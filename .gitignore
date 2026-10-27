@@ -2,6 +2,7 @@
 .env
 .env.*
 !.env.example
+.ledgerpilot-env-*
 
 # Python
 __pycache__/

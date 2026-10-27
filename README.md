@@ -11,15 +11,20 @@ LedgerPilot is a responsive web finance office for small businesses. Phase 1 is 
 
 ## Fresh local setup
 
-1. From the repository root, create `.env` if it does not exist: `if (!(Test-Path .env)) { Copy-Item .env.example .env }`. Replace the two secret placeholders with URL-safe random values. `.env` is ignored by Git.
-2. Start PostgreSQL: `docker compose up -d postgres`. Wait until `docker compose ps` reports the service as healthy.
-3. In a terminal, install and start the API:
+1. Install locked backend dependencies and prepare local credentials. The helper generates missing random secrets, aligns runtime/migration URLs, preserves unrelated settings and prints only variable names:
 
    ```powershell
    cd backend
    uv sync --locked --all-groups
-   uv run uvicorn ledgerpilot.main:app --reload
+   uv run python -m ledgerpilot.local_setup prepare
+   cd ..
    ```
+
+   If a pre-existing secret is too short, preparation stops without changing the file. Before the first database start, use `prepare --replace-weak-local-secrets` to replace undersized values. After a database exists, follow the rotation procedure in [Phase 1 setup](docs/phase-1-service-setup.md). Never reuse local credentials in a hosted environment.
+
+2. Start PostgreSQL: `docker compose up -d --wait --wait-timeout 90 postgres`. A fresh volume initializes separate runtime/migration roles. For an existing volume, run `./scripts/bootstrap-local-db.ps1` to apply current local role settings without erasing data. If port 5432 is occupied, run `uv run python -m ledgerpilot.local_setup prepare --port 55432` from `backend`, then rerun Compose. It updates `POSTGRES_PORT` and both URLs together. This workstation uses port 55432 because another service listens on 5432; the template defaults to 5432.
+
+3. From `backend`, run `uv run python -m ledgerpilot.local_setup verify`. To test password rotation, stop API/workers first and use `verify --check-rotation`; this temporarily changes and restores the runtime password. Start the API with `uv run uvicorn ledgerpilot.main:app --reload`.
 
 4. In a second terminal, install and start the web client:
 
@@ -31,7 +36,7 @@ LedgerPilot is a responsive web finance office for small businesses. Phase 1 is 
 
 5. Open the Vite URL shown in the terminal. API docs are at `http://localhost:8000/docs`; the liveness endpoint is `http://localhost:8000/health/live`.
 
-To erase and recreate the disposable local PostgreSQL database, run `./scripts/reset-local-db.ps1 -ConfirmReset` from PowerShell. This deletes the local Compose volume and all of its data. Domain seed fixtures will be added with the Phase 2 database schema; the Phase 0 database is intentionally empty.
+The API's `DATABASE_URL` must use the restricted runtime role. Use `MIGRATION_DATABASE_URL` only for Alembic/operator work; do not configure the running API with the migration credential. To erase and recreate the disposable local PostgreSQL database, run `./scripts/reset-local-db.ps1 -ConfirmReset` from PowerShell. This deletes the local Compose volume and all of its data. Domain seed fixtures will be added with the Phase 2 database schema; the Phase 0 database is intentionally empty.
 
 ## Local verification
 
@@ -52,7 +57,7 @@ cd ..
 docker build -f backend/Dockerfile -t ledgerpilot-api:local backend
 ```
 
-The CI jobs run the backend and frontend checks and build the API container. Tests use synthetic data and do not require paid provider credentials. Database-backed integration tests must use a local/test database, never production data.
+The backend CI job also generates isolated credentials, starts real PostgreSQL, verifies restricted roles and password rotation, and removes its disposable CI volume. Unit tests use explicit synthetic settings; database checks do not require paid provider credentials. Database-backed integration tests must use a local/test database, never production data.
 
 ## Repository boundaries
 
@@ -64,7 +69,7 @@ The CI jobs run the backend and frontend checks and build the API container. Tes
 
 ## CI and deployments
 
-GitHub Actions validates pull requests and pushes with locked backend dependencies, Ruff, mypy, pytest/coverage, Python compilation, a frontend production build, and an API container build. The AWS demo deploy job runs from the configured deployment branch only after all required CI jobs pass and the AWS environment variables are present. It uses GitHub OIDC, Amazon ECR, and AWS Systems Manager rather than stored long-lived AWS access keys.
+GitHub Actions validates pull requests and pushes with locked backend dependencies, Ruff, mypy, pytest/coverage, Python compilation, a frontend production build, and an API container build. The AWS demo deploy job runs from the configured deployment branch only after all required CI jobs pass and the repository variable `ENABLE_DEMO_DEPLOY=true` enables deployment. Required AWS values are validated inside the protected `demo` environment. It uses GitHub OIDC, Amazon ECR, and AWS Systems Manager rather than stored long-lived AWS access keys.
 
 Connect the repository to Vercel for web previews and production deploys. Set project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch. Protect that branch and require the `Backend checks and tests`, `Frontend checks and production build`, and `Build API container` checks before merge. The local repository currently uses `master`; if the remote default branch is changed to `main`, align Vercel, AWS role trust, deployment settings, and branch protection with `main`.
 
@@ -79,6 +84,8 @@ Configure GitHub Actions OIDC and an IAM role whose trust policy is limited to t
 - `AWS_ACCOUNT_ID`: AWS account number.
 - `ECR_REPOSITORY`: ECR repository name.
 - `EC2_INSTANCE_ID`: demo instance ID.
+
+After setup, set the repository-level variable `ENABLE_DEMO_DEPLOY=true`. Deployment is restricted to the repository default branch and active runs are not automatically cancelled. CI saves the built API image with one-day artifact retention; deployment and release load this exact image rather than rebuild it. Re-run the full workflow if approval outlasts artifact retention. Monitor Actions storage/minute quotas.
 
 After setup, each successful push to the configured deployment branch publishes an immutable commit-SHA image to ECR and asks SSM to deploy it. The instance checks API health and restores the previous image if the new deployment fails. A version tag such as `v0.1.0` also publishes an API image to GitHub Container Registry.
 

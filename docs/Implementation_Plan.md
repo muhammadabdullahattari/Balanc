@@ -2,7 +2,7 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.3  
+**Plan version:** 2.6
 **Status:** Governing implementation sequence  
 **Date:** 27 October 2026  
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
@@ -113,22 +113,22 @@ Scaffold the web client from the repo root with Vite React TypeScript, commit pa
 **Deliverables:** Repository scaffold, locked backend/frontend dependencies, contributor and SRS-linked issue/PR templates, local PostgreSQL Compose configuration and reset instructions, API container, CI/CD definitions, and clean-clone guide.  
 **Exit gate:** A clean checkout installs and builds both apps; backend quality tests pass; PostgreSQL starts healthy from Compose; API image builds; GitHub CI passes on the selected default branch; provider/deployment setup is documented; no secret is committed.
 
-## 5. Phase 1 — Supabase and service credentials
+## 5. Phase 1 — Database, authentication and service configuration
 
 **Purpose:** Set up selected services and keys before database-backed feature work.
 
-1. Confirm identity authority. FastAPI-owned auth is the SRS default; Supabase Auth requires an approved ADR and SRS/test updates.
-2. Create isolated development and test/staging Supabase projects or databases when quotas permit; create a separate demo environment later.
-3. Select TLS connection mode, role/grant model and connection pool behavior. Keep migration and runtime credentials separate.
-4. Enable RLS for tenant-owned data; use least-privilege runtime DB role and verify it does not bypass policies. Test tenant context through real backend sessions.
+1. Use FastAPI-owned authentication; Supabase Auth is not in scope unless an ADR and SRS/session contract are approved. Follow the SRS: 10-minute access-token expiry, HttpOnly/Secure cookie on the API origin, CSRF and strict Origin checks, no bearer token in localStorage, refresh rotation, revocation, MFA and audited recovery. The selected design is short-lived JWT access plus server-stored, hashed, rotated refresh tokens.
+2. Use the existing local Docker Compose PostgreSQL for this phase. Do not provision a hosted database now; revisit hosted PostgreSQL at deployment after current cost, quota, network, backup and recovery review.
+3. Separate database roles: Compose bootstrap administrator, least-privileged application runtime role, and schema migration role. The API uses only the runtime role; migration credentials stay in an operator/migration context. Select pool behavior and exact grants, then verify privilege separation.
+4. Defer tenant RLS policies and real-session cross-tenant tests until Phase 2 creates the tenant schema. Do not claim tenant isolation from an empty database.
 5. Configure private storage only if P1 upload use requires it; short-lived access, content/size validation and scan before parse. Disable hosted upload if free profile cannot support safe processing.
 6. Inventory only selected values: database URLs, migration URL, app signing secret, CORS origins, optional storage/email/telemetry credentials. P1 tests need no paid AI key.
 7. Keep local values in ignored .env; keep deploy secrets in protected provider settings. No private value in VITE_ variables.
 8. Document owner, purpose, environment, quota, expiry, rotation/revocation and fallback for each credential.
 9. Verify connectivity, startup validation, redaction and credential rotation.
 
-**Deliverables:** Environment/service inventory, approved auth decision, RLS/roles plan, protected credentials and rotation notes.  
-**Exit gate:** Secure test DB connection and tenant isolation pass; environments are separated; no paid service blocks tests.
+**Deliverables:** [Phase 1 service setup and credential inventory](phase-1-service-setup.md), [approved browser auth contract](auth-session-contract.md), local credential helper and runtime validation, verified runtime/migration roles and connection strings, real role/password-rotation checks and CI definitions.
+**Exit gate:** Local PostgreSQL is healthy; app and migration roles are separate and verified; the API runtime uses only the restricted app role; secrets stay local and ignored; free local test workflow is documented. Tenant RLS and cross-tenant tests are a Phase 2 exit gate after tenant schema exists.
 
 ## 6. Phase 2 — Backend foundation and accounting core
 
@@ -260,7 +260,7 @@ For each work item record SRS ID, release, dependency, expected journal, authori
 
 ## 18. Quality gates and project workflow
 
-Every PR: SRS-linked acceptance, review, locked dependencies, Ruff/type checks, pytest/coverage, migration check, frontend production build, API container build, secret/dependency scan and test evidence. Protect main and require backend, frontend and container CI checks before merge. Vercel deploys web previews/production through Git integration. The AWS demo job runs only from main after required CI jobs pass, using OIDC, ECR and SSM; deployment requires protected environment variables and a bootstrapped EC2 host. Every release: compatible additive migration, OpenAPI compatibility, auth/TLS/CORS/cookie checks, tenant tests, backup/rollback/export plan and core workflow smoke tests.
+Every PR: SRS-linked acceptance, review, locked dependencies, Ruff/type checks, pytest/coverage, migration check, frontend production build, API container build, secret/dependency scan and test evidence. Protect the default branch and require backend, frontend and container CI checks before merge. Vercel deploys web previews/production through Git integration. The AWS demo deploys from the default branch after CI passes, using OIDC, ECR and SSM; deployment requires protected environment variables and a bootstrapped EC2 host. Every release: compatible additive migration, OpenAPI compatibility, auth/TLS/CORS/cookie checks, tenant tests, backup/rollback/export plan and core workflow smoke tests.
 
 Accounting blockers: unbalanced or duplicate posting, broken subledger tie-out, silent unknown-deposit revenue, period-lock bypass, cross-tenant access or unexplained migration balance. Swagger UI supplements automation; UI, integration and deployed E2E each require separate evidence.
 
@@ -270,7 +270,7 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 
 - [ ] Clean clone, uv lock and local DB setup work from documentation.
 - [ ] P1 features and later SRS scope are distinguished.
-- [ ] Supabase/Auth ownership, RLS, service roles and key rotation are verified.
+- [ ] Selected identity ownership, session lifecycle, tenant RLS, service roles and key rotation are verified in their implementation phases.
 - [ ] All P1 models, schemas, services, routers, report and dashboard APIs complete before UI.
 - [ ] Pytest and Swagger/OpenAPI cover every P1 API before frontend.
 - [ ] Frontend and independent UI tests pass before API integration.
@@ -286,34 +286,46 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 | Version | Date | Change |
 |---|---|---|
 | 1.0 | 26 Oct 2026 | Initial plan aligned to LedgerPilot SRS |
-| 2.0 | 27 Oct 2026 | Reordered to requested development sequence; preserved LedgerPilot architecture and clarified P1, Supabase/Auth and public API/SDK boundaries |
-| 2.1 | 27 Oct 2026 | Aligned the database driver with the SRS-selected psycopg and added LedgerPilot-specific engineering standards and ADRs |
-| 2.2 | 27 Oct 2026 | Added the current implementation tracker and a gated Vercel web plus AWS EC2 demo CI/CD path using ECR, SSM, OIDC, health checks and rollback; recorded verification and activation dependencies |
-| 2.3 | 27 Oct 2026 | Implemented Phase 0 contributor/issue templates, clean setup and reset guidance, Compose health validation, and local backend/frontend quality gates; recorded Docker/remote CI blockers without marking the phase complete |
+| 2.0 | 27 Oct 2026 | Resequenced plan to match LedgerPilot scope |
+| 2.1 | 27 Oct 2026 | Added project standards and ADRs |
+| 2.2 | 27 Oct 2026 | Added progress tracker and demo CI/CD |
+| 2.3 | 27 Oct 2026 | Phase 0 scaffold; Docker/hosted CI pending |
+| 2.4 | 27 Oct 2026 | Began Phase 1 setup |
+| 2.5 | 27 Oct 2026 | Completed local Phase 1 configuration and live database verification |
+| 2.6 | 27 Oct 2026 | Audited configuration, bootstrap and CI; verified API image |
 
 
 ## 20. Current implementation progress tracker
 
 Track actual code and verification here; a planned item is not complete until its evidence exists. Update this section and the version history whenever implementation changes.
 
-**Current phase:** Phase 0 — repository and uv setup (**in progress**). The repository scaffold, local setup documents, and CI/CD definitions exist. Backend and frontend checks pass locally, but PostgreSQL/container execution and a GitHub-hosted CI run remain unverified, so the Phase 0 exit gate is not met.
+**Current phase:** Phase 0 local foundation checks pass, including the API image build and non-root HTTP/health/OpenAPI smoke test. Its formal exit remains open for successful GitHub-hosted CI. A Git remote is now configured; these audit changes have not been pushed.
+
+**Phase 1:** Complete for the selected local services. FastAPI-owned JWT access cookies and stored rotating refresh tokens are documented; the local PostgreSQL runtime/migration roles, private credential file, configuration validation, denied-operation checks and password-rotation drill pass. LedgerPilot uses loopback port 55432 because another local service uses 5432. No hosted service was provisioned. Auth endpoints, tenant schema/RLS and the configured API pool remain Phase 2 work. See `docs/phase-1-service-setup.md` and `docs/auth-session-contract.md`.
 
 **Implemented in this update:**
 
-- `.github/workflows/quality.yml`: locked backend checks/tests, frontend production build/artifact, API container build, and gated AWS demo deploy after required CI jobs.
-- `.github/workflows/release.yml`: version-tagged API image publishing to GitHub Container Registry.
+- `.github/workflows/checks.yml` and `quality.yml`: shared locked backend checks/tests, frontend production build/artifact, API container build, and gated AWS demo deploy after required CI jobs.
+- `.github/workflows/release.yml`: required checks before version-tagged API image publishing to GitHub Container Registry.
 - `.github/ISSUE_TEMPLATE/feature_request.yml`, `bug_report.yml`, and `.github/pull_request_template.md`: SRS, accounting, tenant/security and evidence prompts.
 - `backend/Dockerfile` and `backend/tests/test_health.py`: non-root API image health check and a liveness route contract test.
 - `deploy/aws/deploy-api.sh`: EC2-side ECR pull, health verification and rollback to the previous image on failure.
 - `scripts/reset-local-db.ps1` and `docker-compose.yml`: environment-based PostgreSQL health check and an explicit-confirmation reset for disposable local database data.
+- `backend/db/init/01-roles.sql` and `scripts/bootstrap-local-db.ps1`: separate local runtime/migration roles, schema privileges and non-destructive bootstrap for an existing local database volume.
+- `backend/src/ledgerpilot/local_setup.py`: local-only credential preparation, atomic file updates, configurable loopback port, hidden-value validation, real role/grant probes and a temporary password-rotation drill with restoration.
+- `backend/src/ledgerpilot/config.py` and configuration tests: required secrets, restricted runtime role, valid origins, verified TLS for hosted profiles and bounded Phase 2 pool settings.
+- `.env.example`, ignored `.env`, `docs/phase-1-service-setup.md` and `docs/auth-session-contract.md`: selected local credentials, ownership/rotation/fallback inventory and the approved browser session contract. Existing valid settings were preserved; undersized bootstrap credentials were replaced before the first local database initialization.
+- `.github/workflows/quality.yml`: isolated PostgreSQL initialization, real grants/password-rotation verification and disposable CI cleanup. Hosted execution is pending a Git remote.
 - `CONTRIBUTING.md`, `.nvmrc`, `.gitattributes`, and `README.md`: reproducible setup, branch/review expectations, local commands, Vercel/AWS setup, and deployment boundaries.
 
-**Verification recorded:** `uv sync --locked --all-groups`, Ruff, mypy, pytest/coverage (1 scaffold test passed), and Python source compilation passed locally. `npm ci` and the frontend production build passed. `docker compose config --quiet` passed. Docker Desktop's Linux engine did not become available; WSL returned access denied, so PostgreSQL was not started and the API image was not built. This checkout has no Git remote, so GitHub-hosted CI could not be run.
+**Verification recorded:** 38 tests pass, including five real PostgreSQL bootstrap rejection cases. Ruff, mypy, frontend production build, database grant/DDL-denial verification, API image build and container HTTP/health/OpenAPI checks pass. All workflows pass actionlint. Prior Phase 1 password-rotation evidence remains recorded. Credentials remain ignored. Hosted CI and deployment remain unverified.
+
+**Audit fixes:** Block connection query overrides; isolate file validation; reject unsafe SQL bootstrap inputs; restrict Docker context; require shared checks before release; publish the built image; gate demo deployment on an explicit enable flag and default branch, validating environment values inside the job. See [Phase 0 and Phase 1 audit](phase-0-1-audit.md).
 
 **Pending to activate deployment:**
 
-- Start Docker Desktop/WSL successfully; bring PostgreSQL to healthy state and build the API image locally or on GitHub.
-- Configure a Git remote and run CI on GitHub; require backend, frontend and container checks on the selected default branch. No remote is configured in this checkout.
+- Run the revised workflows on GitHub and capture successful checks; the local API image build passes.
+- Protect the selected default branch with required checks shown by GitHub for the reusable workflow. The remote is configured; hosted verification remains pending.
 - Link Vercel to the repository, set the project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch.
 - Provision the demo ECR repository and SSM-managed EC2 instance; install Docker, AWS CLI, `/opt/ledgerpilot/deploy-api.sh`, root-only API environment settings, TLS reverse proxy and DNS.
 - Configure the narrowly scoped GitHub OIDC role and the `demo` environment variables listed in the README.

@@ -13,6 +13,10 @@
 - Support time-limited, scoped auditor/support access with purpose, approval, and audit evidence as defined by the SRS.
 - Store public developer API credentials only in the later approved API/SDK phase; store hashes, reveal secrets once, and support immediate revocation.
 
+## Phase 1 session decision
+
+The user selected a short-lived JWT access token in the secure browser cookie and an opaque server-stored refresh token. Refresh values are hashed at rest, rotated and revocable. The SRS maximum access lifetime remains 10 minutes. `docs/auth-session-contract.md` records the boundary and Phase 2 acceptance evidence; selecting token formats does not implement the authentication lifecycle.
+
 ## Consequences
 
 Every financial record and job has an auditable business boundary. Support and integrations cannot bypass normal authorization through privileged generic routes.

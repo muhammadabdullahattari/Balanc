@@ -1,0 +1,90 @@
+name: Required checks
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend checks and tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v5
+        with:
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install locked dependencies
+        run: uv sync --locked --all-groups
+      - name: Lint
+        run: uv run ruff check src tests
+      - name: Type check
+        run: uv run mypy
+      - name: Run tests with coverage
+        run: uv run coverage run -m pytest -q && uv run coverage report
+      - name: Compile Python sources
+        run: uv run python -m compileall -q src
+      - name: Prepare isolated local database credentials
+        run: uv run python -m ledgerpilot.local_setup prepare
+      - name: Start PostgreSQL with restricted roles
+        working-directory: .
+        run: docker compose up -d --wait --wait-timeout 90 postgres
+      - name: Verify database grants and password rotation
+        run: uv run python -m ledgerpilot.local_setup verify --check-rotation
+      - name: Verify unsafe bootstrap configurations fail without mutation
+        env:
+          RUN_DB_BOOTSTRAP_TESTS: '1'
+        run: uv run pytest tests/test_bootstrap_integration.py -q
+      - name: Stop disposable CI database
+        if: always()
+        working-directory: .
+        run: docker compose down --volumes
+
+  frontend:
+    name: Frontend checks and production build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - name: Build production web application
+        run: npm run build
+      - name: Save production bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: ledgerpilot-web-${{ github.sha }}
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  container:
+    name: Build API container
+    runs-on: ubuntu-latest
+    needs: [backend]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build API image
+        run: docker build --file backend/Dockerfile --tag ledgerpilot-api:${{ github.sha }} backend
+      - name: Save checked API image
+        run: docker save ledgerpilot-api:${{ github.sha }} --output /tmp/api-image.tar
+      - name: Upload checked API image
+        uses: actions/upload-artifact@v7
+        with:
+          name: ledgerpilot-api-image-${{ github.sha }}
+          path: /tmp/api-image.tar
+          compression-level: 0
+          retention-days: 1
+          if-no-files-found: error

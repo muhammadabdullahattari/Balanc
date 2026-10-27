@@ -1,0 +1,12 @@
+# Allow only inputs required to build the runtime image.
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!README.md
+!src/
+!src/**
+**/__pycache__/
+**/*.pyc
+**/.env
+**/.env.*
