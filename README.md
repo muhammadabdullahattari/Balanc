@@ -1,0 +1,89 @@
+# LedgerPilot
+
+LedgerPilot is a responsive web finance office for small businesses. Phase 1 is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
+
+## Prerequisites
+
+- Git
+- Python 3.12 and `uv`
+- Node.js 22 and npm (the repository includes `.nvmrc`)
+- Docker Desktop with Docker Compose for local PostgreSQL and container builds
+
+## Fresh local setup
+
+1. From the repository root, create `.env` if it does not exist: `if (!(Test-Path .env)) { Copy-Item .env.example .env }`. Replace the two secret placeholders with URL-safe random values. `.env` is ignored by Git.
+2. Start PostgreSQL: `docker compose up -d postgres`. Wait until `docker compose ps` reports the service as healthy.
+3. In a terminal, install and start the API:
+
+   ```powershell
+   cd backend
+   uv sync --locked --all-groups
+   uv run uvicorn ledgerpilot.main:app --reload
+   ```
+
+4. In a second terminal, install and start the web client:
+
+   ```powershell
+   cd frontend
+   npm ci
+   npm run dev
+   ```
+
+5. Open the Vite URL shown in the terminal. API docs are at `http://localhost:8000/docs`; the liveness endpoint is `http://localhost:8000/health/live`.
+
+To erase and recreate the disposable local PostgreSQL database, run `./scripts/reset-local-db.ps1 -ConfirmReset` from PowerShell. This deletes the local Compose volume and all of its data. Domain seed fixtures will be added with the Phase 2 database schema; the Phase 0 database is intentionally empty.
+
+## Local verification
+
+Run these commands before a pull request:
+
+```powershell
+cd backend
+uv sync --locked --all-groups
+uv run ruff check src tests
+uv run mypy
+uv run coverage run -m pytest -q
+uv run coverage report
+uv run python -m compileall -q src
+cd ..\frontend
+npm ci
+npm run build
+cd ..
+docker build -f backend/Dockerfile -t ledgerpilot-api:local backend
+```
+
+The CI jobs run the backend and frontend checks and build the API container. Tests use synthetic data and do not require paid provider credentials. Database-backed integration tests must use a local/test database, never production data.
+
+## Repository boundaries
+
+- `backend/src/ledgerpilot/`: FastAPI modules; routers handle HTTP, services handle workflows/accounting rules, and repositories own persistence.
+- `frontend/`: responsive React/TypeScript/Vite client. The browser never connects directly to PostgreSQL or receives private credentials.
+- `docs/`: SRS, governing implementation plan, standards, and architecture decisions.
+- `deploy/`: demo and future production deployment assets.
+- `.github/`: CI/CD workflows and SRS-linked issue/pull request templates.
+
+## CI and deployments
+
+GitHub Actions validates pull requests and pushes with locked backend dependencies, Ruff, mypy, pytest/coverage, Python compilation, a frontend production build, and an API container build. The AWS demo deploy job runs from the configured deployment branch only after all required CI jobs pass and the AWS environment variables are present. It uses GitHub OIDC, Amazon ECR, and AWS Systems Manager rather than stored long-lived AWS access keys.
+
+Connect the repository to Vercel for web previews and production deploys. Set project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch. Protect that branch and require the `Backend checks and tests`, `Frontend checks and production build`, and `Build API container` checks before merge. The local repository currently uses `master`; if the remote default branch is changed to `main`, align Vercel, AWS role trust, deployment settings, and branch protection with `main`.
+
+### AWS demo setup (one time)
+
+The AWS workflow deploys to an EC2 demo host; it does not provision AWS resources. Create an ECR repository and an EC2 instance registered as a Systems Manager managed node. Attach an instance role that permits ECR image pulls and SSM management. Install Docker and AWS CLI, create `/etc/ledgerpilot/api.env` with the API configuration, set root ownership and mode `600`, and install `deploy/aws/deploy-api.sh` as `/opt/ledgerpilot/deploy-api.sh` with executable permissions. Configure a TLS reverse proxy and DNS for the API hostname, keep port 8000 private, and allow HTTPS from the public internet. Set `FRONTEND_ORIGINS` to the Vercel production origin.
+
+Configure GitHub Actions OIDC and an IAM role whose trust policy is limited to this repository and the protected `demo` GitHub environment. Restrict its permissions to pushing to the target ECR repository and sending `AWS-RunShellScript` to the one EC2 instance. Add these environment variables to the GitHub `demo` environment:
+
+- `AWS_ROLE_ARN`: deployment role ARN.
+- `AWS_REGION`: region containing ECR and EC2.
+- `AWS_ACCOUNT_ID`: AWS account number.
+- `ECR_REPOSITORY`: ECR repository name.
+- `EC2_INSTANCE_ID`: demo instance ID.
+
+After setup, each successful push to the configured deployment branch publishes an immutable commit-SHA image to ECR and asks SSM to deploy it. The instance checks API health and restores the previous image if the new deployment fails. A version tag such as `v0.1.0` also publishes an API image to GitHub Container Registry.
+
+The EC2 path is a quota-limited demo, not the production AWS topology in the SRS. Production still requires the planned load balancing, managed database, private networking, backups, monitoring, and operations budget. Verify AWS eligibility and quotas before provisioning; free-tier terms can change. Do not use the demo for real customer books, money movement, or tax filing.
+
+## Accounting and security invariants
+
+Posted journals must be balanced, immutable, idempotent, auditable, and scoped to the active business. Period locks and subledger/control-account tie-outs are enforced by backend services and PostgreSQL. Bank transactions are evidence of cash movement; uncertain transactions remain in review rather than being silently posted as income or expense. The SRS is the source of requirements; record architecture changes as ADRs and update the SRS before implementation.

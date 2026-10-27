@@ -1,0 +1,1 @@
+"""LedgerPilot backend application."""

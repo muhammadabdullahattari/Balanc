@@ -1,0 +1,47 @@
+name: Bug report
+description: Report a reproducible product or engineering defect
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: input
+    id: srs
+    attributes:
+      label: SRS requirement or phase
+      description: Give the related SRS requirement or implementation-plan phase, if known.
+      placeholder: FR-008 / Phase 3
+  - type: textarea
+    id: observed
+    attributes:
+      label: Observed behavior
+      description: Describe what happened, including a sanitized error or request ID where available.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. In a synthetic/test business...
+        2. Perform...
+        3. Observe...
+    validations:
+      required: true
+  - type: textarea
+    id: financial
+    attributes:
+      label: Financial and tenant impact
+      description: State whether balances/journals, duplicate posting, permissions, or another tenant may be affected. Never attach real customer books or credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Verification performed
+      description: Include environment, build/version, relevant tests and sanitized evidence.
+
