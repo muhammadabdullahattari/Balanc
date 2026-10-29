@@ -2,12 +2,14 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.12
+**Plan version:** 2.13
 **Status:** Governing implementation sequence  
 **Date:** 29 October 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**CI mailbox startup repair (29 October 2026):** The `Start local SMTP mailbox` check failed with curl exit 56 because the container had started before its HTTP listener was ready. The workflow now retries all errors for the read-only readiness GET, with ten retries, a 60-second retry budget, two-second connection/five-second request limits and a two-minute step timeout. A local TCP test reproduced two connection resets (curl 56) followed by a successful third request; persistent HTTP failure still exits nonzero after bounded retries. Real Mailpit HTTP readiness and SMTP NOOP, workflow YAML parsing and Git whitespace checks passed. No product architecture or phase sequence changed. Hosted GitHub Actions must be rerun after committing/pushing this repair; no hosted success is claimed and nothing was committed or pushed by the assistant.
 
 **Phase 2–3 audit follow-up (29 October 2026):** See [the audit and repair record](phase-2-3-audit.md). Added regression protection for reset/login races, backdated advance over-allocation, reversal chronology, date-scoped close readiness and malformed CSRF headers. Migration/readiness is now **0020**. These are repairs within the existing architecture, not a new phase or a change to the delivery sequence. Final audit verification is recorded in that document; Phase 4 remains the next separate gate.
 
