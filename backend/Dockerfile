@@ -10,12 +10,13 @@ WORKDIR /app
 
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --locked --no-dev --no-install-project
 COPY src ./src
-RUN uv sync --locked --no-dev --no-install-project \
-    && uv sync --locked --no-dev
+COPY alembic.ini ./
+COPY migrations ./migrations
+RUN uv sync --locked --no-dev
 
-RUN useradd --create-home --uid 10001 appuser \
-    && chown -R appuser:appuser /app
+RUN useradd --create-home --uid 10001 appuser
 USER appuser
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \

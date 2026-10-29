@@ -1,6 +1,8 @@
 # LedgerPilot
 
-LedgerPilot is a responsive web finance office for small businesses. Phase 1 is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
+LedgerPilot is a responsive web finance office for small businesses. The first release is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
+
+Current backend implementation: [Phase 2 foundation](docs/phase-2-backend-foundation.md). Progress and acceptance evidence: [implementation tracker](docs/Implementation_Plan.md).
 
 ## Prerequisites
 
@@ -22,9 +24,9 @@ LedgerPilot is a responsive web finance office for small businesses. Phase 1 is 
 
    If a pre-existing secret is too short, preparation stops without changing the file. Before the first database start, use `prepare --replace-weak-local-secrets` to replace undersized values. After a database exists, follow the rotation procedure in [Phase 1 setup](docs/phase-1-service-setup.md). Never reuse local credentials in a hosted environment.
 
-2. Start PostgreSQL: `docker compose up -d --wait --wait-timeout 90 postgres`. A fresh volume initializes separate runtime/migration roles. For an existing volume, run `./scripts/bootstrap-local-db.ps1` to apply current local role settings without erasing data. If port 5432 is occupied, run `uv run python -m ledgerpilot.local_setup prepare --port 55432` from `backend`, then rerun Compose. It updates `POSTGRES_PORT` and both URLs together. This workstation uses port 55432 because another service listens on 5432; the template defaults to 5432.
+2. Start PostgreSQL: `docker compose up -d --wait --wait-timeout 90 postgres`. A fresh volume initializes separate runtime/migration roles. For an existing volume, run `./scripts/bootstrap-local-db.ps1` to apply current local role settings without erasing data. If port 5432 is occupied, run `uv run python -m ledgerpilot.local_setup prepare --port 15432` from `backend`, then rerun Compose. It updates `POSTGRES_PORT` and both URLs together. This workstation uses port 15432 after Windows rejected the previous binding; the template defaults to 5432.
 
-3. From `backend`, run `uv run python -m ledgerpilot.local_setup verify`. To test password rotation, stop API/workers first and use `verify --check-rotation`; this temporarily changes and restores the runtime password. Start the API with `uv run uvicorn ledgerpilot.main:app --reload`.
+3. From `backend`, run `uv run python -m ledgerpilot.local_setup verify`. To test password rotation, stop API/workers first and use `verify --check-rotation`; this temporarily changes and restores the runtime password. Apply migrations with `uv run alembic upgrade head`, then start the API with `uv run uvicorn ledgerpilot.main:app --reload`.
 
 4. In a second terminal, install and start the web client:
 
@@ -71,7 +73,7 @@ The backend CI job also generates isolated credentials, starts real PostgreSQL, 
 
 GitHub Actions validates pull requests and pushes with locked backend dependencies, Ruff, mypy, pytest/coverage, Python compilation, a frontend production build, and an API container build. The AWS demo deploy job runs from the configured deployment branch only after all required CI jobs pass and the repository variable `ENABLE_DEMO_DEPLOY=true` enables deployment. Required AWS values are validated inside the protected `demo` environment. It uses GitHub OIDC, Amazon ECR, and AWS Systems Manager rather than stored long-lived AWS access keys.
 
-Connect the repository to Vercel for web previews and production deploys. Set project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch. Protect that branch and require the `Backend checks and tests`, `Frontend checks and production build`, and `Build API container` checks before merge. The local repository currently uses `master`; if the remote default branch is changed to `main`, align Vercel, AWS role trust, deployment settings, and branch protection with `main`.
+Connect the repository to Vercel for web previews and production deploys. Set project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch. Protect that branch and require the `Backend checks and tests`, `Frontend checks and production build`, and `Build API container` checks before merge. The local repository uses `main`; align Vercel, AWS role trust, deployment settings and branch protection with the selected remote default branch.
 
 ### AWS demo setup (one time)
 
@@ -94,3 +96,13 @@ The EC2 path is a quota-limited demo, not the production AWS topology in the SRS
 ## Accounting and security invariants
 
 Posted journals must be balanced, immutable, idempotent, auditable, and scoped to the active business. Period locks and subledger/control-account tie-outs are enforced by backend services and PostgreSQL. Bank transactions are evidence of cash movement; uncertain transactions remain in review rather than being silently posted as income or expense. The SRS is the source of requirements; record architecture changes as ADRs and update the SRS before implementation.
+
+## Local identity mailbox
+
+Start `docker compose -f docker-compose.auth.yml up -d` from the repository root and enable `AUTH_DELIVERY_ENABLED=true` in the private environment. Mailpit captures real local verification/reset messages at `http://127.0.0.1:8025`. Keep the generated MFA encryption key backed up privately. Browser authentication requires HTTPS and an explicitly allowed origin; see the Phase 2 record for Secure-cookie and CSRF setup.
+
+## Local document scanning and OCR
+
+Run `uv run python -m ledgerpilot.local_setup prepare` from `backend` to prepare missing local secrets without displaying them. Preserve the evidence encryption and export signing keys in private backup; replacing them can make originals unreadable or break signing continuity. Set `OCR_ENABLED=true` in the ignored root environment, then run `docker compose -f docker-compose.documents.yml up -d --build --wait --wait-timeout 300` from the root. ClamAV and the Tesseract/Poppler parser are local services without a paid API. They require downloads, local disk and RAM; their configured memory ceilings total 6 GiB.
+
+Apply `uv run alembic upgrade head` from `backend`. Uploads remain encrypted and quarantined until a scoped worker successfully scans them. Run one job with `uv run python -m ledgerpilot.documents.worker --actor USER_UUID --business BUSINESS_UUID`. This command uses an existing authorized member, not a public impersonation endpoint. Supported extraction formats, manual fallbacks, resource limits and worker recovery are in the [Phase 3 record](docs/phase-3-business-modules.md) and [extraction contract](docs/contracts/document-extraction.md). No scanning or OCR result posts accounting entries automatically.

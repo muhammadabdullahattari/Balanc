@@ -1,3 +1,5 @@
 # Database migrations
 
-Alembic owns schema changes. Create and review migrations alongside model changes; do not edit deployed databases by hand. The first domain migration will be added with the accounting and identity schema phase.
+Alembic owns schema changes. Revisions 0001–0005 implement identity, tenancy and the accounting foundation. Revisions 0006–0019 add sources, evidence jobs, workspace controls, reviewed imports/openings, transfer uniqueness, corrections/cash policies, independent privacy decisions and retained export snapshots. Revision 0020 adds reversal chronology and password-generation session guards. From `backend`, apply them with `uv run alembic upgrade head` using the separate restricted migration role configured in the ignored environment file. Readiness requires revision 0020. Upgrade the existing database without deleting its volume.
+
+Create future revisions with `uv run alembic revision -m "describe the change"`. Review generated SQL and tenant policies before applying them. Empty revisions deliberately fail until their upgrade and rollback policy are implemented. Never edit an applied revision or modify deployed schemas by hand. Financial-history downgrades require an explicit preservation strategy; the existing revisions reject destructive rollback.

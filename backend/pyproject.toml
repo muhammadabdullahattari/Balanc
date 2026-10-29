@@ -1,6 +1,6 @@
 [project]
 name = "ledgerpilot-api"
-version = "0.1.0"
+version = "0.2.0"
 description = "LedgerPilot modular FastAPI backend"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"
@@ -17,6 +17,8 @@ dependencies = [
     "psycopg[binary,pool]>=3.2,<4",
     "sqlalchemy[asyncio]>=2.0.36,<3",
     "uvicorn[standard]>=0.34,<1",
+    "pyjwt>=2.10,<3",
+    "cryptography>=44,<48",
 ]
 
 [dependency-groups]

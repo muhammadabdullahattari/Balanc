@@ -74,9 +74,9 @@ If PostgreSQL fails, preserve its named volume, inspect health and rerun verific
 - [x] Password drill rejects old credentials, accepts replacement and restores original connectivity.
 - [x] Reapplying bootstrap preserves the database and verification still passes.
 - [x] Startup validation and redaction checks pass; credentials remain ignored.
-- [x] CI definition prepares an isolated database, checks real grants/rotation and cleans its disposable volume. The Git remote is configured; a successful hosted run for these changes is still unverified.
+- [x] CI definition prepares an isolated database, checks real grants/rotation and cleans its disposable volume. On 29 October 2026 the user confirmed the commit is done and GitHub checks passed; see the implementation tracker for evidence attribution.
 
-Auth routes/session persistence, tenant tables/RLS, cross-tenant tests and the API pool are Phase 2 deliverables. Storage/email/AI keys are introduced in their integration phase. AWS/Vercel resources belong to deployment. The separate Phase 0 hosted-CI gate retain their own status in the implementation plan.
+Auth routes/session persistence, tenant tables/RLS, cross-tenant tests and the API pool are Phase 2 deliverables. Storage/email/AI keys are introduced in their integration phase. AWS/Vercel resources belong to deployment. The Phase 0 hosted-CI gate is closed on the user-confirmed result recorded in the implementation plan.
 
 ## References
 
@@ -90,3 +90,7 @@ The Phase 0/1 audit rejects connection query overrides, isolates file validation
 ## Foundation audit follow-up
 
 The audit blocks connection query overrides, isolates selected-file validation, and rejects unsafe SQL bootstrap inputs before mutation. See [audit and verification](phase-0-1-audit.md).
+
+## Phase 2 follow-up on 29 October 2026
+
+The identity APIs, durable sessions, forced tenant RLS, migrations and bounded API pool are now implemented. The development database volume is preserved on 127.0.0.1:15432 after the previous binding became unavailable. The dedicated MFA key and local SMTP configuration are documented in [the Phase 2 record](phase-2-backend-foundation.md); earlier checks above are historical Phase 1 evidence.

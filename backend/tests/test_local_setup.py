@@ -105,3 +105,14 @@ def test_rejects_shared_roles_and_passwords(tmp_path: Path) -> None:
     values["MIGRATION_DB_PASSWORD"] = values["APP_DB_PASSWORD"]
     with pytest.raises(SetupError, match="distinct"):
         validate_values(values)
+
+
+def test_prepare_refuses_to_replace_a_lost_mfa_key(tmp_path: Path) -> None:
+    path = tmp_path / ".env"
+    prepare_environment(path, ROOT / ".env.example")
+    key = read_values(path)["MFA_ENCRYPTION_KEY"]
+    path.write_text(path.read_text(encoding="utf-8").replace(key, ""), encoding="utf-8")
+    before = path.read_bytes()
+    with pytest.raises(SetupError, match="Restore"):
+        prepare_environment(path, ROOT / ".env.example")
+    assert path.read_bytes() == before

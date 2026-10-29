@@ -88,7 +88,7 @@ def credential_url(values: dict[str, str], user_key: str, password_key: str) -> 
         "postgresql+psycopg",
         username=values[user_key],
         password=values[password_key],
-        host="localhost",
+        host="127.0.0.1",
         port=int(values.get("POSTGRES_PORT", "5432")),
         database=values["POSTGRES_DB"],
     ).render_as_string(hide_password=False)
@@ -171,9 +171,10 @@ def prepare_environment(
         "APP_DB_PASSWORD",
         "MIGRATION_DB_PASSWORD",
         "SESSION_SIGNING_KEY",
+        "OCR_SERVICE_TOKEN",
     ):
         value = updated.get(key, "")
-        minimum = 32 if key == "SESSION_SIGNING_KEY" else 16
+        minimum = 32 if key in {"SESSION_SIGNING_KEY", "OCR_SERVICE_TOKEN"} else 16
         if (
             not value
             or value.startswith(("replace-", "local-only-"))
@@ -186,6 +187,25 @@ def prepare_environment(
     ):
         # Align local URLs to the selected roles, retaining the other settings.
         updated[key] = credential_url(updated, user_key, password_key)
+    if not updated.get("MFA_ENCRYPTION_KEY"):
+        if updated.get("MFA_KEY_INITIALIZED", "").lower() == "true":
+            raise SetupError("Restore the existing MFA encryption key; do not replace it silently")
+        from cryptography.fernet import Fernet
+
+        updated["MFA_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
+    updated["MFA_KEY_INITIALIZED"] = "true"
+    if not updated.get("EVIDENCE_ENCRYPTION_KEY"):
+        if updated.get("EVIDENCE_KEY_INITIALIZED", "").lower() == "true":
+            raise SetupError("Restore the existing evidence key; do not replace it silently")
+        from cryptography.fernet import Fernet
+
+        updated["EVIDENCE_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
+    updated["EVIDENCE_KEY_INITIALIZED"] = "true"
+    if not updated.get("EXPORT_SIGNING_PRIVATE_KEY"):
+        if updated.get("EXPORT_KEY_INITIALIZED", "").lower() == "true":
+            raise SetupError("Restore the existing export signing key; do not replace it silently")
+        updated["EXPORT_SIGNING_PRIVATE_KEY"] = secrets.token_hex(32)
+    updated["EXPORT_KEY_INITIALIZED"] = "true"
     validate_values(updated)
     changed = [key for key in updated if values.get(key) != updated[key]]
     if not changed and path.exists():
@@ -322,9 +342,8 @@ def verify_database(values: dict[str, str], check_rotation: bool = False) -> lis
                 except psycopg.OperationalError as error:
                     # libpq connection failures can lack a structured SQLSTATE.
                     # Do not count a timeout/refused socket as password rejection.
-                    if (
-                        error.sqlstate != "28P01"
-                        and "password authentication failed" not in str(error)
+                    if error.sqlstate != "28P01" and "password authentication failed" not in str(
+                        error
                     ):
                         raise SetupError("Could not verify retired password rejection") from None
                 else:

@@ -13,6 +13,10 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-007](ADR-007-observability.md) | Logs, metrics, traces, and health probes | Accepted |
 | [ADR-008](ADR-008-security-and-multitenancy.md) | Session security, roles, and business isolation | Accepted |
 | [ADR-009](ADR-009-test-strategy.md) | Phase-gated test strategy | Accepted |
+| [ADR-010](ADR-010-phase-2-auth-and-posting.md) | Phase 2 authentication, tenant context and posting implementation | Accepted |
+| [ADR-011](ADR-011-phase-3-sources-and-local-extraction.md) | Business sources and isolated local extraction profile | Accepted for local P1 |
+| [ADR-012](ADR-012-reviewed-opening-balances.md) | Accountant-reviewed cutover balances and equity offsets | Accepted for local P1 |
+| [ADR-013](ADR-013-local-p1-closure.md) | Reviewed suggestions, resumable exports and P1 completion controls | Accepted for local P1 |
 
 ## Changing a decision
 

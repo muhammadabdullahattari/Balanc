@@ -2,12 +2,14 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.6
+**Plan version:** 2.12
 **Status:** Governing implementation sequence  
-**Date:** 27 October 2026  
+**Date:** 29 October 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**Phase 2–3 audit follow-up (29 October 2026):** See [the audit and repair record](phase-2-3-audit.md). Added regression protection for reset/login races, backdated advance over-allocation, reversal chronology, date-scoped close readiness and malformed CSRF headers. Migration/readiness is now **0020**. These are repairs within the existing architecture, not a new phase or a change to the delivery sequence. Final audit verification is recorded in that document; Phase 4 remains the next separate gate.
 
 The existing LedgerPilot plan contains the right accounting foundations, product modules, security concerns and deployment progression. It does not fully enforce the developer sequence you requested: backend work is spread across phases, frontend implementation is not gated on completion and testing of all P1 APIs, and API testing, UI testing, integration testing and deployed E2E testing are not cleanly separated.
 
@@ -293,15 +295,19 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 | 2.4 | 27 Oct 2026 | Began Phase 1 setup |
 | 2.5 | 27 Oct 2026 | Completed local Phase 1 configuration and live database verification |
 | 2.6 | 27 Oct 2026 | Audited configuration, bootstrap and CI; verified API image |
+| 2.7 | 29 Oct 2026 | Recorded user-confirmed commit and passing GitHub checks; closed Phase 0; Phase 2 ready |
+| 2.8 | 29 Oct 2026 | Completed Phase 2 identity, tenant and accounting foundation; real-service acceptance and container verification |
 
 
 ## 20. Current implementation progress tracker
 
 Track actual code and verification here; a planned item is not complete until its evidence exists. Update this section and the version history whenever implementation changes.
 
-**Current phase:** Phase 0 local foundation checks pass, including the API image build and non-root HTTP/health/OpenAPI smoke test. Its formal exit remains open for successful GitHub-hosted CI. A Git remote is now configured; these audit changes have not been pushed.
+**Current phase:** Phases 2 and 3 are complete for the documented local P1 implementation scope after the [audit repairs](phase-2-3-audit.md); **Phase 4 is next and has not started**. Fresh all-service acceptance passed **110 tests in 572.40 seconds**. Ruff, strict mypy, non-root API build/HTTP/readiness/secure-cookie checks, locked dependencies, compilation and whitespace checks pass. See [the implementation record](phase-3-business-modules.md), [API inventory](contracts/phase-3-api-coverage.md) and [completion contract](contracts/phase-3-completion.md). Reviewed duplicates/rule suggestions, resumable encrypted exports, opening corrections/cash policies, independent manual privacy fulfillment and complete response contracts preserve the modular monolith and PostgreSQL financial authority. Main schema is **0020** with existing data preserved. OpenAPI is unchanged at 121 paths and 229 schemas; CI includes all real-service test modules. ADR-010's audit amendment and ADR-011–013 record implementation details and local limits. Phase 4 independently verifies backend/Swagger/restore and generates the frontend client before frontend feature work. Production capacity and automated P2 privacy execution are not claimed. No commit, push or new hosted CI run was performed. Earlier completion evidence remains historical; the audit record contains the latest result.
 
-**Phase 1:** Complete for the selected local services. FastAPI-owned JWT access cookies and stored rotating refresh tokens are documented; the local PostgreSQL runtime/migration roles, private credential file, configuration validation, denied-operation checks and password-rotation drill pass. LedgerPilot uses loopback port 55432 because another local service uses 5432. No hosted service was provisioned. Auth endpoints, tenant schema/RLS and the configured API pool remain Phase 2 work. See `docs/phase-1-service-setup.md` and `docs/auth-session-contract.md`.
+**Closure evidence:** User confirmation in this conversation on 29 October 2026 is the source for the GitHub result; no Actions run URL was supplied or independently inspected in this documentation update. The local checkout is on `main`, with latest commit `13402b1b8fd8b198f3f9bc57dec086475754d153` (`Phase 1 : completed the project structure and the database connections are done and tested`). This identifies the observed checkout; the exact CI run-to-commit association was not independently verified. The Phase 0/1 audit and its identified fixes are complete. Branch protection and cloud deployment are separate outstanding rollout tasks.
+
+**Phase 1:** Complete for the selected local services. FastAPI-owned JWT access cookies and stored rotating refresh tokens are documented; the local PostgreSQL runtime/migration roles, private credential file, configuration validation, denied-operation checks and password-rotation drill pass. Phase 1 initially used loopback port 55432; Phase 2 moved the same database volume to 127.0.0.1:15432 after Windows rejected the previous binding. No hosted service was provisioned. The previously deferred auth endpoints, tenant schema/RLS and bounded API pool are now implemented in Phase 2. See `docs/phase-1-service-setup.md` and `docs/auth-session-contract.md`.
 
 **Implemented in this update:**
 
@@ -315,17 +321,37 @@ Track actual code and verification here; a planned item is not complete until it
 - `backend/src/ledgerpilot/local_setup.py`: local-only credential preparation, atomic file updates, configurable loopback port, hidden-value validation, real role/grant probes and a temporary password-rotation drill with restoration.
 - `backend/src/ledgerpilot/config.py` and configuration tests: required secrets, restricted runtime role, valid origins, verified TLS for hosted profiles and bounded Phase 2 pool settings.
 - `.env.example`, ignored `.env`, `docs/phase-1-service-setup.md` and `docs/auth-session-contract.md`: selected local credentials, ownership/rotation/fallback inventory and the approved browser session contract. Existing valid settings were preserved; undersized bootstrap credentials were replaced before the first local database initialization.
-- `.github/workflows/quality.yml`: isolated PostgreSQL initialization, real grants/password-rotation verification and disposable CI cleanup. Hosted execution is pending a Git remote.
+- `.github/workflows/quality.yml`: isolated PostgreSQL initialization, real grants/password-rotation verification and disposable CI cleanup. Hosted checks passed according to the user confirmation recorded above.
 - `CONTRIBUTING.md`, `.nvmrc`, `.gitattributes`, and `README.md`: reproducible setup, branch/review expectations, local commands, Vercel/AWS setup, and deployment boundaries.
 
-**Verification recorded:** 38 tests pass, including five real PostgreSQL bootstrap rejection cases. Ruff, mypy, frontend production build, database grant/DDL-denial verification, API image build and container HTTP/health/OpenAPI checks pass. All workflows pass actionlint. Prior Phase 1 password-rotation evidence remains recorded. Credentials remain ignored. Hosted CI and deployment remain unverified.
+**Verification recorded:** 38 tests pass, including five real PostgreSQL bootstrap rejection cases. Ruff, mypy, frontend production build, database grant/DDL-denial verification, API image build and container HTTP/health/OpenAPI checks pass. All workflows pass actionlint. Prior Phase 1 password-rotation evidence remains recorded. Credentials remain ignored. The user subsequently confirmed passing GitHub checks on 29 October 2026; deployment remains unverified. These local checks were not rerun for this documentation-only update.
 
 **Audit fixes:** Block connection query overrides; isolate file validation; reject unsafe SQL bootstrap inputs; restrict Docker context; require shared checks before release; publish the built image; gate demo deployment on an explicit enable flag and default branch, validating environment values inside the job. See [Phase 0 and Phase 1 audit](phase-0-1-audit.md).
 
+**Phase 2 implementation:**
+
+- `backend/src/ledgerpilot/database.py`, `main.py`, `shared/`: app lifecycle, bounded pooled transactions, actual runtime-role checks, readiness, CSRF/body/depth limits, structured safe errors/logs, strict schemas and read contracts.
+- `identity/`: real SMTP verification/reset, Argon2id and offline blocklist, ten-minute JWT access, stored rotating refresh families, replay revocation, seven-day absolute expiry, privileged idle limit, encrypted one-use TOTP, hashed recovery codes, CSRF cookies and distributed auth throttling/backoff.
+- `tenancy/`: verified memberships, forced RLS, one-use 48-hour invitations, multi-business selection and prospective policy history. No unrestricted support role is exposed.
+- `accounting/`: typed accounts and versions, non-overlapping periods, durable versioned drafts, a shared private posting gateway, immutable balanced posting, idempotency, reversals, provenance/period/policy links, exact rounding/allocation, GL, closing-balance trial balance and reconciliation primitives that reject incomplete sources.
+- `backend/migrations/`: operator-only Alembic setup and frozen revisions `0001`–`0005`. Financial history is protected from destructive downgrade. Source SQL and migrations are included in the API image; runtime never receives migration credentials.
+- `docker-compose.auth.yml`, `.env.example`, local setup helper and ignored `.env`: isolated loopback SMTP, dedicated MFA key/initialization marker, explicit cookie/mail settings and preserved existing database volume/secrets.
+- `backend/tests/test_phase2_security.py`, `test_phase2_integration.py`, `.github/workflows/checks.yml`: unit/property checks and actual PostgreSQL/SMTP acceptance in a uniquely created temporary database, including draft isolation, concurrency, replay, reset, role denial and safe cleanup.
+- [Phase 2 implementation and operations](phase-2-backend-foundation.md), [ADR-010](architecture/ADR-010-phase-2-auth-and-posting.md) and the updated auth contract record scope, requirements, setup, security details and later-phase boundaries.
+
+**Phase 2 verification:** 73 tests passed against the final application source, including real PostgreSQL and SMTP flows; coverage is 86%. Ruff and mypy (45 source files) passed. Migrations through 0005 applied successfully, including repeated upgrade checks. The final non-root API image passed live/readiness, OpenAPI, secure-cookie and migration-asset smoke checks; root-owned application code is not runtime-writable. All three workflows passed actionlint. The future-migration template rendered and compiled successfully; unimplemented generated migrations fail explicitly. The independent mailbox HTTP/SMTP checks passed. Updated CI now enables the new real-service tests; these new changes have not been run on hosted GitHub Actions yet. No hosted deployment or remote push is part of this update. Real browser HTTPS/cookie/CORS acceptance remains in UI integration/deployed testing; actual AR/AP/loan/tax source adapters and remaining P1 feature APIs are Phase 3 work.
+
+**Phase 2 execution order:**
+
+1. Implement application lifespan, the bounded PostgreSQL engine/session factory, transaction handling, request IDs, redacted logs/errors, and separate liveness/readiness checks.
+2. Configure Alembic and implement identity, business, membership, role and audit models/migrations; deliver the approved login/session/MFA/recovery controls.
+3. Enforce tenant authorization, transaction-scoped tenant context, RLS and explicit grants using the restricted runtime connection.
+4. Build accounting policy, chart of accounts, currency/rounding, fiscal periods, immutable balanced journal posting, idempotency, reversals, GL and trial balance.
+5. Pass real PostgreSQL migration, accounting-invariant, concurrency and cross-tenant tests before closing Phase 2. Track work as implemented only when its checks pass.
+
 **Pending to activate deployment:**
 
-- Run the revised workflows on GitHub and capture successful checks; the local API image build passes.
-- Protect the selected default branch with required checks shown by GitHub for the reusable workflow. The remote is configured; hosted verification remains pending.
+- Protect the selected default branch with required checks shown by GitHub for the reusable workflow. The remote is configured and the user has confirmed passing hosted checks; branch protection configuration is not confirmed.
 - Link Vercel to the repository, set the project root to `frontend`, build command to `npm run build`, output directory to `dist`, and production branch to the selected GitHub default branch.
 - Provision the demo ECR repository and SSM-managed EC2 instance; install Docker, AWS CLI, `/opt/ledgerpilot/deploy-api.sh`, root-only API environment settings, TLS reverse proxy and DNS.
 - Configure the narrowly scoped GitHub OIDC role and the `demo` environment variables listed in the README.
@@ -343,7 +369,7 @@ Verify package versions and provider terms when implementing:
 - [Supabase documentation](https://supabase.com/docs)
 - [Vercel Vite deployment](https://vercel.com/docs/frameworks/frontend/vite)
 - [AWS database migration guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/strategy-database-migration/welcome.html)
-- LedgerPilot Complete SRS, updated edition: docs/LedgerPilot_Complete_SRS_Updated.docx
+- LedgerPilot Complete SRS, updated edition: docs/srs/LedgerPilot_Complete_SRS_Updated.docx
 
 
 

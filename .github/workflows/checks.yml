@@ -41,6 +41,28 @@ jobs:
         env:
           RUN_DB_BOOTSTRAP_TESTS: '1'
         run: uv run pytest tests/test_bootstrap_integration.py -q
+      - name: Start local SMTP mailbox
+        working-directory: .
+        run: |
+          docker compose -f docker-compose.auth.yml up -d
+          curl --fail --retry 10 --retry-connrefused --retry-delay 1 --max-time 5 http://127.0.0.1:8025/api/v1/messages > /dev/null
+      - name: Start bounded local malware scanner
+        working-directory: .
+        run: docker compose -f docker-compose.documents.yml up -d --build --wait --wait-timeout 300
+      - name: Verify backend on isolated PostgreSQL, SMTP and ClamAV
+        env:
+          RUN_PHASE2_INTEGRATION: '1'
+          RUN_DOCUMENT_SCANNER_TESTS: '1'
+          RUN_LOCAL_OCR_TESTS: '1'
+        run: uv run pytest tests -q
+      - name: Stop local malware scanner
+        if: always()
+        working-directory: .
+        run: docker compose -f docker-compose.documents.yml down --volumes
+      - name: Stop local SMTP mailbox
+        if: always()
+        working-directory: .
+        run: docker compose -f docker-compose.auth.yml down
       - name: Stop disposable CI database
         if: always()
         working-directory: .
