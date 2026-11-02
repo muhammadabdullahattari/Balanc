@@ -1,0 +1,95 @@
+{
+  "date": "2026-10-30",
+  "scope": "User-selected approved local pilot; detailed SRS gaps remain open",
+  "git_base": "3b48bfc8dbab786d3ac9105f598fee60ae984a95",
+  "migration_head": "0020",
+  "openapi_paths": 121,
+  "openapi_schemas": 229,
+  "openapi_sha256": "78ee610c255e2832ea916ae0e68a64bcab6900ce0a84194c7d2d4a4b9b513169",
+  "baseline_full_run": {
+    "passed": 112,
+    "failed": 0,
+    "seconds": 777.88,
+    "note": "Ran before final Swagger fix and two added golden/migration tests; separate final focused run required."
+  },
+  "coverage": {
+    "overall_combined_percent": 79.46820175438596,
+    "line_percent": 83.95270270270271,
+    "branch_percent": 60.174418604651166,
+    "areas": {
+      "identity": {
+        "covered_branches": 53,
+        "total_branches": 80,
+        "percent": 66.25
+      },
+      "accounting": {
+        "covered_branches": 46,
+        "total_branches": 66,
+        "percent": 69.7
+      }
+    },
+    "srs_thresholds_met": false,
+    "note": "Whole measured backend; this is not changed-line coverage. SRS auth/accounting 90% branch targets are unmet. Not silently waived or claimed complete."
+  },
+  "swagger": {
+    "environment": "Chrome http://localhost:8014/docs, loopback API, disposable synthetic database",
+    "checks": [
+      {
+        "route": "GET /health/ready",
+        "status": 200,
+        "result": "ready"
+      },
+      {
+        "route": "POST /api/v1/auth/register",
+        "input": "invalid email and short password",
+        "status": 400,
+        "result": "ERR_EMAIL"
+      },
+      {
+        "route": "POST /api/v1/auth/register",
+        "input": "synthetic valid local account",
+        "status": 202,
+        "result": "eligible verification email response"
+      }
+    ],
+    "request_ids": [
+      "e31b6f04-e4aa-4b50-82ea-dc18131a49ca",
+      "f01b4063-9ba5-4c2d-b47e-215dd57698d5",
+      "e1b1efbf-367c-4b5a-b1f4-7f59b66e9ae9"
+    ],
+    "limits": "Representative UI execution only; authenticated accounting flows covered by real-service pytest, not claimed clicked through Swagger.",
+    "cleanup": "graceful stop; known disposable database absence verified in PostgreSQL catalog"
+  },
+  "final_focused_run": {
+    "passed": 4,
+    "failed": 0,
+    "seconds": 39.74,
+    "note": "All final Phase 4 golden/restore/migration/security tests; subsequent configured-prefix docs adjustment checked separately."
+  },
+  "final_docs_check": {
+    "passed": 1,
+    "failed": 0,
+    "deselected": 3,
+    "note": "See docs-final log for measured duration.",
+    "seconds": 11.85
+  },
+  "browser_client_tests": {
+    "passed": 4,
+    "failed": 0,
+    "type_contract_assertions": "passed"
+  },
+  "checks": {
+    "ruff": "passed",
+    "mypy": "passed: 90 application source files",
+    "openapi_drift": "passed",
+    "traceability_references": "passed:104",
+    "generated_types": "passed: regenerated then checked against sorted reviewed contract",
+    "frontend_build": "passed",
+    "hosted_ci": "not run",
+    "production_capacity": "not measured",
+    "api_container": "ledgerpilot-api:phase4 built; UID10001,real DB ready0020,121 paths,Secure/HttpOnly CSRF passed; smoke container removed",
+    "git_whitespace": "passed"
+  },
+  "ci_workflow_yaml": "parsed successfully; not a hosted Actions run",
+  "status": "complete for approved local pilot; detailed SRS gaps open"
+}

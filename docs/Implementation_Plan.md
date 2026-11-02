@@ -2,12 +2,16 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.13
+**Plan version:** 2.16
 **Status:** Governing implementation sequence  
-**Date:** 29 October 2026
+**Date:** 30 October 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**Phase 5 functional implementation and local HTTP acceptance (30 October 2026):** Completed the approved local-pilot workflows, including the remaining refunds/advances/rules/opening-baseline/draft/reversal paths and discovered integration repairs. The user advanced real integration work into Phase 5; the system architecture is preserved. **17 real-service frontend journeys, 6 component/accessibility-structure checks, 6 transport checks and 26 focused backend regressions passed. Overall visual/browser sign-off remains open:** Computer Use stopped because it could not verify the current browser URL safely. See [the authoritative Phase 5 record](phase-5-responsive-frontend.md) and [machine-readable live results](contracts/phase-5-results.json). This is not full SRS or production certification; Phases 6/8 and deployment gates are not silently closed.
+
+**Phase 4 local verification (30 October 2026): Complete for the approved local pilot.** Implemented reproducible OpenAPI/type generation, the canonical cookie/CSRF browser transport, real synthetic restore and populated migration checks, independent financial assertions, representative Swagger execution and CI evidence collection. The user explicitly selected **"Verify approved local pilot; record SRS gaps."** See [the Phase 4 record](phase-4-backend-verification.md), [results](contracts/phase-4-results.json), [104-requirement registry](contracts/phase-4-traceability.json) and ADR-014. The full baseline passed 112 tests; four final focused checks and one later Swagger check passed. Browser transport/type checks, build/container smoke, Ruff/mypy and contract checks passed. Measured coverage is 79.47% combined with accounting/auth branch targets unmet; detailed SRS differences remain open. This closes local verification, not full SRS or production certification. Phase order and system architecture are preserved; Phase 5 is next. No commit/push/deployment was performed.
 
 **CI mailbox startup repair (29 October 2026):** The `Start local SMTP mailbox` check failed with curl exit 56 because the container had started before its HTTP listener was ready. The workflow now retries all errors for the read-only readiness GET, with ten retries, a 60-second retry budget, two-second connection/five-second request limits and a two-minute step timeout. A local TCP test reproduced two connection resets (curl 56) followed by a successful third request; persistent HTTP failure still exits nonzero after bounded retries. Real Mailpit HTTP readiness and SMTP NOOP, workflow YAML parsing and Git whitespace checks passed. No product architecture or phase sequence changed. Hosted GitHub Actions must be rerun after committing/pushing this repair; no hosted success is claimed and nothing was committed or pushed by the assistant.
 

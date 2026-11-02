@@ -751,6 +751,24 @@ def jobs(
     }
 
 
+@router.get("/membership", response_model=contracts.responses["workspace.members"])
+def current_membership(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]:
+    """Expose only the caller's verified membership for permission presentation."""
+    member = authorize(db, identity, business_id)
+    return {
+        "items": [
+            {
+                "user_id": member.user_id,
+                "role": member.role,
+                "active": member.active,
+                "can_post": member.can_post,
+                "can_invite": member.can_invite,
+                "version": member.version,
+            }
+        ]
+    }
+
+
 @router.get(
     "/memberships",
     response_model=contracts.responses["workspace.members"],

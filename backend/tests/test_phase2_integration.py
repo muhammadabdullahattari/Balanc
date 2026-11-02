@@ -220,6 +220,14 @@ async def test_csrf_and_unknown_tenant_are_denied(client: httpx.AsyncClient) -> 
 async def test_owner_is_not_automatically_a_posting_accountant(client: httpx.AsyncClient) -> None:
     await new_identity(client)
     bid = await new_business(client)
+    own = await client.get(f"/api/v1/businesses/{bid}/membership")
+    assert own.status_code == 200, own.text
+    members = own.json()["items"]
+    assert len(members) == 1
+    assert members[0]["role"] == "owner"
+    assert members[0]["can_post"] is False
+    assert members[0]["user_id"] == (await client.get("/api/v1/auth/me")).json()["id"]
+    assert (await client.get(f"/api/v1/businesses/{uuid4()}/membership")).status_code == 404
     response = await client.post(
         f"/api/v1/businesses/{bid}/periods",
         json={"start_date": "2026-01-01", "end_date": "2026-12-31"},

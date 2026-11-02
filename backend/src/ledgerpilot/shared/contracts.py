@@ -178,6 +178,7 @@ Rule = obj(
     priority=int,
     version=int,
     active=bool,
+    history=(many(JSON), []),
 )
 RuleSample = obj("RuleSample", id=UUID, version=int, amount=str)
 RulePreview = obj(

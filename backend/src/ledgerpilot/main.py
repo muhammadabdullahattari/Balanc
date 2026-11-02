@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
@@ -26,12 +26,14 @@ from ledgerpilot.reports.router import router as reports_router
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.middleware import FoundationMiddleware
 from ledgerpilot.shared.responses import ErrorEnvelope, ReadinessResponse
+from ledgerpilot.swagger import local_swagger
 from ledgerpilot.tenancy.router import router as tenancy_router
 from ledgerpilot.trade.router import router as trade_router
 from ledgerpilot.workspace.router import router as workspace_router
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
+
     configured = settings or get_settings()
     logger = logging.getLogger("ledgerpilot")
     logger.setLevel(configured.log_level)
@@ -63,12 +65,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         title=configured.app_name,
         version=version("ledgerpilot-api"),
         lifespan=lifespan,
-        docs_url="/docs" if local_docs else None,
+        docs_url=None,
         redoc_url=None,
         openapi_url="/openapi.json" if local_docs else None,
         responses=error_contracts,
     )
     application.state.settings = configured
+    if local_docs:
+        @application.get("/docs", include_in_schema=False)
+        def documentation() -> HTMLResponse:
+            return local_swagger(
+                "/openapi.json", f"{configured.app_name} - Swagger UI",
+                f"{configured.api_v1_prefix}/auth/csrf",
+            )
+
     application.add_middleware(FoundationMiddleware)
     application.add_middleware(
         CORSMiddleware,

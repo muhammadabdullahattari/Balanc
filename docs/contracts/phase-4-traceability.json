@@ -1,0 +1,1389 @@
+{
+  "source": "docs/srs/LedgerPilot_Complete_SRS_Updated.docx",
+  "source_sha256": "b8d58b98aee376f552c094a7bc705218b088af8803989f2ea4b0ed61138a66f4",
+  "interpretation": "A mapped test is an evidence pointer, not proof of every clause. Full P1 SRS gate remains open until differences are resolved.",
+  "requirements": [
+    {
+      "id": "FR-001",
+      "uc": "UC-001",
+      "tc": "TC-001",
+      "source": "FR-001 | FEAT-001 | Must | P1 | UC-001 | TC-001",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: An expired or reused token fails; recovery-code reuse fails; a suspended user cannot refresh a session.",
+      "routes": [
+        "/api/v1/auth/csrf",
+        "/api/v1/auth/login",
+        "/api/v1/auth/logout",
+        "/api/v1/auth/logout-all",
+        "/api/v1/auth/me",
+        "/api/v1/auth/mfa/confirm",
+        "/api/v1/auth/mfa/enroll",
+        "/api/v1/auth/refresh",
+        "/api/v1/auth/register",
+        "/api/v1/auth/reset",
+        "/api/v1/auth/reset-request",
+        "/api/v1/auth/verification-request",
+        "/api/v1/auth/verify"
+      ],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_real_identity_lifecycle_and_secure_cookie_flags"
+      ],
+      "note": "Verification, login, mandatory privileged TOTP, refresh/replay and recovery; optional passkeys P2."
+    },
+    {
+      "id": "FR-002",
+      "uc": "UC-002",
+      "tc": "TC-002",
+      "source": "FR-002 | FEAT-002 | Must | P1 | UC-002 | TC-002",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: A user in business A cannot list, retrieve, modify or infer business B records by changing identifiers.",
+      "routes": [
+        "/api/v1/businesses",
+        "/api/v1/businesses/{business_id}",
+        "/api/v1/businesses/{business_id}/accounts",
+        "/api/v1/businesses/{business_id}/accounts/{account_id}",
+        "/api/v1/businesses/{business_id}/advances",
+        "/api/v1/businesses/{business_id}/advances/{advance_id}/applications",
+        "/api/v1/businesses/{business_id}/assistant/report-answer",
+        "/api/v1/businesses/{business_id}/audit-events",
+        "/api/v1/businesses/{business_id}/bank-imports",
+        "/api/v1/businesses/{business_id}/bank-imports/preview",
+        "/api/v1/businesses/{business_id}/bank-rules",
+        "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/activation",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/preview",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/rollback",
+        "/api/v1/businesses/{business_id}/bank-transactions",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/disposition",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/matches",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/preview",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/proposal",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/reclassifications",
+        "/api/v1/businesses/{business_id}/beneficiary-changes",
+        "/api/v1/businesses/{business_id}/close-tasks",
+        "/api/v1/businesses/{business_id}/close-tasks/{task_id}",
+        "/api/v1/businesses/{business_id}/consents",
+        "/api/v1/businesses/{business_id}/dashboard",
+        "/api/v1/businesses/{business_id}/entitlement",
+        "/api/v1/businesses/{business_id}/evidence",
+        "/api/v1/businesses/{business_id}/evidence/capabilities",
+        "/api/v1/businesses/{business_id}/evidence/upload",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/download",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/duplicate-candidates",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/identity",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/links",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/notes",
+        "/api/v1/businesses/{business_id}/exports/evidence-pack.zip",
+        "/api/v1/businesses/{business_id}/exports/journals.csv",
+        "/api/v1/businesses/{business_id}/exports/snapshots",
+        "/api/v1/businesses/{business_id}/exports/snapshots/{snapshot_id}",
+        "/api/v1/businesses/{business_id}/exports/snapshots/{snapshot_id}/download",
+        "/api/v1/businesses/{business_id}/exports/verification-key",
+        "/api/v1/businesses/{business_id}/imports",
+        "/api/v1/businesses/{business_id}/imports/apply",
+        "/api/v1/businesses/{business_id}/imports/preview",
+        "/api/v1/businesses/{business_id}/imports/{batch_id}/comparison",
+        "/api/v1/businesses/{business_id}/invitations",
+        "/api/v1/businesses/{business_id}/jobs",
+        "/api/v1/businesses/{business_id}/jobs/{job_id}/replay",
+        "/api/v1/businesses/{business_id}/journal-drafts",
+        "/api/v1/businesses/{business_id}/journal-drafts/{journal_id}",
+        "/api/v1/businesses/{business_id}/journal-drafts/{journal_id}/post",
+        "/api/v1/businesses/{business_id}/journals",
+        "/api/v1/businesses/{business_id}/journals/{journal_id}",
+        "/api/v1/businesses/{business_id}/journals/{journal_id}/reversal",
+        "/api/v1/businesses/{business_id}/ledger",
+        "/api/v1/businesses/{business_id}/loans",
+        "/api/v1/businesses/{business_id}/loans/{loan_id}/movements",
+        "/api/v1/businesses/{business_id}/memberships",
+        "/api/v1/businesses/{business_id}/memberships/{user_id}",
+        "/api/v1/businesses/{business_id}/notification-preferences",
+        "/api/v1/businesses/{business_id}/notifications",
+        "/api/v1/businesses/{business_id}/notifications/{notification_id}/read",
+        "/api/v1/businesses/{business_id}/opening-balances",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/cash-policy",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/corrections",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/history",
+        "/api/v1/businesses/{business_id}/operations/{operation_id}",
+        "/api/v1/businesses/{business_id}/parties",
+        "/api/v1/businesses/{business_id}/parties/{party_id}",
+        "/api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes",
+        "/api/v1/businesses/{business_id}/parties/{party_id}/statement",
+        "/api/v1/businesses/{business_id}/payments",
+        "/api/v1/businesses/{business_id}/periods",
+        "/api/v1/businesses/{business_id}/periods/{period_id}",
+        "/api/v1/businesses/{business_id}/policies",
+        "/api/v1/businesses/{business_id}/privacy-export",
+        "/api/v1/businesses/{business_id}/privacy-requests",
+        "/api/v1/businesses/{business_id}/privacy-requests/{privacy_id}",
+        "/api/v1/businesses/{business_id}/privacy-requests/{privacy_id}/reviews",
+        "/api/v1/businesses/{business_id}/privacy-review-queue",
+        "/api/v1/businesses/{business_id}/readiness",
+        "/api/v1/businesses/{business_id}/reminders/review",
+        "/api/v1/businesses/{business_id}/reports/aging",
+        "/api/v1/businesses/{business_id}/reports/balance-sheet",
+        "/api/v1/businesses/{business_id}/reports/controls",
+        "/api/v1/businesses/{business_id}/reports/forecast",
+        "/api/v1/businesses/{business_id}/reports/history",
+        "/api/v1/businesses/{business_id}/reports/history/{report_id}",
+        "/api/v1/businesses/{business_id}/reports/profit-loss",
+        "/api/v1/businesses/{business_id}/reports/tax-support",
+        "/api/v1/businesses/{business_id}/search",
+        "/api/v1/businesses/{business_id}/source-drafts",
+        "/api/v1/businesses/{business_id}/source-drafts/{draft_id}",
+        "/api/v1/businesses/{business_id}/source-drafts/{draft_id}/issue",
+        "/api/v1/businesses/{business_id}/source-drafts/{draft_id}/void",
+        "/api/v1/businesses/{business_id}/statements/sign-off",
+        "/api/v1/businesses/{business_id}/tax/remittances",
+        "/api/v1/businesses/{business_id}/trade-documents",
+        "/api/v1/businesses/{business_id}/trade-documents/preview",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}/dispute",
+        "/api/v1/businesses/{business_id}/trial-balance",
+        "/api/v1/businesses/{business_id}/usage"
+      ],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_csrf_and_unknown_tenant_are_denied"
+      ],
+      "note": "Membership and multi-business list covered; aggregate portfolio exceptions across hundreds of businesses not verified."
+    },
+    {
+      "id": "FR-003",
+      "uc": "UC-003",
+      "tc": "TC-003",
+      "source": "FR-003 | FEAT-003 | Must | P1 | UC-003 | TC-003",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: A $100 service invoice earned in October and settled in November reports in the correct month on each basis; opening balances and control accounts reconcile.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/policies"
+      ],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_policies_and_chronological_ledger_read_contracts"
+      ],
+      "note": "Policies/openings covered; unsupported historic tax and currency migrations fail explicitly."
+    },
+    {
+      "id": "FR-004",
+      "uc": "UC-004",
+      "tc": "TC-004",
+      "source": "FR-004 | FEAT-004 | Must | P1 | UC-004 | TC-004",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Duplicate simultaneous submissions create one journal; unbalanced or locked-period writes leave no partial rows.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/exports/journals.csv",
+        "/api/v1/businesses/{business_id}/journals",
+        "/api/v1/businesses/{business_id}/journals/{journal_id}",
+        "/api/v1/businesses/{business_id}/journals/{journal_id}/reversal"
+      ],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_balanced_atomic_idempotent_posting_reversal_and_period_lock"
+      ],
+      "note": "Balanced immutable atomic posting and chronology verified; not external exactly-once delivery."
+    },
+    {
+      "id": "FR-005",
+      "uc": "UC-005",
+      "tc": "TC-005",
+      "source": "FR-005 | FEAT-005 | Must | P1 | UC-005 | TC-005",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: A $100 invoice and $40 payment leave $60 due; subledger totals equal AR; a sales receipt creates no remaining receivable.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/trade-documents",
+        "/api/v1/businesses/{business_id}/trade-documents/preview",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}/dispute"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_invoice_partial_payment_and_cash_timing"
+      ],
+      "note": "Local assertions only; see linked test and Phase 3 inventory."
+    },
+    {
+      "id": "FR-006",
+      "uc": "UC-006",
+      "tc": "TC-006",
+      "source": "FR-006 | FEAT-006 | Must | P1 | UC-006 | TC-006",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Two payments of $40 and $60 settle a $100 bill once; AP subledger equals control account.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/trade-documents",
+        "/api/v1/businesses/{business_id}/trade-documents/preview",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}",
+        "/api/v1/businesses/{business_id}/trade-documents/{document_id}/dispute"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bill_two_payments_and_loan_principal"
+      ],
+      "note": "Local assertions only; see linked test and Phase 3 inventory."
+    },
+    {
+      "id": "FR-007",
+      "uc": "UC-007",
+      "tc": "TC-007",
+      "source": "FR-007 | FEAT-007 | Must | P1/P2 delivery | UC-007 | TC-007",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: A paid or disputed invoice receives no overdue chase; allocations never exceed available payment without a separate credit treatment.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/payments"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_advance_application_and_reminder_settlement_recheck"
+      ],
+      "note": "In-app review only; external collections delivery P2."
+    },
+    {
+      "id": "FR-008",
+      "uc": "UC-008",
+      "tc": "TC-008",
+      "source": "FR-008 | FEAT-008 | Must | P1 CSV / P2 feed | UC-008 | TC-008",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Reimporting the same file creates no extra postings; two legitimate identical payments are not automatically collapsed.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/bank-imports",
+        "/api/v1/businesses/{business_id}/bank-imports/preview"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bank_reimport_preserves_legitimate_identical_rows"
+      ],
+      "note": "CSV only; OFX/QIF/live feed later."
+    },
+    {
+      "id": "FR-009",
+      "uc": "UC-009",
+      "tc": "TC-009",
+      "source": "FR-009 | FEAT-009 | Must | P1 assisted | UC-009 | TC-009",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Selecting a field highlights its source; a failed model leaves a manual workflow available; unsupported scans are not guessed into journals.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/evidence",
+        "/api/v1/businesses/{business_id}/evidence/capabilities",
+        "/api/v1/businesses/{business_id}/evidence/upload",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/download",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/duplicate-candidates",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/identity",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/links",
+        "/api/v1/businesses/{business_id}/evidence/{evidence_id}/notes",
+        "/api/v1/businesses/{business_id}/exports/evidence-pack.zip"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_real_pdf_text_and_scanned_png_extraction_remain_unposted"
+      ],
+      "note": "English Tesseract/Poppler; manual fallbacks. See VAL-006 and SEC-009 differences."
+    },
+    {
+      "id": "FR-010",
+      "uc": "UC-010",
+      "tc": "TC-010",
+      "source": "FR-010 | FEAT-010 | Must | P1 | UC-010 | TC-010",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: An unknown $3,287.64 deposit does not silently become income; every disposition has a reason and traceable result.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/bank-transactions",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/disposition",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/matches",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/preview",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/proposal",
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/reclassifications"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bank_split_match_and_two_sided_transfer_do_not_duplicate_profit"
+      ],
+      "note": "Local assertions only; see linked test and Phase 3 inventory."
+    },
+    {
+      "id": "FR-011",
+      "uc": "UC-011",
+      "tc": "TC-011",
+      "source": "FR-011 | FEAT-011 | Must | P1 | UC-011 | TC-011",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Borrowing $100 posts Dr Bank / Cr Loan Payable; repayment reverses principal to zero; $10 interest is separate and does not reduce principal below zero.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/loans",
+        "/api/v1/businesses/{business_id}/loans/{loan_id}/movements"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bill_two_payments_and_loan_principal"
+      ],
+      "note": "Local assertions only; see linked test and Phase 3 inventory."
+    },
+    {
+      "id": "FR-012",
+      "uc": "UC-012",
+      "tc": "TC-012",
+      "source": "FR-012 | FEAT-012 | Must | P1 | UC-012 | TC-012",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: An internal $500 transfer changes neither profit nor combined cash without fees; each bank side is consumed once.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/disposition"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_late_transfer_side_clears_once_and_keeps_both_sources"
+      ],
+      "note": "Local assertions only; see linked test and Phase 3 inventory."
+    },
+    {
+      "id": "FR-013",
+      "uc": "UC-013",
+      "tc": "TC-013",
+      "source": "FR-013 | FEAT-013 | Must | P1 manual / P2 feeds | UC-013 | TC-013",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Sign-off is rejected when unexplained difference is nonzero; stale feeds show last successful update.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/statements/sign-off"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_real_scanner_statement_and_signed_offline_export"
+      ],
+      "note": "Manual reconciliation only; no live feed claim."
+    },
+    {
+      "id": "FR-014",
+      "uc": "UC-014",
+      "tc": "TC-014",
+      "source": "FR-014 | FEAT-014 | Must | P1 supported policy | UC-014 | TC-014",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Every total reconciles to ledger scope; a confirmed tax remittance reduces the recorded tax liability without duplicating expense.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/reports/aging",
+        "/api/v1/businesses/{business_id}/reports/balance-sheet",
+        "/api/v1/businesses/{business_id}/reports/controls",
+        "/api/v1/businesses/{business_id}/reports/forecast",
+        "/api/v1/businesses/{business_id}/reports/history",
+        "/api/v1/businesses/{business_id}/reports/history/{report_id}",
+        "/api/v1/businesses/{business_id}/reports/profit-loss",
+        "/api/v1/businesses/{business_id}/reports/tax-support"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_receipt_fee_closes_ar_and_tax_remittance_is_not_an_expense"
+      ],
+      "note": "Supported manually reviewed tax policies only; no tax filing."
+    },
+    {
+      "id": "FR-015",
+      "uc": "UC-015",
+      "tc": "TC-015",
+      "source": "FR-015 | FEAT-015 | Must | P1 suggestions / P2 autopost | UC-015 | TC-015",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: A rule change shows affected samples before activation; high-risk categories remain approval-only.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/bank-rules",
+        "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/activation",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/preview",
+        "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/rollback"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bank_rule_requires_fresh_preview_and_never_posts"
+      ],
+      "note": "Human-approved suggestions; controlled autopost P2."
+    },
+    {
+      "id": "FR-016",
+      "uc": "UC-016",
+      "tc": "TC-016",
+      "source": "FR-016 | FEAT-016 | Should | P2 | UC-016 | TC-016",
+      "status": "later_release",
+      "expected": "Acceptance: A $50 expense billed once cannot be automatically billed again; project totals reconcile to filtered ledger lines.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-017",
+      "uc": "UC-017",
+      "tc": "TC-017",
+      "source": "FR-017 | FEAT-017 | Must | P1 baseline / P2 advanced | UC-017 | TC-017",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Every numeric answer uses a report ID; prompt-injected documents cannot trigger actions; model releases pass regression before promotion.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/assistant/report-answer"
+      ],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_reports_workspace_lists_and_cited_answers_are_frontend_usable"
+      ],
+      "note": "Saved authorized numeric report lookup and deterministic forecast; general question interpretation and calibrated bands not verified."
+    },
+    {
+      "id": "FR-018",
+      "uc": "UC-018",
+      "tc": "TC-018",
+      "source": "FR-018 | FEAT-018 | Should | P2/P3 | UC-018 | TC-018",
+      "status": "later_release",
+      "expected": "Acceptance: Revoked keys fail immediately; replaying the same provider event has one business effect; missing connector scopes cannot be bypassed.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-019",
+      "uc": "UC-019",
+      "tc": "TC-019",
+      "source": "FR-019 | FEAT-019 | Should | P2 email / P3 channels | UC-019 | TC-019",
+      "status": "later_release",
+      "expected": "Acceptance: Evidence receipt cancels pending chase; no channel fallback bypasses opt-out or consent.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-020",
+      "uc": "UC-020",
+      "tc": "TC-020",
+      "source": "FR-020 | FEAT-020 | Should | P2 simple / P3 contracts | UC-020 | TC-020",
+      "status": "later_release",
+      "expected": "Acceptance: All installments sum exactly to approved amount; rerunning a period cannot post twice; a service period alone cannot assert IFRS 15 compliance.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-021",
+      "uc": "UC-021",
+      "tc": "TC-021",
+      "source": "FR-021 | FEAT-021 | Should | P3 | UC-021 | TC-021",
+      "status": "later_release",
+      "expected": "Acceptance: Payroll expense and liabilities reconcile to source summary; multiple withdrawals settle clearing without assuming gross costs equal one withdrawal.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-022",
+      "uc": "UC-022",
+      "tc": "TC-022",
+      "source": "FR-022 | FEAT-022 | Should | P2 | UC-022 | TC-022",
+      "status": "later_release",
+      "expected": "Acceptance: Narrative values equal source report delta; zero baseline shows absolute change without division by zero.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-023",
+      "uc": "UC-023",
+      "tc": "TC-023",
+      "source": "FR-023 | FEAT-023 | Should | P3 | UC-023 | TC-023",
+      "status": "later_release",
+      "expected": "Acceptance: A disputed $10 deduction leaves $10 receivable until approved adjustment; no silent write-off.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-024",
+      "uc": "UC-024",
+      "tc": "TC-024",
+      "source": "FR-024 | FEAT-024 | Could | P4 | UC-024 | TC-024",
+      "status": "later_release",
+      "expected": "Acceptance: Eliminations balance and are traceable; ownership changes and minority interests require approved consolidation policy.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-025",
+      "uc": "UC-025",
+      "tc": "TC-025",
+      "source": "FR-025 | FEAT-025 | Must | P1 change hold / P3 verification | UC-025 | TC-025",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: An invoice with changed beneficiary details cannot authorize payment until independent approval; a hash alone is not proof of ownership.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/beneficiary-changes",
+        "/api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_party_statement_history_and_held_beneficiary_changes"
+      ],
+      "note": "Held proposed changes; independent account verification P3."
+    },
+    {
+      "id": "FR-026",
+      "uc": "UC-026",
+      "tc": "TC-026",
+      "source": "FR-026 | FEAT-026 | Should | P1 rules / P3 enrichment | UC-026 | TC-026",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Changing merchant display name does not alter raw bank text; uncertain identity cannot merge parties automatically.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_reviewed_duplicate_identity_and_correction_rule_suggestions"
+      ],
+      "note": "Correction-backed rule suggestions; provider enrichment P3."
+    },
+    {
+      "id": "FR-027",
+      "uc": "UC-027",
+      "tc": "TC-027",
+      "source": "FR-027 | FEAT-027 | Should | P3 | UC-027 | TC-027",
+      "status": "later_release",
+      "expected": "Acceptance: Components equal payout plus change in reserves/clearing; sales are not reposted from the bank payout.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-028",
+      "uc": "UC-028",
+      "tc": "TC-028",
+      "source": "FR-028 | FEAT-028 | Must | P1 basic / P2 workpapers | UC-028 | TC-028",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Export opens offline with working relative evidence links; subledger tie-outs reconcile and manifest detects modified files.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/exports/evidence-pack.zip"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_real_scanner_statement_and_signed_offline_export"
+      ],
+      "note": "Bounded signed evidence packs; advanced workpapers later."
+    },
+    {
+      "id": "FR-029",
+      "uc": "UC-029",
+      "tc": "TC-029",
+      "source": "FR-029 | FEAT-029 | Should | P3 | UC-029 | TC-029",
+      "status": "later_release",
+      "expected": "Acceptance: One approved accrual produces one reversal; late bill clears or adjusts accrual without double counting.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-030",
+      "uc": "UC-030",
+      "tc": "TC-030",
+      "source": "FR-030 | FEAT-030 | Should | P3 | UC-030 | TC-030",
+      "status": "later_release",
+      "expected": "Acceptance: Book depreciation totals do not exceed depreciable basis; disposal and tax/book differences remain traceable.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-031",
+      "uc": "UC-031",
+      "tc": "TC-031",
+      "source": "FR-031 | FEAT-031 | Could | P4 | UC-031 | TC-031",
+      "status": "later_release",
+      "expected": "Acceptance: Allocated landed costs sum to source bill; no silent negative inventory or rewrite of closed-period valuation.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-032",
+      "uc": "UC-032",
+      "tc": "TC-032",
+      "source": "FR-032 | FEAT-032 | Should | P3 | UC-032 | TC-032",
+      "status": "later_release",
+      "expected": "Acceptance: Invoice settled at a different rate closes AR and posts exact FX difference; rate changes do not rewrite prior journals.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-033",
+      "uc": "UC-033",
+      "tc": "TC-033",
+      "source": "FR-033 | FEAT-033 | Must | P1 manual trial / P2 paid | UC-033 | TC-033",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Duplicate successful-payment webhook grants entitlement once; cancellation preserves export/read access during retention window.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/entitlement"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_edges.py::test_trial_expiry_retains_export_privacy_and_quota_limits_apply"
+      ],
+      "note": "Manual trial/usage limits; no paid subscription."
+    },
+    {
+      "id": "FR-034",
+      "uc": "UC-034",
+      "tc": "TC-034",
+      "source": "FR-034 | FEAT-034 | Must | P1 in-app / P2 delivery | UC-034 | TC-034",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Opt-out stops marketing; hard bounce suppresses future mail; unsubscribed SMS cannot be bypassed by retries.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/notifications",
+        "/api/v1/businesses/{business_id}/notifications/{notification_id}/read"
+      ],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_reports_workspace_lists_and_cited_answers_are_frontend_usable"
+      ],
+      "note": "In-app only; external delivery P2."
+    },
+    {
+      "id": "FR-035",
+      "uc": "UC-035",
+      "tc": "TC-035",
+      "source": "FR-035 | FEAT-035 | Must | P1 minimal / P2 delegated | UC-035 | TC-035",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Every support session is auditable and expires after 15 minutes; cross-tenant browsing is denied without a scoped grant.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/jobs",
+        "/api/v1/businesses/{business_id}/jobs/{job_id}/replay"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_edges.py::test_failed_quarantined_job_replay_rescans_and_never_replays_completed_jobs"
+      ],
+      "note": "Scoped jobs/audit/replay; no support impersonation."
+    },
+    {
+      "id": "FR-036",
+      "uc": "UC-036",
+      "tc": "TC-036",
+      "source": "FR-036 | FEAT-036 | Should | P2 | UC-036 | TC-036",
+      "status": "later_release",
+      "expected": "Acceptance: Control and treatment produce identical ledger results; opt-out removes nonessential analytics events.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-037",
+      "uc": "UC-037",
+      "tc": "TC-037",
+      "source": "FR-037 | FEAT-037 | Must | P1 | UC-037 | TC-037",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Search for a known other-tenant invoice returns no result or count; CSV cells beginning with spreadsheet formula prefixes are escaped.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/search"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_csv_import_is_reviewed_atomic_idempotent_and_compares_with_baseline"
+      ],
+      "note": "Bounded search and retained export; 100MB async export requirement not met by local 10MiB snapshots."
+    },
+    {
+      "id": "FR-038",
+      "uc": "UC-038",
+      "tc": "TC-038",
+      "source": "FR-038 | FEAT-038 | Must | P1 basic / P2 automated | UC-038 | TC-038",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Deletion request reports retained categories and legal basis; crypto-erasure does not claim deletion of uncontrolled exports.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/privacy-export",
+        "/api/v1/businesses/{business_id}/privacy-requests",
+        "/api/v1/businesses/{business_id}/privacy-requests/{privacy_id}",
+        "/api/v1/businesses/{business_id}/privacy-requests/{privacy_id}/reviews",
+        "/api/v1/businesses/{business_id}/privacy-review-queue"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_retained_export_resumes_same_bytes_and_privacy_review_is_independent"
+      ],
+      "note": "Independent manual review/export; automatic erasure and backup expiry not claimed."
+    },
+    {
+      "id": "FR-039",
+      "uc": "UC-039",
+      "tc": "TC-039",
+      "source": "FR-039 | FEAT-039 | Must | P1 CSV / P2 connectors | UC-039 | TC-039",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Trial balance and control balances agree before cutover; posted migration corrections use journals, not deletion.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/opening-balances",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/cash-policy",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/corrections",
+        "/api/v1/businesses/{business_id}/opening-balances/{opening_id}/history"
+      ],
+      "tests": [
+        "backend/tests/test_opening_corrections.py::test_opening_corrections_and_reviewed_cash_recognition_reconcile"
+      ],
+      "note": "Reviewed CSV and opening balances; partner migration connectors later."
+    },
+    {
+      "id": "FR-040",
+      "uc": "UC-040",
+      "tc": "TC-040",
+      "source": "FR-040 | FEAT-040 | Should | P1 checklist / P2 workflow | UC-040 | TC-040",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: Readiness is calculated from disclosed checks; unexplained score is not used; unapproved mandatory task blocks close.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/close-tasks",
+        "/api/v1/businesses/{business_id}/close-tasks/{task_id}"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_close_requires_independent_reviewer_and_membership_changes_are_scoped"
+      ],
+      "note": "Checklist/reviewer close; advanced workflow P2."
+    },
+    {
+      "id": "FR-041",
+      "uc": "UC-041",
+      "tc": "TC-041",
+      "source": "FR-041 | FEAT-041 | Could | P3 | UC-041 | TC-041",
+      "status": "later_release",
+      "expected": "Acceptance: A customer cannot enumerate another customer’s invoices; vendor change never becomes effective solely from portal submission.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-042",
+      "uc": "UC-042",
+      "tc": "TC-042",
+      "source": "FR-042 | FEAT-042 | Should | P2 | UC-042 | TC-042",
+      "status": "later_release",
+      "expected": "Acceptance: Changing a scenario does not alter actual books; every forecast assumption can be inspected and reset.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-043",
+      "uc": "UC-043",
+      "tc": "TC-043",
+      "source": "FR-043 | FEAT-043 | Should | P2 | UC-043 | TC-043",
+      "status": "later_release",
+      "expected": "Acceptance: Savings labeled ESTIMATE cannot be presented as measured; tenant analytics contain no cross-customer private data.",
+      "routes": [],
+      "tests": [],
+      "note": "Outside P1; preserve release gate in SRS."
+    },
+    {
+      "id": "FR-044",
+      "uc": "UC-044",
+      "tc": "TC-044",
+      "source": "FR-044 | FEAT-044 | Must | P1 limits / P3 cells | UC-044 | TC-044",
+      "status": "mapped_local_partial",
+      "expected": "Acceptance: At quota exhaustion, new expensive work pauses safely; live job latency stays within its SLO during backlog testing.",
+      "routes": [
+        "/api/v1/businesses/{business_id}/usage"
+      ],
+      "tests": [
+        "backend/tests/test_phase3_edges.py::test_trial_expiry_retains_export_privacy_and_quota_limits_apply"
+      ],
+      "note": "Local quotas/leases; production cells and backlog isolation P3."
+    },
+    {
+      "id": "VAL-001",
+      "tc": "TC-201",
+      "status": "mapped_local_partial",
+      "expected": "Email and verification — Parse with a maintained email parser; maximum 254 characters and 64-character local part; trim outer whitespace and lowercase/IDNA-normalize domain only. Do not strip plus tags or dots. P1 ASCII local part only, international domains accepted. Unique canonical address index. DNS/MX check is advisory with retry; explicit policy blocklist for disposable domains is versioned. Confirmation token proves control, not DNS.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_email_canonicalization_preserves_local_case_and_aliases"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-002",
+      "tc": "TC-202",
+      "status": "mapped_local_partial",
+      "expected": "Password and reset — 15–128 Unicode characters after NFC, preserve spaces; no silent trimming. Block compromised/common values and exact context-derived password candidates. Permit paste/password managers. Argon2id m=65536 KiB,t=3,p=1, random 16-byte salt, 32-byte output; benchmark 100–500ms target and adjust upward where viable. Reset token 256 random bits, hashed, one use, 15 min. Requested 12-char/composition/sequence policy is superseded by ADR-004.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_password_policy_preserves_spaces_and_rejects_common_credentials"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-003",
+      "tc": "TC-203",
+      "status": "mapped_local_partial",
+      "expected": "Identifiers and authorization — UUID syntax; resolve IDs within authenticated business. Never accept tenant scope from request body alone. Composite tenant foreign keys and row policies supplement API checks.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_database_rls_denies_forged_business_scope"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-004",
+      "tc": "TC-204",
+      "status": "mapped_local_partial",
+      "expected": "Money and allocation — Decimal string only, signed range within NUMERIC(24,6); document amounts nonnegative; journal debit/credit nonnegative and exactly one positive per line. Reject NaN/infinity/scientific notation. Currency-specific posting precision; deterministic remainder allocation.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_rejects_noncanonical_money"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-005",
+      "tc": "TC-205",
+      "status": "mapped_local_partial",
+      "expected": "Dates and timezone — ISO 8601 date or offset timestamp; timezone from IANA list. Business dates are local; events are UTC. due_date >= issue_date unless explicit imported exception; start<=end; locked accounting dates rejected.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_policies_and_chronological_ledger_read_contracts"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-006",
+      "tc": "TC-206",
+      "status": "mapped_local_partial",
+      "expected": "Upload and extraction — PDF/JPEG/PNG/CSV only in P1; 10 MiB/file, 20 pages, image <=40 megapixels; reject encrypted PDF, embedded scripts and archives. MIME sniff, extension consistency, malware scan, parser sandbox and timeout. SHA-256 content digest. Later OFX/QIF allowlist separate.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_real_pdf_text_and_scanned_png_extraction_remain_unposted"
+      ],
+      "note": "SRS 10MiB/20pages/40MP; local upload max25MiB, OCR10pages/16MP. Limits conflict; disposition required."
+    },
+    {
+      "id": "VAL-007",
+      "tc": "TC-207",
+      "status": "mapped_local_partial",
+      "expected": "Text and structured payload — Names 1–120 chars; notes 0–2000; addresses 0–500; strip forbidden control characters, retain valid Unicode; no HTML accepted. JSON <=256 KiB, depth <=10, line arrays <=200; reject unknown fields. SQL parameterization and context-specific output encoding.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_json_depth_guard_ignores_brackets_inside_strings"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-008",
+      "tc": "TC-208",
+      "status": "later_release",
+      "expected": "Phone and URL — Optional phone normalized E.164 (up to 15 digits plus +); browser URL https and max2048 chars. Webhook URL rejects credentials, private/reserved/link-local IPs, non-443 ports and unsafe redirects; recheck DNS on connect.",
+      "routes": [],
+      "tests": [],
+      "note": "Provider URL/webhook/phone workflows not P1."
+    },
+    {
+      "id": "VAL-009",
+      "tc": "TC-209",
+      "status": "mapped_local_partial",
+      "expected": "Pagination sorting and filters — limit integer 1–100 default25; opaque signed cursor binds tenant, filters and sort. Allowlisted sort fields only; stable created_at,id order. Date range <=366 days for interactive queries; longer exports async.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_policies_and_chronological_ledger_read_contracts"
+      ],
+      "note": "SRS signed filter-bound cursors/limit<=100; several local lists use UUID/integer cursors and limit<=200. Disposition required."
+    },
+    {
+      "id": "VAL-010",
+      "tc": "TC-210",
+      "status": "mapped_local_partial",
+      "expected": "Enumerations and status transitions — Enums use declared schemas; transitions compare expected version and authorized role; impossible transitions return409. Do not mass-assign status, role, posted_at or approval fields.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_draft_versions_posting_transition_and_provenance"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-011",
+      "tc": "TC-211",
+      "status": "mapped_local_partial",
+      "expected": "Accounting cross-field rules — Lines must balance, source allocations reconcile, control accounts agree, tenant/currency match and counterparties have correct role. Database posting function owns atomic multi-row checks; client cannot enforce final authority.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_control_reconciliation_requires_complete_sources_and_flags_difference"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-012",
+      "tc": "TC-212",
+      "status": "mapped_local_partial",
+      "expected": "Tax and reporting policy — Tax IDs encrypted and format-checked for selected jurisdiction; retain verification status/authority/time. Tax rates 0–100 percent as exact decimals; effective-dated policy; unsupported treatment requests accountant review.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_receipt_fee_closes_ar_and_tax_remittance_is_not_an_expense"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-013",
+      "tc": "TC-213",
+      "status": "mapped_local_partial",
+      "expected": "Rule and schedule input — Rule expressions use allowlisted operators, no eval or executable code; <=20 conditions. schedules have positive periods and exact amount conservation. Automation threshold 0–1 is calibrated and versioned.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_bank_rule_requires_fresh_preview_and_never_posts"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-014",
+      "tc": "TC-214",
+      "status": "mapped_local_partial",
+      "expected": "Privacy and consent — Consent purpose enum, policy version and event time mandatory; rights requests require verified identity. Never accept legal-hold deletion from ordinary member role.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_retained_export_resumes_same_bytes_and_privacy_review_is_independent"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-015",
+      "tc": "TC-215",
+      "status": "mapped_local_partial",
+      "expected": "Import mappings and CSV safety — Require mapped date, description, amount/currency or debit/credit. Distinguish parse error, duplicate candidate and accepted row. Prefix spreadsheet-dangerous =,+,-,@ cells with apostrophe on export; do not corrupt numeric amount columns.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_csv_import_is_reviewed_atomic_idempotent_and_compares_with_baseline"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-016",
+      "tc": "TC-216",
+      "status": "mapped_local_partial",
+      "expected": "Authentication attempt limits — Login: 5 failures/account/15min then progressive delay and CAPTCHA; IP limit30/min, subnet abuse controls. Do not permanently lock accounts via attacker requests. Reset/resend3/account/hour; verification10/IP/hour; TOTP6 digits ±1 step with replay counter.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_failed_logins_consume_distributed_rate_limits"
+      ],
+      "note": "Local DB throttling tested; CAPTCHA/subnet defenses not implemented to full SRS text."
+    },
+    {
+      "id": "VAL-017",
+      "tc": "TC-217",
+      "status": "mapped_local_partial",
+      "expected": "API keys webhooks and idempotency — API secret 256 bits, stored hash, once-only display. Webhook HMAC timestamp tolerance5min and unique event ID. Idempotency-Key UUID required for write commands; bind request digest and tenant; conflicting reuse409. Financial operation keys persist with retained journals.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_concurrent_database_idempotency_has_one_financial_effect"
+      ],
+      "note": "Local body operation keys differ from SRS Idempotency-Key UUID header; public platform later."
+    },
+    {
+      "id": "VAL-018",
+      "tc": "TC-218",
+      "status": "mapped_local_partial",
+      "expected": "Search and model outputs — Limit query 1–200 characters. Structured model JSON must pass Pydantic schema, document lineage checks and approved account ID membership. No model confidence is treated as empirical probability without calibration.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_reports_workspace_lists_and_cited_answers_are_frontend_usable"
+      ],
+      "note": "Bounded local assertion coverage; individual clauses remain subject to test/code review."
+    },
+    {
+      "id": "VAL-019",
+      "tc": "TC-219",
+      "status": "later_release",
+      "expected": "Billing quantities and pricing — Plan ID from server catalog; seats1–10000; no client-supplied price or tax total trusted. Currency supported by provider; webhook signature and provider subscription identity required.",
+      "routes": [],
+      "tests": [],
+      "note": "Paid billing later."
+    },
+    {
+      "id": "VAL-020",
+      "tc": "TC-220",
+      "status": "mapped_local_partial",
+      "expected": "Accessibility and client parity — Client provides labels, inline errors and error summary with focus; API returns field paths; UI schemas generated/tested against OpenAPI. DB enforces persisted invariants but never stores plaintext passwords to duplicate their checks.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_every_http_success_and_error_has_an_explicit_schema"
+      ],
+      "note": "API schema field parity only; accessibility/UI error behavior Phases5/6."
+    },
+    {
+      "id": "NFR-001",
+      "tc": "TC-301",
+      "status": "unverified_or_partial",
+      "expected": "Interactive latency — Production accepted indexed reads at peak: API ingress-to-response p95<200ms,p99<500ms excluding external provider calls and network transit. End-to-end regional browser p95<800ms target. Reports/imports/AI use202 jobs.",
+      "routes": [],
+      "tests": [],
+      "note": "No production latency evidence."
+    },
+    {
+      "id": "NFR-002",
+      "tc": "TC-302",
+      "status": "unverified_or_partial",
+      "expected": "Throughput — 166,667 authenticated API requests/s for a 60min peak test with 80% reads/20% writes, representative hot tenants and no CDN-hit substitution. 10M registered users retained separately.",
+      "routes": [],
+      "tests": [],
+      "note": "166667RPS/10M users not measured."
+    },
+    {
+      "id": "NFR-003",
+      "tc": "TC-303",
+      "status": "unverified_or_partial",
+      "expected": "Availability — Production monthly successful eligible requests >=99.95%; 30-day time equivalent21.6min. Planned outages count. P1 has no contractual SLA.",
+      "routes": [],
+      "tests": [],
+      "note": "No SLA in P1."
+    },
+    {
+      "id": "NFR-004",
+      "tc": "TC-304",
+      "status": "unverified_or_partial",
+      "expected": "Frontend performance — p75 LCP<2.5s,INP<200ms,CLS<0.1 by device cohort; initial compressed JS<=250KiB, initial page<=1MiB excluding requested document. Lighthouse CI accessibility>=95/performance>=90 on fixed profile.",
+      "routes": [],
+      "tests": [],
+      "note": "Frontend performance Phases5/6/10."
+    },
+    {
+      "id": "NFR-005",
+      "tc": "TC-305",
+      "status": "unverified_or_partial",
+      "expected": "Accessibility and compatibility — WCAG2.2 AA target; latest two major Chrome/Edge/Firefox/Safari versions and current/previous iOS Safari/Android Chrome. 320px to2560px layouts, keyboard/screen-reader review.",
+      "routes": [],
+      "tests": [],
+      "note": "Browser/accessibility Phases5/6/10."
+    },
+    {
+      "id": "NFR-006",
+      "tc": "TC-306",
+      "status": "unverified_or_partial",
+      "expected": "Recovery — Production multi-AZ committed-ledger RPO0 within supported database failure model; regional standard RPO<=5min/RTO<=60min; quarterly restore. Strict regional RPO0 gate separately defined inADR-009.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase4_verification.py::test_synthetic_backup_restores_rows_grants_rls_and_financial_reads"
+      ],
+      "note": "Synthetic same-host logical restore only; external evidence files/keys need separate backup; production regional recovery Phase12."
+    },
+    {
+      "id": "NFR-007",
+      "tc": "TC-307",
+      "status": "unverified_or_partial",
+      "expected": "Processing fairness — Live document queue p95 start<60s and completion<5min at declared supported mix; 500k-page backlog increases live p95<=10%; provider outage excluded from completion but visible.",
+      "routes": [],
+      "tests": [],
+      "note": "No 500k backlog/fairness evidence."
+    },
+    {
+      "id": "NFR-008",
+      "tc": "TC-308",
+      "status": "unverified_or_partial",
+      "expected": "Durability and consistency — No partial/unbalanced posting, duplicate business effect or lost acknowledged journal in declared failure model. Read-your-write on ledger; projections carry version/as-of time.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_concurrent_database_idempotency_has_one_financial_effect"
+      ],
+      "note": "Atomic/idempotent DB concurrency tests, not all crash boundaries."
+    },
+    {
+      "id": "NFR-009",
+      "tc": "TC-309",
+      "status": "unverified_or_partial",
+      "expected": "Isolation — Zero unauthorized tenant records in API/cache/search/files/jobs/exports during cross-tenant test suite. Region-bound data stays in approved region including model processing and logs.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_database_rls_denies_forged_business_scope"
+      ],
+      "note": "DB/API denial evidence; regional residency Phase12."
+    },
+    {
+      "id": "NFR-010",
+      "tc": "TC-310",
+      "status": "unverified_or_partial",
+      "expected": "Retention and deletion — Policy default target10years evidence where lawful; minimum viable pilot retention stated in consent; holds override. Eligible active stores erased within30days, backups expire<=90days, evidence records exceptions.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_retained_export_resumes_same_bytes_and_privacy_review_is_independent"
+      ],
+      "note": "P1 manual privacy; retention/backup expiry not proved."
+    },
+    {
+      "id": "NFR-011",
+      "tc": "TC-311",
+      "status": "unverified_or_partial",
+      "expected": "Observability — 100% posting/approval events carry request, business, journal and operation IDs; no secrets/raw PII in ordinary logs. Critical alerts delivered within5min.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_request_bounds_and_errors_do_not_echo_secrets"
+      ],
+      "note": "Request audit/redaction exists; centralized alert timing not measured."
+    },
+    {
+      "id": "NFR-012",
+      "tc": "TC-312",
+      "status": "unverified_or_partial",
+      "expected": "Rate limits and shedding — Human60 reads/min,20 writes/min by default; API keys contracted quotas; imports separate. Overload returns429/503 before pool exhaustion; no successful response before durable commit.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_failed_logins_consume_distributed_rate_limits"
+      ],
+      "note": "Local120/user-business and600/business rates differ from SRS60reads/20writes; no production load proof."
+    },
+    {
+      "id": "NFR-013",
+      "tc": "TC-313",
+      "status": "unverified_or_partial",
+      "expected": "Release and migration — Expand/backfill/contract changes support current and previous app version; no blocking table rewrite at peak; rollback application within10min.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase4_verification.py::test_synthetic_backup_restores_rows_grants_rls_and_financial_reads"
+      ],
+      "note": "Empty/current migration and logical restore; compatible old/new app + scale migration not verified."
+    },
+    {
+      "id": "NFR-014",
+      "tc": "TC-314",
+      "status": "unverified_or_partial",
+      "expected": "Maintainability — Typed domain interfaces, OpenAPI contract checks, 90% branch coverage accounting/auth and80% overall changed-code coverage; no unresolved critical vulnerabilities at release.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_every_http_success_and_error_has_an_explicit_schema"
+      ],
+      "note": "Use measured coverage report; do not infer thresholds from test count."
+    },
+    {
+      "id": "NFR-015",
+      "tc": "TC-315",
+      "status": "unverified_or_partial",
+      "expected": "AI evaluation — Measure field accuracy, false posting, matching precision/recall, anomaly recall, forecast MAE/WAPE when denominator valid and interval coverage. Publish synthetic results; private examples never published.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_reports_workspace_lists_and_cited_answers_are_frontend_usable"
+      ],
+      "note": "No versioned published precision/recall evaluation suite for extraction/matching; deterministic assertions only."
+    },
+    {
+      "id": "NFR-016",
+      "tc": "TC-316",
+      "status": "unverified_or_partial",
+      "expected": "Cost and free budget — Per-tenant page/token/job usage counters; cloud/model cost per page reported. Free profile stops at quota/credit threshold with manual mode. 50% AI-cost reduction month3→6 is a research goal conditional on unchanged quality.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_edges.py::test_trial_expiry_retains_export_privacy_and_quota_limits_apply"
+      ],
+      "note": "Local usage caps; no cloud/AI cost ledger/research result."
+    },
+    {
+      "id": "NFR-017",
+      "tc": "TC-317",
+      "status": "unverified_or_partial",
+      "expected": "Localization and offline — English first; all user text externalized, currency/date locale-aware, RTL layout-ready. Offline shows cached shell only; no financial offline mutation or persistent document cache.",
+      "routes": [],
+      "tests": [],
+      "note": "Frontend localization/offline later."
+    },
+    {
+      "id": "NFR-018",
+      "tc": "TC-318",
+      "status": "unverified_or_partial",
+      "expected": "Export and search — Search p95<500ms within366-day indexed scope; exports<=100MB complete<=10min under reserved capacity; larger jobs provide progress and cancellation.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_retained_export_resumes_same_bytes_and_privacy_review_is_independent"
+      ],
+      "note": "Local bounded10MiB exports; SRS100MB async progress/cancel not met."
+    },
+    {
+      "id": "NFR-019",
+      "tc": "TC-319",
+      "status": "unverified_or_partial",
+      "expected": "Security verification — Annual and major-change external penetration test before high-scale commitments; dependency scanning each build; access review quarterly; no absolute security claim.",
+      "routes": [],
+      "tests": [],
+      "note": "External pentest/security attestation later; dependency scan evidence recorded separately."
+    },
+    {
+      "id": "NFR-020",
+      "tc": "TC-320",
+      "status": "unverified_or_partial",
+      "expected": "Scale verification — Instance count/cost projections are ESTIMATES until target mix tested. Burst2x for5min must shed predictably with no corruption,24h soak leaks<5% memory after warmup.",
+      "routes": [],
+      "tests": [],
+      "note": "No stress/spike/24h soak evidence."
+    },
+    {
+      "id": "SEC-001",
+      "tc": "TC-401",
+      "status": "unverified_or_partial",
+      "expected": "Enforce verified email, mandatory privileged MFA, Argon2id policy, recovery-code one-time use, generic auth responses and progressive throttling. OIDC/SAML federation later validates issuer,audience,nonce,state and signature.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_real_identity_lifecycle_and_secure_cookie_flags"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-002",
+      "tc": "TC-402",
+      "status": "unverified_or_partial",
+      "expected": "HttpOnly Secure session cookie; SameSite Lax on same-site custom domains, explicit CSRF token and Origin allowlist. Cross-site demo uses SameSite None;Secure with CSRF and documents browser third-party-cookie limitations. Refresh rotation revokes reused family;10min access,7day refresh,15min privileged idle.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_refresh_rotation_and_replay_revoke_the_whole_family"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-003",
+      "tc": "TC-403",
+      "status": "unverified_or_partial",
+      "expected": "Authorize action,tenant,role and resource for every lookup; composite FK, forced RLS, nonowner DB role, scoped jobs/cache/search/files. Support grants ticketed, expiring and read-only.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_database_rls_denies_forged_business_scope"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-004",
+      "tc": "TC-404",
+      "status": "unverified_or_partial",
+      "expected": "Immutable journals, deterministic validators, maker-checker approval, signed audit manifests, idempotency and period locks. Beneficiary changes use previously trusted out-of-band contact.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_posting_guards_and_database_immutability"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-005",
+      "tc": "TC-405",
+      "status": "unverified_or_partial",
+      "expected": "Parameterized SQL, allowlisted fields/sorts, strict Pydantic schemas, no raw eval or model SQL. DB role cannot bypass posting function.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_request_bounds_and_errors_do_not_echo_secrets"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-006",
+      "tc": "TC-406",
+      "status": "unverified_or_partial",
+      "expected": "Encode output; no user HTML; CSP default-src self,script-src self,object-src none,base-uri none,frame-ancestors none; narrow connect/img origins. HSTS on production, nosniff and Referrer-Policy strict-origin-when-cross-origin.",
+      "routes": [],
+      "tests": [],
+      "note": "Browser CSP/output behavior requires UI/deployment verification."
+    },
+    {
+      "id": "SEC-007",
+      "tc": "TC-407",
+      "status": "unverified_or_partial",
+      "expected": "Webhook destinations public HTTPS only; block internal/metadata IPs and DNS rebinding, no redirects by default; outbound allowlist. Verify provider HMAC/time/event ID before parsing business action.",
+      "routes": [],
+      "tests": [],
+      "note": "Provider callback/SSRF controls later; not exercised."
+    },
+    {
+      "id": "SEC-008",
+      "tc": "TC-408",
+      "status": "unverified_or_partial",
+      "expected": "TLS1.2+ prefer1.3; encrypted DB/S3/backups. KMS envelope keys per business; Secrets Manager references, IAM role short-lived credentials. Rotate secrets90days and immediately on compromise; no secrets in build/client.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_jwt_requires_signed_claims_and_explicit_key_id"
+      ],
+      "note": "Local application encryption/keys; production KMS/TLS/rotation not verified."
+    },
+    {
+      "id": "SEC-009",
+      "tc": "TC-409",
+      "status": "unverified_or_partial",
+      "expected": "Quarantine, MIME sniff, malware scan, page/pixel/file bounds; parser runs nonroot with no network, read-only filesystem and CPU/memory/time limits. No public bucket.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_real_pdf_text_and_scanned_png_extraction_remain_unposted"
+      ],
+      "note": "Parser bridge does not deny outbound networking; accepted local ADR011 differs from SRS no-network requirement."
+    },
+    {
+      "id": "SEC-010",
+      "tc": "TC-410",
+      "status": "unverified_or_partial",
+      "expected": "Treat source text as data; separate instructions, typed output, tenant-scoped retrieval, tool allowlist and no payment/write authority. Prevent training on customer data absent explicit contract/consent.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_api_surface.py::test_reports_workspace_lists_and_cited_answers_are_frontend_usable"
+      ],
+      "note": "No arbitrary SQL/payment tools; model evaluation and adversarial document holdout still unverified."
+    },
+    {
+      "id": "SEC-011",
+      "tc": "TC-411",
+      "status": "unverified_or_partial",
+      "expected": "WAF, rate/size limits, reserved capacity, queue quotas, circuit breakers and load shedding. DDoS plan and provider escalation contacts; authentication hashing concurrency bounded.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_security.py::test_password_hash_bulkhead_rejects_overload_without_waiting"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-012",
+      "tc": "TC-412",
+      "status": "unverified_or_partial",
+      "expected": "Purpose-limited collection, redacted logs, configured retention/holds, verified rights requests, processor deletion tracking, minimal analytics and no nonessential cookies before applicable consent.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_closure.py::test_retained_export_resumes_same_bytes_and_privacy_review_is_independent"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-013",
+      "tc": "TC-413",
+      "status": "unverified_or_partial",
+      "expected": "Pin dependencies and lockfiles; SBOM with Syft; Trivy/Semgrep/pip-audit/Gitleaks; signed images via Cosign; protected branch review, least-privilege CI OIDC and provenance.",
+      "routes": [],
+      "tests": [],
+      "note": "CI/locked dependencies exist; full release supply-chain assurance unverified."
+    },
+    {
+      "id": "SEC-014",
+      "tc": "TC-414",
+      "status": "unverified_or_partial",
+      "expected": "Encrypt backups, restrict region placement including logs/models, restore drills and failover fencing. Standard and strictRPO0 modes cannot be marketed interchangeably.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase4_verification.py::test_synthetic_backup_restores_rows_grants_rls_and_financial_reads"
+      ],
+      "note": "Same-host synthetic restore only; production failure/residency boundaries later."
+    },
+    {
+      "id": "SEC-015",
+      "tc": "TC-415",
+      "status": "unverified_or_partial",
+      "expected": "Append-only security/accounting logs, segregated access, event correlation, alerts for tenant probing/beneficiary changes/privileged grants. Keep ordinary logs30days and security evidence90days unless legal policy differs.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_request_bounds_and_errors_do_not_echo_secrets"
+      ],
+      "note": "Local audit events; alert delivery/central monitoring not measured."
+    },
+    {
+      "id": "SEC-016",
+      "tc": "TC-416",
+      "status": "unverified_or_partial",
+      "expected": "Hosted checkout keeps PAN/CVV outside platform; verify provider events and server prices; payment intents with dual approval and status reconciliation. PCI obligations assessed with provider/acquirer, no blanket exemption claim.",
+      "routes": [],
+      "tests": [],
+      "note": "Payment execution and paid billing outside local P1."
+    },
+    {
+      "id": "SEC-017",
+      "tc": "TC-417",
+      "status": "unverified_or_partial",
+      "expected": "Quarterly role review, joiner/mover/leaver process, MFA, no shared admin accounts, ticketed break-glass and customer notification. Support cannot impersonate authentication/payment actions.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase3_integration.py::test_close_requires_independent_reviewer_and_membership_changes_are_scoped"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    },
+    {
+      "id": "SEC-018",
+      "tc": "TC-418",
+      "status": "unverified_or_partial",
+      "expected": "Threat review per feature, security review before release, external penetration test before commercial launch/major change, triage Sev1 immediately, contain<=1h target, preserve evidence and review after incident.",
+      "routes": [],
+      "tests": [],
+      "note": "External assurance and incident response not executed."
+    },
+    {
+      "id": "SEC-019",
+      "tc": "TC-419",
+      "status": "unverified_or_partial",
+      "expected": "GDPR: purpose,rights,processor contracts,transfer safeguards; SOC2: access/change/availability evidence; ISO27001: risk inventory and control ownership. Legal counsel confirms applicability and notification deadlines; GDPR72h authority notice where required, not a universal timer for all events.",
+      "routes": [],
+      "tests": [],
+      "note": "No compliance certification claimed."
+    },
+    {
+      "id": "SEC-020",
+      "tc": "TC-420",
+      "status": "unverified_or_partial",
+      "expected": "Generic external errors, bounded request IDs, no stack traces or document text. Mask bank/tax identifiers, encrypt sensitive columns, disable debug endpoints and protect metrics behind operator auth.",
+      "routes": [],
+      "tests": [
+        "backend/tests/test_phase2_integration.py::test_request_bounds_and_errors_do_not_echo_secrets"
+      ],
+      "note": "Local test covers selected controls; not full security certification."
+    }
+  ]
+}

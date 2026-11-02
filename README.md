@@ -2,7 +2,7 @@
 
 LedgerPilot is a responsive web finance office for small businesses. The first release is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
 
-Current backend implementation: [Phase 2 foundation](docs/phase-2-backend-foundation.md). Progress and acceptance evidence: [implementation tracker](docs/Implementation_Plan.md).
+Backend: [foundation](docs/phase-2-backend-foundation.md), [business modules](docs/phase-3-business-modules.md) and [local verification](docs/phase-4-backend-verification.md). Web implementation and acceptance: [Phase 5](docs/phase-5-responsive-frontend.md). Governing status: [implementation tracker](docs/Implementation_Plan.md).
 
 ## Prerequisites
 
@@ -38,7 +38,7 @@ Current backend implementation: [Phase 2 foundation](docs/phase-2-backend-founda
 
 5. Open the Vite URL shown in the terminal. API docs are at `http://localhost:8000/docs`; the liveness endpoint is `http://localhost:8000/health/live`.
 
-The API's `DATABASE_URL` must use the restricted runtime role. Use `MIGRATION_DATABASE_URL` only for Alembic/operator work; do not configure the running API with the migration credential. To erase and recreate the disposable local PostgreSQL database, run `./scripts/reset-local-db.ps1 -ConfirmReset` from PowerShell. This deletes the local Compose volume and all of its data. Domain seed fixtures will be added with the Phase 2 database schema; the Phase 0 database is intentionally empty.
+The API's `DATABASE_URL` must use the restricted runtime role. Use `MIGRATION_DATABASE_URL` only for Alembic/operator work; do not configure the running API with the migration credential. To erase and recreate the disposable local PostgreSQL database, run `./scripts/reset-local-db.ps1 -ConfirmReset` from PowerShell. This deletes the local Compose volume and all of its data. Real-service tests seed disposable databases; development books are not automatically populated with sample financial entries.
 
 ## Local verification
 
@@ -106,3 +106,11 @@ Start `docker compose -f docker-compose.auth.yml up -d` from the repository root
 Run `uv run python -m ledgerpilot.local_setup prepare` from `backend` to prepare missing local secrets without displaying them. Preserve the evidence encryption and export signing keys in private backup; replacing them can make originals unreadable or break signing continuity. Set `OCR_ENABLED=true` in the ignored root environment, then run `docker compose -f docker-compose.documents.yml up -d --build --wait --wait-timeout 300` from the root. ClamAV and the Tesseract/Poppler parser are local services without a paid API. They require downloads, local disk and RAM; their configured memory ceilings total 6 GiB.
 
 Apply `uv run alembic upgrade head` from `backend`. Uploads remain encrypted and quarantined until a scoped worker successfully scans them. Run one job with `uv run python -m ledgerpilot.documents.worker --actor USER_UUID --business BUSINESS_UUID`. This command uses an existing authorized member, not a public impersonation endpoint. Supported extraction formats, manual fallbacks, resource limits and worker recovery are in the [Phase 3 record](docs/phase-3-business-modules.md) and [extraction contract](docs/contracts/document-extraction.md). No scanning or OCR result posts accounting entries automatically.
+
+### Responsive web development and acceptance
+
+The web implementation and evidence are recorded in [Phase 5](docs/phase-5-responsive-frontend.md). Use `http://127.0.0.1:5173` consistently with `FRONTEND_ORIGINS`; Vite proxies `/api` to `127.0.0.1:8000`. Start the API and the approved scoped evidence worker for upload processing. The frontend never needs database credentials or signing keys.
+
+From `frontend`, run `npm run test:ui`, `npm run test:api` and `npm run test:live`. The last command needs PostgreSQL/Mailpit/ClamAV and an unused local port 8000; it creates and removes an isolated synthetic database. On Linux set `LEDGERPILOT_TEST_PYTHON` to the backend virtual environment's Python. Results are written to ignored `tmp/phase5/live-results.json`; CI retains them as an artifact.
+
+For Vercel, configure `VITE_API_ORIGIN` to the approved HTTPS API origin before building; the checked-in SPA rewrite supports deep links. Hosted cookie/CORS behavior still needs the Phase 9 deployment checks. Prefer web/API hostnames under the same approved site; a cross-site arrangement needs explicit SameSite/credentialed-CORS and browser verification. No hosted deployment is performed by these local checks.

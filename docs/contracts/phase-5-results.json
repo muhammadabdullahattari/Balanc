@@ -1,0 +1,34 @@
+{
+  "date": "2026-10-30",
+  "profile": "Approved local pilot; real HTTP API and isolated PostgreSQL/Mailpit/ClamAV",
+  "command": "cd frontend && npm run test:live",
+  "passed": 17,
+  "failed": 0,
+  "duration_ms": 152504,
+  "journeys": [
+    "frontend with real HTTP, cookie sessions and PostgreSQL signs in with MFA recovery",
+    "frontend with real HTTP, cookie sessions and PostgreSQL previews and posts an invoice",
+    "frontend with real HTTP, cookie sessions and PostgreSQL confirms receipt before changing outstanding balance",
+    "frontend with real HTTP, cookie sessions and PostgreSQL posts a supplier bill",
+    "frontend with real HTTP, cookie sessions and PostgreSQL saves, edits and issues a prepared draft",
+    "frontend with real HTTP, cookie sessions and PostgreSQL previews and activates a category rule",
+    "frontend with real HTTP, cookie sessions and PostgreSQL records a customer advance",
+    "frontend with real HTTP, cookie sessions and PostgreSQL creates a customer credit and records a linked refund through the payment screen",
+    "frontend with real HTTP, cookie sessions and PostgreSQL records a loan drawdown and verifies the loan subledger",
+    "frontend with real HTTP, cookie sessions and PostgreSQL imports CSV evidence, previews and posts a reviewed bank category",
+    "frontend with real HTTP, cookie sessions and PostgreSQL loads the actual tax workpaper and cited profit lookup",
+    "frontend with real HTTP, cookie sessions and PostgreSQL imports reviewed opening balances into an empty independent business",
+    "frontend with real HTTP, cookie sessions and PostgreSQL uploads actual statement evidence, saves a review note and signs off its ledger balance",
+    "frontend with real HTTP, cookie sessions and PostgreSQL prepares an optional close task and confirms period lock",
+    "frontend with real HTTP, cookie sessions and PostgreSQL holds supplier bank-detail proposals and shows masked change alerts",
+    "frontend with real HTTP, cookie sessions and PostgreSQL flags and resolves a document dispute without editing its posted total",
+    "frontend with real HTTP, cookie sessions and PostgreSQL ties trial balance and exports real CSV and ZIP evidence"
+  ],
+  "boundaries": [
+    "React DOM/real HTTP acceptance; not a browser layout engine",
+    "jsdom synthetic FileList limitation handled only in test submission",
+    "Requests paced below unchanged real tenant/user rate limits",
+    "Visual screenshots, browser accessibility/contrast and browser-matrix approval remain blocked by Computer Use URL-verification stop"
+  ],
+  "final_transport_verified": true
+}

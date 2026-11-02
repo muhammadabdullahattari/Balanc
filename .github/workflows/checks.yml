@@ -26,6 +26,10 @@ jobs:
         run: uv run ruff check src tests
       - name: Type check
         run: uv run mypy
+      - name: Check reviewed OpenAPI contract
+        run: |
+          uv run python -m ledgerpilot.export_openapi --check
+          uv run python -m ledgerpilot.verify_traceability
       - name: Run tests with coverage
         run: uv run coverage run -m pytest -q && uv run coverage report
       - name: Compile Python sources
@@ -55,7 +59,42 @@ jobs:
           RUN_PHASE2_INTEGRATION: '1'
           RUN_DOCUMENT_SCANNER_TESTS: '1'
           RUN_LOCAL_OCR_TESTS: '1'
-        run: uv run pytest tests -q
+          RUN_DB_BOOTSTRAP_TESTS: '1'
+        run: |
+          uv run coverage run -m pytest tests -q --junitxml=phase4-results.xml
+          uv run coverage json -o phase4-coverage.json
+          uv run coverage report
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install web acceptance dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Verify real web workflows on isolated API and PostgreSQL
+        working-directory: frontend
+        env:
+          LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
+        run: npm run test:live
+      - name: Save frontend integration evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ledgerpilot-web-live-${{ github.sha }}
+          path: tmp/phase5/live-results.json
+          if-no-files-found: warn
+          retention-days: 7
+      - name: Save backend verification evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ledgerpilot-backend-verification-${{ github.sha }}
+          path: |
+            backend/phase4-results.xml
+            backend/phase4-coverage.json
+          if-no-files-found: warn
+          retention-days: 7
       - name: Stop local malware scanner
         if: always()
         working-directory: .
@@ -83,6 +122,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Check generated API types and browser transport
+        run: |
+          npm run api:check
+          npm run test:api
+          npm run test:ui
+          npm run format:check
       - name: Build production web application
         run: npm run build
       - name: Save production bundle

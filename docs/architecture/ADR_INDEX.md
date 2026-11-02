@@ -17,6 +17,7 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-011](ADR-011-phase-3-sources-and-local-extraction.md) | Business sources and isolated local extraction profile | Accepted for local P1 |
 | [ADR-012](ADR-012-reviewed-opening-balances.md) | Accountant-reviewed cutover balances and equity offsets | Accepted for local P1 |
 | [ADR-013](ADR-013-local-p1-closure.md) | Reviewed suggestions, resumable exports and P1 completion controls | Accepted for local P1 |
+| [ADR-014](ADR-014-phase-4-local-verification.md) | Local verification scope, generated browser contract and secure Swagger transport | Accepted for local pilot |
 
 ## Changing a decision
 
