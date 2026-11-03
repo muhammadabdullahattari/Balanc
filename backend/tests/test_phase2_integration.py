@@ -156,7 +156,7 @@ async def mail_token(email: str) -> str:
 
 async def new_identity(browser: httpx.AsyncClient) -> tuple[str, str, list[str]]:
     email = uuid4().hex + "@example.com"
-    password = "Private phrase " + uuid4().hex
+    password = "Private phrase 7! " + uuid4().hex
     response = await browser.post(
         "/api/v1/auth/register", json={"email": email, "password": password}
     )
@@ -527,7 +527,7 @@ async def test_password_reset_is_one_use_and_revokes_old_sessions(
     requested = await client.post("/api/v1/auth/reset-request", json={"email": email})
     assert requested.status_code == 202
     token = await mail_token(email)
-    replacement = "Replacement private phrase " + uuid4().hex
+    replacement = "Replacement private phrase 7! " + uuid4().hex
     reset = await client.post(
         "/api/v1/auth/reset", json={"token": token, "new_password": replacement}
     )
@@ -557,7 +557,7 @@ async def test_expired_verification_token_cannot_verify(
     email = uuid4().hex + "@example.com"
     response = await client.post(
         "/api/v1/auth/register",
-        json={"email": email, "password": "Synthetic private phrase " + uuid4().hex},
+        json={"email": email, "password": "Synthetic private phrase 7! " + uuid4().hex},
     )
     assert response.status_code == 202
     token = await mail_token(email)

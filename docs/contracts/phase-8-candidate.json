@@ -1,0 +1,835 @@
+{
+  "profile": "Uncommitted local-pilot workspace candidate; not a deployed release",
+  "algorithm": "SHA-256 of sorted path/content-hash JSON; UTF-8 source CRLF normalized to LF",
+  "sha256": "5bf64a8a38ee504365481acc95dff786604fdc4657fd6ca416f4ef779ade8c6f",
+  "inputs": [
+    {
+      "file": ".github/workflows/checks.yml",
+      "sha256": "b950d95a07ec741b1fcf1cc085babac4177aab868a79a7e6e21310a4b8118c03"
+    },
+    {
+      "file": ".github/workflows/quality.yml",
+      "sha256": "500953f0a26aae2d80c6524b9acf8bdf8a55b211b47c37762b6d2b96aa9dbb69"
+    },
+    {
+      "file": ".github/workflows/release.yml",
+      "sha256": "70eae85500d9b493a16d3643cd524fc36c62e0562f3f83b74701780dc1b521d0"
+    },
+    {
+      "file": "backend/Dockerfile",
+      "sha256": "bb2fc9a66fb6983bb94103f0374af6d111fd319b57fe99a9622d8106d50be546"
+    },
+    {
+      "file": "backend/Dockerfile.ocr",
+      "sha256": "e835ae0b322df3dd98d96313ae3676ef4b754d716a0836e3720460753a74105c"
+    },
+    {
+      "file": "backend/alembic.ini",
+      "sha256": "98454efca5c460974ee159a75747724c76639e133cf64899f1d0021621ac1b71"
+    },
+    {
+      "file": "backend/migrations/env.py",
+      "sha256": "efd009f63adf4471e4ea1cb1e3a33577b22d3225897a383bc590a270a06315a5"
+    },
+    {
+      "file": "backend/migrations/versions/0001_foundation.py",
+      "sha256": "6cc487ba1ae2a9acf30fa8ed6122205fafdb89024f0c4d70dcfdfce656187114"
+    },
+    {
+      "file": "backend/migrations/versions/0001_guards.sql",
+      "sha256": "00b79cbbec1a450c6b2ebe407afb0a6f6731b7a0e666476f84f79c22b4f4fe63"
+    },
+    {
+      "file": "backend/migrations/versions/0001_tables.sql",
+      "sha256": "831ef8e4bee8eeee1867935c317da966d8b6a4bdce10c50a056a04ae28e864e7"
+    },
+    {
+      "file": "backend/migrations/versions/0002_readiness.py",
+      "sha256": "9216b966e4b9b4201a8750d2275ede46f526ba8304979fc7d4675db1c7002320"
+    },
+    {
+      "file": "backend/migrations/versions/0003_runtime_locks.py",
+      "sha256": "a31575d763192d716b3a91886cc1c1ca8eec831926e8033a44c0962f4f607ae4"
+    },
+    {
+      "file": "backend/migrations/versions/0004_auth_backoff.py",
+      "sha256": "48ccb5c9c160ca3a28d994f15f151b783ec4dc7630952cbebd7740e0f3125115"
+    },
+    {
+      "file": "backend/migrations/versions/0005_drafts.py",
+      "sha256": "a47c7f9e65dea84cb057bd88f7fe60c28a305132fe11c4a0404fe7fcf654c95e"
+    },
+    {
+      "file": "backend/migrations/versions/0005_drafts.sql",
+      "sha256": "c0cabf2fa88008a960e91a189c35990562a4b68e54fb866a4439a7e378571a56"
+    },
+    {
+      "file": "backend/migrations/versions/0006_sources.py",
+      "sha256": "f50c4c9e9d094b86b8a5656903a8ba3a5c2b6bc8da4017f2ecc2b55e1d3368c1"
+    },
+    {
+      "file": "backend/migrations/versions/0006_sources.sql",
+      "sha256": "e2e90b8cfb902909554faad94976039470ce9c17da4368f510847f558203b6e4"
+    },
+    {
+      "file": "backend/migrations/versions/0007_workspace.py",
+      "sha256": "36fc9cef950a064ff46e319039c49bac220f4b84df62ffd67b6df85e6ce13b55"
+    },
+    {
+      "file": "backend/migrations/versions/0007_workspace.sql",
+      "sha256": "eeaf1398e66486950515e752cd402430338af843f4e7f5a39e62b603a7f1bdd6"
+    },
+    {
+      "file": "backend/migrations/versions/0008_source_controls.py",
+      "sha256": "98c8acb849bf83d84067219cd9ab70b2c8fa44c118906f94e09002a7233cc0af"
+    },
+    {
+      "file": "backend/migrations/versions/0008_source_controls.sql",
+      "sha256": "70724d8043fa8856bc3997935d9a637f91dbd8b90d0508815d82ffaa6a075d48"
+    },
+    {
+      "file": "backend/migrations/versions/0009_evidence_jobs.py",
+      "sha256": "f37ee014bd718c98f8a4ed7d149d1877a71a0c602a4bea6e3692fb82d7aae944"
+    },
+    {
+      "file": "backend/migrations/versions/0009_evidence_jobs.sql",
+      "sha256": "e1c4b902c78de4edd0f102fe47fee51817c1e7bf211653a6c0f2ebc98561486f"
+    },
+    {
+      "file": "backend/migrations/versions/0010_source_drafts.py",
+      "sha256": "9bb6042b1abdd856d7c5fe3adee6d8141f8d7d4b53397d870c3df761bee713bf"
+    },
+    {
+      "file": "backend/migrations/versions/0011_payment_fees.py",
+      "sha256": "4e9b6298c225ff9db529ca9a548982d70a28cf41b516171c6a43e4dd08bb7864"
+    },
+    {
+      "file": "backend/migrations/versions/0012_extraction_results.py",
+      "sha256": "fc4abd77c057ebd5ba9574e27fb9f7f5cd0dc10f0f385cbe16044b46a4f74b64"
+    },
+    {
+      "file": "backend/migrations/versions/0012_extraction_results.sql",
+      "sha256": "d10126c8267852494183cd7f2e0df489552db62c1aac91ca968c03ac04fc724c"
+    },
+    {
+      "file": "backend/migrations/versions/0013_import_batches.py",
+      "sha256": "5bfc46e0d1b2b42f334fecd639d0d2cdfa01ee7127d6355b30a8fb6957b41ccf"
+    },
+    {
+      "file": "backend/migrations/versions/0014_bank_matches.py",
+      "sha256": "466267a303f18aaabdee3244ef606888efff3dd74a185f621e8e8cf42992da73"
+    },
+    {
+      "file": "backend/migrations/versions/0014_bank_matches.sql",
+      "sha256": "efd529914b244678857f0d89bf63c3f9ba5c407cff98c85a27217d65ee2b20b8"
+    },
+    {
+      "file": "backend/migrations/versions/0015_bank_corrections.py",
+      "sha256": "c51c4842bd49cf13c2389cf8453ee350c4112f992de5dba435990dc00c346440"
+    },
+    {
+      "file": "backend/migrations/versions/0016_trial_and_replay.py",
+      "sha256": "2b73c0b884b7a2d721c7aa0516b5eeac72d09f8cb946c90901c06322054ecdba"
+    },
+    {
+      "file": "backend/migrations/versions/0016_trial_and_replay.sql",
+      "sha256": "d2d280fcae2cbe3ad0e2e39cd70bd24980a70c8c55ab9a49513bfed9fc0bdde0"
+    },
+    {
+      "file": "backend/migrations/versions/0017_transfer_peer.py",
+      "sha256": "dac5cfe1809dfcd5723575c3d53f57c859c169c88d90356b5ff7edc0b50ef695"
+    },
+    {
+      "file": "backend/migrations/versions/0018_opening_balances.py",
+      "sha256": "9686a4eca822555693657e0972f6b91776788a96617734595662e8302221310e"
+    },
+    {
+      "file": "backend/migrations/versions/0018_opening_balances.sql",
+      "sha256": "40de6e86bd204396fa1f4a65d0980321bb9fe82d860d0317611ad8c0806fa5ac"
+    },
+    {
+      "file": "backend/migrations/versions/0019_phase3_closure.py",
+      "sha256": "fcea3418950e533c31e5af1c3b4536b445d280f4cb38bade2e4e4d5f70836bb4"
+    },
+    {
+      "file": "backend/migrations/versions/0019_phase3_closure.sql",
+      "sha256": "e48b83d5f998e9748279595a2ca134ec14609a121b6f95903f25e897e82ab4a5"
+    },
+    {
+      "file": "backend/migrations/versions/0020_phase23_audit.py",
+      "sha256": "3b9aa44a9ce12d9f9eed24df515b32bd90e8eba317979676983bdcdb112e6b18"
+    },
+    {
+      "file": "backend/migrations/versions/0020_phase23_audit.sql",
+      "sha256": "de4795e0dd450da656108131d19d36aa0a1a4ea2d4f9f9d8eba3691638f0765c"
+    },
+    {
+      "file": "backend/pyproject.toml",
+      "sha256": "faccdd4b3403b0f3ed1226be315bbe7ed0ad90b6b46062032006c2af966b07dd"
+    },
+    {
+      "file": "backend/src/ledgerpilot/__init__.py",
+      "sha256": "e551f6ff6c725a9473aef39a82aa39d79917eb7d5024a103ead157e9f3c62c03"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/__init__.py",
+      "sha256": "924bbd8f2cdbb04676ea2906032b51e7b4685a0799ce740fe0d488152671db19"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/drafts.py",
+      "sha256": "10e54e814e6401a20cd879868e2e25c07e59fd92d17a19d70a43815fd5d78f30"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/models.py",
+      "sha256": "e982c9dae536fbb5cbfecaa4bae0a0637ef55a1dacdd6d1f79f2b2ae3eebfb2b"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/money.py",
+      "sha256": "b1f0f43ce2bc1371d2f4d0f2d1779365af08dce64f37be1301013005436aa55a"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/reconciliation.py",
+      "sha256": "a94a5d0d7019422ae936e1e5f825ea393a191a68fd81336f715a42cb3ba11f45"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/repository.py",
+      "sha256": "a5780a8e4b577aa632a920b33679493f3549a8ea056775e866adf191b6c947e1"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/router.py",
+      "sha256": "3efb21cf0f3057b40b2d2f3291be6e35d5001d0bb4241b1c7a20a5faafee74e7"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/schemas.py",
+      "sha256": "a52167f914b8186d13403d27e5a30ccf975112805f051c3974254dcb500dddf7"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/service.py",
+      "sha256": "aaedadb7dae0771570b96793c40a012a65be88267820a5b50f587b202b2eade2"
+    },
+    {
+      "file": "backend/src/ledgerpilot/accounting/tax.py",
+      "sha256": "1eea977fd08167dd098a34abbd3f0ecf353429b81e9a8c1bfaea16720d17ad6e"
+    },
+    {
+      "file": "backend/src/ledgerpilot/api/__init__.py",
+      "sha256": "c5e79b75137811726e30acef2fa5cfc649514fce1c86da771535b368f43238c0"
+    },
+    {
+      "file": "backend/src/ledgerpilot/api/v1/__init__.py",
+      "sha256": "cfca912e946ee82b374998942327f270fc461ff5b2196f8bd5895d437f8e643e"
+    },
+    {
+      "file": "backend/src/ledgerpilot/audit/__init__.py",
+      "sha256": "223d2dd6ec9c4f877886ab8d3c902357e7a70d431872ec1e2e851ca8a3806bea"
+    },
+    {
+      "file": "backend/src/ledgerpilot/audit/models.py",
+      "sha256": "846db76a453d3d9e67342f521ac652ca02ad0751032a679ef455d3822230b01b"
+    },
+    {
+      "file": "backend/src/ledgerpilot/audit/service.py",
+      "sha256": "daa6a341b38f6e04cf099e078dd256f33eec6f0ebeefeb8a5886f080aaed2b49"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/__init__.py",
+      "sha256": "eed1f4377516c9f0771bd5ab7bbcfb79f2062b2b93c19efb597fa494c8ddbfaf"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/corrections.py",
+      "sha256": "a362972c506bff0d4a32332a8923e33f332d76d422778fd21f90d80eea10a9b1"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/models.py",
+      "sha256": "522defb7363fff2fc8cbcbe1447c8af9f955bf6584644f8045e94c58b3243479"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/read.py",
+      "sha256": "cc0549ee82a13e96cf0672b22b684e494665d88672f7e11009729c6c875f9dc8"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/reconciliation.py",
+      "sha256": "ac8c96206a855e54c9cba952da2964a6cf0959863b2cc1b3333c7ebe2df41852"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/router.py",
+      "sha256": "63579a20ed4aef188409a5bbbd40abd390d9798ce5fad4e309638a4e23524762"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/schemas.py",
+      "sha256": "3c344f2f555eedc2917ad7312ef65f8ffe8112cb07df7ff4331321b47911652f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/service.py",
+      "sha256": "2f806c088e2e9b15376f4bf9aed34453c6192c4bde00a37ab1b524e9acc142a1"
+    },
+    {
+      "file": "backend/src/ledgerpilot/banking/suggestions.py",
+      "sha256": "af9573ad4754f875b1cf423afe149ba4583706a4c69d12a0ce5e98648fbf9914"
+    },
+    {
+      "file": "backend/src/ledgerpilot/config.py",
+      "sha256": "d2cca281d8bfc0af27f3518b91e9f9e7a62a6cb6926da3dbcf3782236fbd7819"
+    },
+    {
+      "file": "backend/src/ledgerpilot/database.py",
+      "sha256": "7176db6b218b6d0f157f0a3da1fa61ed8a1c9db32f1bbb1bfa5cafc222f7738b"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/__init__.py",
+      "sha256": "80fe7642191d00aafe4baebe80a97ee94bea06d7d38daf346ce45be23b0320af"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/duplicates.py",
+      "sha256": "b77b928351a366a082565dee24a98715bf70409bd4342ef7d301e6a5082f9531"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/extraction.py",
+      "sha256": "3ee7b8d51ba797d8c172d2472198d401aa2b77a1890648642d0973584462f87a"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/ocr_service.py",
+      "sha256": "09cd643c186e02e3e0885615cbe99d6b0bb99fa6a3cb2cb79a928f422c40ec39"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/router.py",
+      "sha256": "d3f91025f317e41d63169158570771c4973dc910571f0c340c156027e0439fe1"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/storage.py",
+      "sha256": "528068d7bba911429a0d66e2f61a8f0fe60ebb110e9b1a6a8c8d90eb705322b2"
+    },
+    {
+      "file": "backend/src/ledgerpilot/documents/worker.py",
+      "sha256": "51875334e806c4936d31406e845b5fd5b7483a3aa4842532e15d640a869c4e6a"
+    },
+    {
+      "file": "backend/src/ledgerpilot/export_openapi.py",
+      "sha256": "bbc5e352a7000cbfe25d10697ebf180134eb9bf5e152bd32564847d0f24fc727"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/__init__.py",
+      "sha256": "ea10c0ca881a96d66cb6e492eb9465218d2573e1b6e6854d37b17de175c20872"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/dependencies.py",
+      "sha256": "e9cf321946d47d308a3b6a0c94d481b788077a017bd320afa4bcac3a2492fd58"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/mail.py",
+      "sha256": "a57fdd321f33aaaa906bdf18640fd664f0e6e2f47ccda1636b08998b89a2ec65"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/models.py",
+      "sha256": "03b0ac0f606a64c2544dc3826f16b3c7206206caa8768d085bfc0ee2dec0efab"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/repository.py",
+      "sha256": "eb90ee471f1bc8bf97f11ecfe8e8a911f491ad4b31dca5ef56b29246815a4583"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/router.py",
+      "sha256": "e49e630e35dbe4462d3215948231b077474e042a59f6f1618b14b01196b051ff"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/schemas.py",
+      "sha256": "556b23fad9e6b431ea92e6ce1e0d986bf6f661cf5c2538aa99e430ac537bab77"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/security.py",
+      "sha256": "25a3bfe4dd36d96e9c356e95dc44a71a9b492dda9407e5ea77ee45eefc9255b7"
+    },
+    {
+      "file": "backend/src/ledgerpilot/identity/service.py",
+      "sha256": "fde345dcdc03ddf00bcf01e3a482190d8258c9555d76f46b6b032727b44654ba"
+    },
+    {
+      "file": "backend/src/ledgerpilot/local_setup.py",
+      "sha256": "259a2a5c4efd97f025cdcae98556dfba85e25533f6129750fe7e274082449741"
+    },
+    {
+      "file": "backend/src/ledgerpilot/main.py",
+      "sha256": "8feffc708f045de53f5c9583547172115ac25e26ee07cd114517d5b7e3101c94"
+    },
+    {
+      "file": "backend/src/ledgerpilot/models.py",
+      "sha256": "f13ced7dae204f18e14369239ecadd1c0c9b5f458f4d3ff484221885f2638240"
+    },
+    {
+      "file": "backend/src/ledgerpilot/notifications/__init__.py",
+      "sha256": "eec45d2827f1dd75b9c0e0e11cb39d4e8d896dd5c507056f0c921d12e3c17565"
+    },
+    {
+      "file": "backend/src/ledgerpilot/purchases/__init__.py",
+      "sha256": "383d9367355680c8205d0c666289941b3ea450cc705b836e6c697c4457b2de40"
+    },
+    {
+      "file": "backend/src/ledgerpilot/reports/__init__.py",
+      "sha256": "bf76714202f578679bcbfbff2710f98dee1da10ccbe1b7dbd7ffbeaabd3cdf00"
+    },
+    {
+      "file": "backend/src/ledgerpilot/reports/router.py",
+      "sha256": "e9e45923ab872d10c8582292ecf792b5dc4a7fcb8931ffc4f8a83420cbc3201f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/reports/service.py",
+      "sha256": "1b8733bc0d8b6d83e6061554b9410463a768ab02e71ace1b3475cd89010226d9"
+    },
+    {
+      "file": "backend/src/ledgerpilot/sales/__init__.py",
+      "sha256": "d5f36a23fa24d0e63973fd02dd9cc8ac76ab50b2c95d6351e84890ff5362d421"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/__init__.py",
+      "sha256": "4adef212413731827c8049ad42d385728b6bfc421f95a50e0c3367a94882aba2"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/contracts.py",
+      "sha256": "8a93d9e5c3f7a27d7969d09e0675e986eebbefced6ffa06417b4bd70de40fcb6"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/errors.py",
+      "sha256": "a38cddea658167959619059e529004e200a2faf538b80f39710d19a83140ea41"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/middleware.py",
+      "sha256": "7a842b065e340fd20490f6c7fa8af9fb8659f4d3aaf42bf0560a6f506d41f898"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/operations.py",
+      "sha256": "dd12dd404591d3e12c251247bde91cd789695ac6243d5260455bd7e4e5592ab4"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/responses.py",
+      "sha256": "616ea076ecfea0a89b3575ab17c3cd8ea2c6de9e2034f8c57b9da1dd8c8e8f40"
+    },
+    {
+      "file": "backend/src/ledgerpilot/shared/schemas.py",
+      "sha256": "d2a62cac7aa0fd5bb22b95a9126f5e2f3227af2ff2cf37f99e382432cca69d11"
+    },
+    {
+      "file": "backend/src/ledgerpilot/swagger.py",
+      "sha256": "15659b524c055c81ec333394070bdb83536f7a45193e0e68c5fe5e2f2a077a93"
+    },
+    {
+      "file": "backend/src/ledgerpilot/tenancy/__init__.py",
+      "sha256": "948c03df0a2d60d423580ed947a3aa79e22c0b9612b69972e1bfcd90072ebdd9"
+    },
+    {
+      "file": "backend/src/ledgerpilot/tenancy/models.py",
+      "sha256": "15d1f1dd30a96a98d664829aa614b72f49472110458741e013bbdb88b1f49165"
+    },
+    {
+      "file": "backend/src/ledgerpilot/tenancy/router.py",
+      "sha256": "fb6f46719d495283e696003ae2d839dae754be20ba09581d3512ff86c8e78c8b"
+    },
+    {
+      "file": "backend/src/ledgerpilot/tenancy/schemas.py",
+      "sha256": "320ba5048b88f4f269b47f550a93832ce8fd8ce11f29c8fec6a939e0bdea0b32"
+    },
+    {
+      "file": "backend/src/ledgerpilot/tenancy/service.py",
+      "sha256": "68e39ecc0678f33658d8b6698b1b33d1f9f27face6c37eb0462b4d21cca32d19"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/__init__.py",
+      "sha256": "e5b40a7181bed1afc61d5a91d9b49910f46cdbbcdea41c7b1de2196aa3002f9c"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/advances.py",
+      "sha256": "c2283675cb673b0889578c7fb2e07089b5a842c009a590f63522cafee8f2a4b4"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/drafts.py",
+      "sha256": "c34de34a509bf5e8f1cd93c8fe41f87ba992eb6d2b548a32c796d179313a0b7d"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/models.py",
+      "sha256": "cb7142fd4825403925d12c1f4be13682aaf49870a741a427caf84f3fb15eaf1c"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/read.py",
+      "sha256": "f3261ea969e08deff1e6e98a72dce01862d4d43f2d2006d51073701de1b9d477"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/repository.py",
+      "sha256": "ad3ddafabca639145e31b799f4133faa6bfbba260f4c5abababae98f18ad30b6"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/router.py",
+      "sha256": "66a197c2bb6e4dc64eff52f791fbe18eee204765ba9e217fbd432317b53c8b9f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/schemas.py",
+      "sha256": "3449d317e5edfe497de7e96b50494fdc45c6ac2294432b1143d7fd08f127c7af"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/service.py",
+      "sha256": "62044b0ef299d5e0486cc3e8acdcc1ecf4caf788ec3e4b36d7d15073c1338e08"
+    },
+    {
+      "file": "backend/src/ledgerpilot/trade/statements.py",
+      "sha256": "4e27e27524b440508d42374c16b41a0a0b91b12097aad0aee000771ef78dd264"
+    },
+    {
+      "file": "backend/src/ledgerpilot/verify_traceability.py",
+      "sha256": "164c9e234d6b24a55f471432943eda3c19f3228cd2fb9746d72b12335e97913a"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/__init__.py",
+      "sha256": "70ee79f10dcb4d7809de143766b1dec3fb62b376753c747f2d7c33bc6771746a"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/beneficiaries.py",
+      "sha256": "9f3ed95102ada2ce943646bf0bf6d0e32ba8722785a7fae1bc5669a6e6194c3f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/exports.py",
+      "sha256": "c3220316e387055bf39b0a366f76c9af51ff706cb4882fe9c8a9d9c246d25ca0"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/imports.py",
+      "sha256": "6ecfa4615896cbf7f4b0213563ac7aa73e71fc8a804bb2428cb8d4f9c32a4da9"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/models.py",
+      "sha256": "ce4b0207b14373edbc9cf690005036394cf613ddc816f33e41e6c6950b03cd27"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/opening_adjustments.py",
+      "sha256": "aff3d3fa1a53f71c0222a3421e5e314926069738eac42dd8e579c317f65a68f8"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/opening_cash.py",
+      "sha256": "947f03360b57f73a3ca7016c6c8d4558448bfe07b0c137abb2093a2dfd5fca5f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/openings.py",
+      "sha256": "79ab17a021d037a8caadaf2327951850443616b022a7048fd8c1e8021ea9823f"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/privacy.py",
+      "sha256": "d54227cef8c31e8f137edfbb24aa8ffc3b7f2c39ea3d34dc9ca97fe64c893915"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/resumable.py",
+      "sha256": "bd865d9f8c10ca5a9bbd830af9b899d215bdaa353cf3ae99c20f716ec6565d47"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/router.py",
+      "sha256": "98507e1b8dc82b1717ffb6e27e30e94e22ec6c21db1b0e8ff7d4df0b6e34fc26"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/schemas.py",
+      "sha256": "c9e6eb6db76ca5413334815582aaf8622095bfd7a85bf9e0f2859da9b3a2a4b4"
+    },
+    {
+      "file": "backend/src/ledgerpilot/workspace/service.py",
+      "sha256": "9ea4d60222d83913f9a765f1bac47928d11a90287c9417c8096f8c903efb030d"
+    },
+    {
+      "file": "backend/tests/conftest.py",
+      "sha256": "bea4bca7e5db2dca7f6d390a50eece98120329780e102324202d63952bcb21b0"
+    },
+    {
+      "file": "backend/tests/frontend_acceptance_server.py",
+      "sha256": "d1976ad307501a8d03bbe706fb68cc225c7c3ccc9b0c843a3580f43fe4457353"
+    },
+    {
+      "file": "backend/tests/test_api_surface.py",
+      "sha256": "0f9d5b7f46895ffaf8d17cacc443c330187a52e00b603d687f1905fc01174f2e"
+    },
+    {
+      "file": "backend/tests/test_bootstrap_integration.py",
+      "sha256": "dde51159ceade43c2230fa4bb98c9eeadabe415c7c1de54be904ba5fb678f401"
+    },
+    {
+      "file": "backend/tests/test_card_settlement.py",
+      "sha256": "4bfaf398d8a63eaa2ec1669f42b0341985248d8e7f0db08badc2a7ebf208bc20"
+    },
+    {
+      "file": "backend/tests/test_config.py",
+      "sha256": "77a2d5be5b5883f9e9ba16f2393950f85d6ca3bd087c9e0a9b1fcd88842259ce"
+    },
+    {
+      "file": "backend/tests/test_health.py",
+      "sha256": "45f55701cce7b48539586493c9031e1e454c0fd85d6e2950c55f67dca05366de"
+    },
+    {
+      "file": "backend/tests/test_import_contract.py",
+      "sha256": "1871a23e5cea971493a727aa4acae8a037ef7224d67343b8130606c3f6eda21b"
+    },
+    {
+      "file": "backend/tests/test_local_setup.py",
+      "sha256": "fd9d90b0304189e291133d8c719e089d547bfb7fa538caa20b04802a062baf99"
+    },
+    {
+      "file": "backend/tests/test_opening_balances.py",
+      "sha256": "5250d53f80bcc677966be7af21d16e24adb3dd6c0a03a2b1e82fb2ae45c28d45"
+    },
+    {
+      "file": "backend/tests/test_opening_corrections.py",
+      "sha256": "e0fff5a3f5e6631041297da6c1a404845c857db21822ddc854eb153118865038"
+    },
+    {
+      "file": "backend/tests/test_phase23_audit.py",
+      "sha256": "bd59e9acd3601e163a808e7e34fb7063512a0e7aea3d446b88ef2e54fcbc99bb"
+    },
+    {
+      "file": "backend/tests/test_phase2_integration.py",
+      "sha256": "27016f7bce89fddd6c68460aee439b4d9bed18dc8a731ed4d0404258dffd74fb"
+    },
+    {
+      "file": "backend/tests/test_phase2_security.py",
+      "sha256": "5056e51f48023d6b43b65d4e248a34d64e93a87f855f1a7e5cb5bb8333a4c0f7"
+    },
+    {
+      "file": "backend/tests/test_phase3_closure.py",
+      "sha256": "3bcb297b08a7162c53065061afdd097eb13e8d0b11b00f7ea3dc063577e20f60"
+    },
+    {
+      "file": "backend/tests/test_phase3_edges.py",
+      "sha256": "4d6ee0b7c3ed8651c4713d85bc70d712c03cd6f5e49b26a4c89a2d383d2ee97c"
+    },
+    {
+      "file": "backend/tests/test_phase3_integration.py",
+      "sha256": "891287edee12167b1e0828d538af181ae623537f9eeeffb7a2b853e1c97e3087"
+    },
+    {
+      "file": "backend/tests/test_phase4_verification.py",
+      "sha256": "47e362b572ede256db11d75f7385a6fc42275f34a55015281bc775cbcb7dfc3e"
+    },
+    {
+      "file": "backend/uv.lock",
+      "sha256": "b908ff9005deffce842a4424b621017e1b501a2afc5fbffced107310d87c5373"
+    },
+    {
+      "file": "deploy/aws/deploy-api.sh",
+      "sha256": "e1d7d1ea3045be4552ae4861a336f7c0f5b7f4e3177396fdb0e1ba168d5b3b81"
+    },
+    {
+      "file": "docker-compose.auth.yml",
+      "sha256": "3b4f82b1a7bf9f0c47253e5cf381005cc2050fdbc64b063b22230c9eefbe5563"
+    },
+    {
+      "file": "docker-compose.documents.yml",
+      "sha256": "8e3ca44514fc6060641bc2468d8ec876ea8c1301400328de94a2c7998be911f0"
+    },
+    {
+      "file": "docker-compose.yml",
+      "sha256": "5e7f071b6e72f5324fec559193fe45835ee75868972730977e220060401acf4f"
+    },
+    {
+      "file": "frontend/index.html",
+      "sha256": "ecb68965574bef7a10eaf642a165de7bc0b7b7ceecfdbe4b61a841aefbe2de53"
+    },
+    {
+      "file": "frontend/package-lock.json",
+      "sha256": "31bfc1c03f4434746a16464e172ab65107e10dbd216dbe3ec59ac643fccf6b4f"
+    },
+    {
+      "file": "frontend/package.json",
+      "sha256": "807daa836906d160d721a13d715e91b698721d221e401639885b15ce97ef75b6"
+    },
+    {
+      "file": "frontend/playwright.config.ts",
+      "sha256": "ec76c283f31c4c2a6fe2373a39a4e8982afca33285668dba69ccfbaba16bfb45"
+    },
+    {
+      "file": "frontend/playwright.integration.config.ts",
+      "sha256": "0a047f80eddc2ffaa7946d58083cddcb013f07e1498f0403d021ddf30dcdd3c3"
+    },
+    {
+      "file": "frontend/scripts/check-integration.mjs",
+      "sha256": "3cbba3ae6983d551f4dcc433a9f0e25a65c817428a2f2237f16888237ce56ce1"
+    },
+    {
+      "file": "frontend/src/App.tsx",
+      "sha256": "626d7c0097e82c1406be204e4eb33edff4d05e757bd2636fb2a2dbb34c59c97d"
+    },
+    {
+      "file": "frontend/src/api/client.ts",
+      "sha256": "0690d49de49b198ff1171e0397dfa45b6be294a10b3ea7c0e74a9c7c63fc6526"
+    },
+    {
+      "file": "frontend/src/api/generated/schema.ts",
+      "sha256": "9a1a6d7f814f39f9ba264e0e3b796d0c6a76de9e6a01dffdf05665e1e51020e3"
+    },
+    {
+      "file": "frontend/src/api/runtime.ts",
+      "sha256": "53d656950512350bfaa2cd62ba34b0374289ac18dd802905bc6ea0d6b2e02eab"
+    },
+    {
+      "file": "frontend/src/components/ui.tsx",
+      "sha256": "c50bda4c47215be1d83c745d167aa960515f1eb738d51bb32aa3d10261a063a9"
+    },
+    {
+      "file": "frontend/src/features/activity.tsx",
+      "sha256": "1ce48c0d565bb88c357615d4f5ad8db633da30f7a0662198aaa76b508508fa94"
+    },
+    {
+      "file": "frontend/src/features/advances.tsx",
+      "sha256": "356920492faaacb6096a665618eb9e6350a36afae751799e60aaaa31eb930e1f"
+    },
+    {
+      "file": "frontend/src/features/auth.tsx",
+      "sha256": "8650cb50c42e91ba7aa8c5207503b2677bc6e054425a8c896e3441398583118e"
+    },
+    {
+      "file": "frontend/src/features/banking.tsx",
+      "sha256": "8907528eafa9e76ee15fba2573856bb7613becc05332686ad71ffb75af45e229"
+    },
+    {
+      "file": "frontend/src/features/beneficiary-review.tsx",
+      "sha256": "3e642762e1c2dc35760b639075d145763613ff4e01d43ddd11a0b4ed560758e9"
+    },
+    {
+      "file": "frontend/src/features/close.tsx",
+      "sha256": "fc8154965a0700404e6b553ff1356c3cb4d11e84ddc9296e9c5c93d83ae43df1"
+    },
+    {
+      "file": "frontend/src/features/context.tsx",
+      "sha256": "cf16e408285ad332f7527922e244d718dd7357a94324c756fe7d629c6d04f555"
+    },
+    {
+      "file": "frontend/src/features/dashboard.tsx",
+      "sha256": "7b8267703bce8e8c302017a27738b5693b92b3c03fb7e1cedb7212e62817788c"
+    },
+    {
+      "file": "frontend/src/features/directory.tsx",
+      "sha256": "9b10486f64661cde16b1fd5f5379bfa5dfd2ae5b4f07f23aaf700a4e1e452506"
+    },
+    {
+      "file": "frontend/src/features/drafts.tsx",
+      "sha256": "0dff5b16ddfa89a2cb238d87e46d34ce356386bd1fe1632f6d41b010afe2015e"
+    },
+    {
+      "file": "frontend/src/features/evidence.tsx",
+      "sha256": "f5292eed579a0134fd472748464d4dca59a6c47f7daa127ca4faea08a89258c3"
+    },
+    {
+      "file": "frontend/src/features/ledger.tsx",
+      "sha256": "70ebb6d9c9a72bff986946b61789ef33eb4484fcad9b393a585663b8a3bbeced"
+    },
+    {
+      "file": "frontend/src/features/loans.tsx",
+      "sha256": "12b55d7f21f58fd82415bb3eb8586f68dbf0a6c445f2a04e224392d0e26529ba"
+    },
+    {
+      "file": "frontend/src/features/lookup-more.tsx",
+      "sha256": "6c95dea0448aedf6a6c39991b3252051e203b0ee073275f17d941eceeb756736"
+    },
+    {
+      "file": "frontend/src/features/onboarding.tsx",
+      "sha256": "e6f9e39603d00231548bbd4b03820ce1478bed6c5c8e3d4fdd3d245ae1996c1f"
+    },
+    {
+      "file": "frontend/src/features/openings.tsx",
+      "sha256": "2fdfe898467adba6038315c76b0c7aa1568e7de420af2a1790de05c90d62995a"
+    },
+    {
+      "file": "frontend/src/features/reconciliation.tsx",
+      "sha256": "b3abd55e56cd1f061d3a73d35687525295a0ad737f1186c43b91b959b0016e61"
+    },
+    {
+      "file": "frontend/src/features/refunds.tsx",
+      "sha256": "6a47ff6f85d52ddf29b23e1e892f2d4a0158c6d90d4020790b707bae48ba4c12"
+    },
+    {
+      "file": "frontend/src/features/reports.tsx",
+      "sha256": "96bbce798a015211fbe680e49fe7e915ac916cc5f77ea2b3b27ad938564d75ea"
+    },
+    {
+      "file": "frontend/src/features/rules.tsx",
+      "sha256": "3a901fc1550a5515f0fbf48305f3691092c432dfebaa1c38549510e3e1feddc2"
+    },
+    {
+      "file": "frontend/src/features/settings.tsx",
+      "sha256": "d55fc129c9d1a9f34c740c40546c6b039e1b5b29edc16b9273bd881704215b42"
+    },
+    {
+      "file": "frontend/src/features/trade.tsx",
+      "sha256": "fedf44ae616509b2d7314a2b832d64bc91d72c7bad63df5dc4f7376fa0e8e929"
+    },
+    {
+      "file": "frontend/src/main.tsx",
+      "sha256": "41431cb94a112ca05f90ca6037229d09d4bb8ecc1c27ae3bb3740ace8f01d2a6"
+    },
+    {
+      "file": "frontend/src/styles.css",
+      "sha256": "8eebcfb805b06a3a6264f5c6fe03682449b25c9236f10f9df01fb89c6926ff35"
+    },
+    {
+      "file": "frontend/src/vite-env.d.ts",
+      "sha256": "65996936fbb042915f7b74a200fcdde7e410f32a669b1ab9597cfaa4b0faddb5"
+    },
+    {
+      "file": "frontend/tests/accessibility.test.tsx",
+      "sha256": "fc677e57f4c2dd76e80796588136d0e68f31f5ade9e3d0584d303f4e49a8cac6"
+    },
+    {
+      "file": "frontend/tests/api-client.test.mjs",
+      "sha256": "11b564332d90d2591205534d4012a103fb8e0afd19043413e36d5059bfc8a984"
+    },
+    {
+      "file": "frontend/tests/api-contract.test.ts",
+      "sha256": "1bf8311bd610f74e86301a8cf97c2b9fbde0012b97d03f712e5ae91abf9677c5"
+    },
+    {
+      "file": "frontend/tests/browser-live/phase8.spec.ts",
+      "sha256": "c79a3a8314019f3dec34a8aebf2f5c5def60b9e9d853cc30c71522add6d4c701"
+    },
+    {
+      "file": "frontend/tests/browser/phase6.spec.ts",
+      "sha256": "3970dad7e10cac33ab95a51ab16f27e882e6216f89ffe53fc88e20aae9494405"
+    },
+    {
+      "file": "frontend/tests/live.acceptance.tsx",
+      "sha256": "b78a4c547505b12858fe4b281b5718e4a97d08b29ae90405e71909c70619573d"
+    },
+    {
+      "file": "frontend/tests/phase6-screens.test.tsx",
+      "sha256": "772cdaa87f152dd65b0a3d975c147d8398934bc697353f44ed7eee5386501889"
+    },
+    {
+      "file": "frontend/tests/phase6.test.tsx",
+      "sha256": "7440f1ef332c65a9c12e9925b512b3a5fad1474fcefea2069160656060ba52f2"
+    },
+    {
+      "file": "frontend/tests/run-browser-live.mjs",
+      "sha256": "eb2180481f307585efd7b8ef2f12e33f265110ace6895011f907804829c41072"
+    },
+    {
+      "file": "frontend/tests/run-live.mjs",
+      "sha256": "5a646472d5c95fcc2f57366ff9756e136d036432cca2e30cd7626c928f5b0e34"
+    },
+    {
+      "file": "frontend/tests/setup.ts",
+      "sha256": "ace51ddf220516380965ca2e146ee99b1024f32578c033689c32f834de4baab0"
+    },
+    {
+      "file": "frontend/tests/ui.test.tsx",
+      "sha256": "45ea965e1388a0bd9044daefb71059be543857c9f24cdeb46c31902f5ab1db84"
+    },
+    {
+      "file": "frontend/tsconfig.json",
+      "sha256": "dc4735f09c54067adb44eeac144a80918db3be56f9d81fdc90f65e7effa2e4e4"
+    },
+    {
+      "file": "frontend/vite.config.ts",
+      "sha256": "8c45d26275ed8df20fd693aa3224be846b41b3144e539497cd57c7d753de37bd"
+    },
+    {
+      "file": "frontend/vitest.config.ts",
+      "sha256": "aa57651911183b4f20f0f96b2234d73fced8002bea833eca4258cbe5609f9feb"
+    },
+    {
+      "file": "frontend/vitest.live.config.ts",
+      "sha256": "2bb83b5d426f38775458c58340f91052f38654ba8802abec062a1e3926ec3b2f"
+    },
+    {
+      "file": "scripts/record-phase8-candidate.mjs",
+      "sha256": "25d3639d8668c769b620f5f2dd44cfdefb3ef61a120868bb11c21c2c8f889436"
+    }
+  ]
+}

@@ -67,7 +67,20 @@ async def seed():
             )
             opening_business = (await api.get(opening_base)).json()
             business = (await api.get(base)).json()
+            foreign_bid = await identity_tests.new_business(owner)
+            foreign_base = f"/api/v1/businesses/{foreign_bid}"
+            foreign_account = await create_account(owner, foreign_base, "foreign_private", "asset")
+            foreign_upload = await owner.post(
+                foreign_base + "/evidence/upload",
+                params={"filename": "private.csv"},
+                content=b"private,tenant\nforeign,only\n",
+                headers={"Content-Type": "application/octet-stream"},
+            )
+            assert foreign_upload.status_code == 201, foreign_upload.text
             return {
+                "foreign_business": foreign_bid,
+                "foreign_account": foreign_account,
+                "foreign_evidence": foreign_upload.json()["id"],
                 "actor": (await api.get("/api/v1/auth/me")).json()["id"],
                 "business": business,
                 "accounts": accounts,
@@ -84,7 +97,10 @@ async def seed():
 try:
     data = asyncio.run(seed())
     settings = settings.model_copy(
-        update={"frontend_origins": "http://127.0.0.1:8000,http://127.0.0.1:5173"}
+        update={
+            "google_client_id": None,
+            "frontend_origins": "http://127.0.0.1:8000,http://127.0.0.1:5173,http://127.0.0.1:4178"
+        }
     )
     stop.unlink(missing_ok=True)
     server = uvicorn.Server(
@@ -111,7 +127,11 @@ finally:
     stop.touch()
     if "data" in globals():
         storage = Path(settings.evidence_storage_root).resolve()
-        for bid in (data["business"]["id"], data["opening_business"]["id"]):
+        for bid in (
+            data["business"]["id"],
+            data["opening_business"]["id"],
+            data["foreign_business"],
+        ):
             tenant = storage / str(UUID(bid))
             assert tenant.resolve().parent == storage
             if tenant.exists():

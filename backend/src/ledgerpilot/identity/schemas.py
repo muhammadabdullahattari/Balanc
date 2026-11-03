@@ -29,3 +29,10 @@ class ResetRequest(TokenRequest):
 
 class MFARequest(Schema):
     code: SecretStr = Field(min_length=6, max_length=6)
+
+
+class GoogleCredentials(Schema):
+    credential: SecretStr = Field(min_length=20, max_length=8192)
+    nonce: SecretStr = Field(min_length=32, max_length=128)
+    mfa_code: SecretStr | None = Field(default=None, min_length=6, max_length=6)
+    recovery_code: SecretStr | None = Field(default=None, max_length=128)

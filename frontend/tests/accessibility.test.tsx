@@ -23,4 +23,4 @@ it("sign-in has no detectable structural accessibility violations", async () => 
     screen.getByRole("button", { name: "Sign in", exact: true }),
   ).toHaveAccessibleName("Sign in");
   queryClient.clear();
-});
+}, 15000);

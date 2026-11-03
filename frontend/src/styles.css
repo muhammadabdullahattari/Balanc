@@ -1553,3 +1553,37 @@ details > form {
     z-index: 19;
   }
 }
+
+.password-control {
+  position: relative;
+}
+.password-control input {
+  width: 100%;
+  padding-right: 3rem;
+}
+.password-control .icon-button {
+  position: absolute;
+  right: 0.5rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.field > label {
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.mfa-qr {
+  background: white;
+  padding: 1rem;
+  border-radius: 0.75rem;
+  display: inline-block;
+  max-width: 100%;
+}
+.google-signin {
+  margin-block: 1rem;
+}
+
+.mfa-qr svg {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}

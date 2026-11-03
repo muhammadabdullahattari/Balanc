@@ -81,3 +81,20 @@ test("expired safe reads share refresh rotation and retry once", async (t) => {
  const keepAlive=setTimeout(()=>{},1000);
  try {await assert.rejects(client.GET("/api/v1/businesses"),error=>error.name === "TimeoutError");assert.equal(reads,1);}finally{clearTimeout(keepAlive);}
  });
+
+
+test("API configuration rejects credentials, path, query and fragment instead of silently dropping them", t => {
+  browser(t, () => { throw new Error("Must not connect"); });
+  for (const value of ["https://user:password@api.example", "https://api.example/api", "https://api.example?token=test", "https://api.example#test", "file:///tmp/api"]) {
+    assert.throws(() => createApiClient(value), /origin without/);
+  }
+  assert.doesNotThrow(() => createApiClient("https://api.example/"));
+});
+
+test("same-origin remote HTTP cannot transmit credentials, while local loopback remains supported", t => {
+ browser(t,()=>{throw new Error("Must not connect");});
+ globalThis.window.location.origin="http://remote.example";
+ assert.throws(()=>createApiClient("http://remote.example"),/HTTPS/);
+ globalThis.window.location.origin="http://localhost:5173";
+ assert.doesNotThrow(()=>createApiClient("http://localhost:5173"));
+});

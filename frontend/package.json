@@ -12,7 +12,14 @@
     "test:api": "tsc --noEmit --strict --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler tests/api-contract.test.ts && node --test tests/api-client.test.mjs",
     "test:ui": "vitest run",
     "format:check": "prettier --check src/App.tsx src/components src/features src/styles.css src/api/runtime.ts",
-    "test:live": "node tests/run-live.mjs"
+    "test:live": "node tests/run-live.mjs",
+    "test:browser": "playwright test",
+    "test:phase6": "npm run api:check && npm run test:api && npm run test:ui && npm run build && npm run test:browser:types && npm run test:browser && npm run format:check",
+    "test:browser:types": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM tests/browser/phase6.spec.ts playwright.config.ts tests/browser-live/phase8.spec.ts playwright.integration.config.ts",
+    "integration:check": "node scripts/check-integration.mjs",
+    "test:phase7": "npm run integration:check && npm run api:check && npm run test:api && npm run test:ui && npm run build && npm run test:browser:types && npm run test:browser && npm run test:live && npm run format:check",
+    "test:browser:live": "node tests/run-browser-live.mjs",
+    "test:phase8": "npm run integration:check && npm run api:check && npm run test:api && npm run test:ui && npm run build && npm run test:browser:types && npm run test:browser && npm run test:browser:live && npm run test:live && npm run format:check"
   },
   "dependencies": {
     "@hookform/resolvers": "^6.0.2",
@@ -22,6 +29,7 @@
     "clsx": "^2.1.1",
     "lucide-react": "^1.65.0",
     "openapi-fetch": "^0.17.0",
+    "qrcode.react": "^4.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-hook-form": "^7.91.0",
@@ -30,9 +38,11 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@testing-library/user-event": "^14.6.8",
+    "@types/node": "^26.6.6",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.0",

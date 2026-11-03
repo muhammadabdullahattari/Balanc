@@ -18,6 +18,10 @@ class User(Base):
     password_version: Mapped[int] = mapped_column(BigInteger, server_default=text("0"))
     verified: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     suspended: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
+    verification_csrf_hash: Mapped[str | None] = mapped_column(String(64))
+    verification_attempts: Mapped[int] = mapped_column(default=0, server_default=text("0"))
+    verification_blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    verification_started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=text("now()")
     )
@@ -80,3 +84,19 @@ class AuthRateBucket(Base):
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     attempts: Mapped[int]
     blocked_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class GoogleIdentity(Base):
+    __tablename__ = "google_identities"
+    __table_args__ = {"schema": "app"}
+    subject: Mapped[str] = mapped_column(String(255), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(ForeignKey("app.users.id"), unique=True)
+
+
+class GoogleChallenge(Base):
+    __tablename__ = "google_challenges"
+    __table_args__ = {"schema": "app"}
+    nonce_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    csrf_hash: Mapped[str] = mapped_column(String(64))
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

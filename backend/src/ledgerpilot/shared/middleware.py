@@ -49,6 +49,17 @@ class FoundationMiddleware:
             )
             await response(scope, receive, send)
 
+        hosted = settings.app_env not in {"local", "test"}
+        health_probe = request.method in {"GET", "HEAD"} and scope["path"] in {
+            "/health/live",
+            "/health/ready",
+        }
+        # The ASGI scheme may only be set from forwarding headers by a trusted proxy.
+        # Do not trust X-Forwarded-Proto directly here or redirect credential POST bodies.
+        if hosted and scope.get("scheme") != "https" and not health_probe:
+            await reject("ERR_HTTPS_REQUIRED", "Use the secure HTTPS address to continue.", 403)
+            return
+
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             cookie = request.cookies.get(CSRF_COOKIE, "")
             csrf = request.headers.get("x-csrf-token", "")
@@ -148,6 +159,8 @@ class FoundationMiddleware:
                         (b"x-content-type-options", b"nosniff"),
                     ]
                 )
+                if hosted and scope.get("scheme") == "https":
+                    headers.append((b"strict-transport-security", b"max-age=31536000"))
                 message["headers"] = headers
                 logger.info(
                     json.dumps(

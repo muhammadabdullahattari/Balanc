@@ -69,11 +69,16 @@ def normalized_password(value: str, email: str = "") -> str:
     local = email.partition("@")[0].casefold()
     if (
         not 15 <= len(result) <= 128
+        or not any(c.isascii() and c.isupper() for c in result)
+        or not any(c.isascii() and c.islower() for c in result)
+        or not any(c.isascii() and c.isdigit() for c in result)
+        or not any(not c.isalnum() and not c.isspace() for c in result)
         or result.casefold() in COMMON_PASSWORDS
         or (local and result.casefold() in {local, local * 2, local + "123456789"})
     ):
         raise DomainError(
-            "ERR_PASSWORD", "Use 15–128 characters and avoid known compromised passwords."
+            "ERR_PASSWORD",
+            "Use 15–128 characters with uppercase, lowercase, a number and a special character.",
         )
     return result
 
@@ -150,6 +155,8 @@ def decode_access(settings: Settings, token: str) -> tuple[UUID, UUID]:
 
 def totp_counter(secret: str, code: str, previous: int) -> int:
     # A single adjacent step tolerates transmission/clock skew; counters are one-use.
+    if len(code) != 6 or not code.isascii() or not code.isdigit():
+        raise DomainError("ERR_MFA_CODE", "Enter the current six-digit authenticator code.", 401)
     instant = now()
     counter = int(instant.timestamp()) // 30
     for candidate in (counter, counter - 1, counter + 1):
@@ -157,4 +164,4 @@ def totp_counter(secret: str, code: str, previous: int) -> int:
             pyotp.TOTP(secret).at(candidate * 30), code
         ):
             return candidate
-    raise DomainError("ERR_AUTH", "Authentication failed.", 401)
+    raise DomainError("ERR_MFA_CODE", "The authenticator code is incorrect or already used.", 401)

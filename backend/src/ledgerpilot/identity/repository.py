@@ -23,8 +23,12 @@ def by_token(db: Session, token_hash: str, purpose: str) -> ActionToken | None:
     )
     if token:
         set_context(db, token.user_id)
+        db.scalar(select(User).where(User.id == token.user_id).with_for_update())
         return db.scalar(
-            select(ActionToken).where(ActionToken.token_hash == token_hash).with_for_update()
+            select(ActionToken)
+            .where(ActionToken.token_hash == token_hash)
+            .with_for_update()
+            .execution_options(populate_existing=True)
         )
     return None
 

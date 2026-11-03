@@ -19,6 +19,8 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-013](ADR-013-local-p1-closure.md) | Reviewed suggestions, resumable exports and P1 completion controls | Accepted for local P1 |
 | [ADR-014](ADR-014-phase-4-local-verification.md) | Local verification scope, generated browser contract and secure Swagger transport | Accepted for local pilot |
 
+| [ADR-015](ADR-015-google-and-verification-hardening.md) | Optional Google federation, browser-bound verification and requested password/abuse rules | Accepted by user scope |
+
 ## Changing a decision
 
 An architecture change requires a new or superseding ADR, impact review against the SRS, API/data compatibility review, and updated acceptance checks before implementation. Do not mark an ADR Accepted merely because a reference document from another product did so.

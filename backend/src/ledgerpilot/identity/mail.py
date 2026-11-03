@@ -14,8 +14,13 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
     message["From"] = settings.smtp_from
     message["To"] = recipient
     message["Subject"] = f"LedgerPilot {purpose}"
+    lifetime = (
+        "15 minutes. Only the newest code works." if purpose in {"verify", "reset"} else "48 hours."
+    )
     message.set_content(
-        f"Your {purpose} token is:\n\n{token}\n\nUse it only in LedgerPilot. Do not share it."
+        f"Your {purpose} token is:\n\n{token}\n\n"
+        f"It expires in {lifetime}\n"
+        "Use it only if you requested it in LedgerPilot. Never share it."
     )
     try:
         with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5) as client:

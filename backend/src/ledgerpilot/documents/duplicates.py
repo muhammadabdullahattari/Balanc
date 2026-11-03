@@ -1,5 +1,3 @@
-"""Human-reviewed supplier/date/total identity; candidates never merge originals."""
-
 import re
 import unicodedata
 from datetime import date

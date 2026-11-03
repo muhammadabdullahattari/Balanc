@@ -3,7 +3,7 @@
 Date: 30 October 2026.
 
 **Functional implementation and real-service local acceptance: complete for the approved local pilot.**
-**Overall phase sign-off: open because visual/browser acceptance could not be completed.**
+**Phase 5 technical implementation: Completed.** Browser acceptance is deferred to Phase 10 by user decision on 2 November 2026.
 
 This record supersedes the earlier incremental lists. The user explicitly brought real API integration into Phase 5, advancing part of Phase 7 without changing the FastAPI modular monolith, PostgreSQL financial source of truth or React/TypeScript/Vite architecture. The accepted Phase 4 local-pilot boundaries and documented SRS gaps remain in force. No native mobile app, money execution, tax filing, public SDK, paid service or production capacity claim is introduced.
 
@@ -75,7 +75,7 @@ jsdom's synthetic FileList does not update its internal required-file validity. 
 
 Real Chrome previously completed sign-in and business selection. During this final attempt, screenshot/control commands stalled. The Windows fallback then **stopped Computer Use because it could not determine the current browser URL confidently enough to enforce policy**. No further UI control was attempted after that stop.
 
-Consequently screenshots, visual review at 320–2560px, browser contrast/screen-reader checks, the full supported-browser matrix and native file-picker journeys remain **unverified**. These are required before unconditional Phase 5/UI acceptance; they are not represented as passing. The React/HTTP suite is repeatable and passing, but does not replace a browser engine.
+Consequently screenshots, visual review at 320–2560px, browser contrast/screen-reader checks, the full supported-browser matrix and native file-picker journeys remain **unverified**. These are deferred to Phase 10 (Staging & Live E2E Sign-Off) by user decision; they are not represented as passing. The React/HTTP suite is repeatable and passing, but does not replace a browser engine.
 
 Nothing was committed, pushed or deployed. Phase 9 deployment and Phase 10 deployed system acceptance remain separate gates.
 

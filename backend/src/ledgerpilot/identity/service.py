@@ -5,7 +5,7 @@ from datetime import timedelta
 from uuid import UUID, uuid4
 
 import pyotp
-from sqlalchemy import select, update
+from sqlalchemy import select, text, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -39,12 +39,25 @@ from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.models import Membership
 
 
-def register(db: Session, settings: Settings, data: Registration) -> None:
+def register(db: Session, settings: Settings, data: Registration, csrf: str) -> None:
     email = canonical_email(data.email)
     password = normalized_password(data.password.get_secret_value(), email)
-    if repository.by_email(db, email):
-        # Password hashing equalizes the expensive part for existing addresses.
-        hash_password(password)
+    # Serialize registration/resend for an address, including its first insertion.
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtextextended(:email,0))"), {"email": email})
+    existing = repository.by_email(db, email)
+    if existing:
+        new_hash = hash_password(password)
+        set_context(db, existing.id)
+        existing = db.scalar(
+            select(User)
+            .where(User.id == existing.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if existing and not existing.verified and not existing.suspended:
+            existing.password_hash = new_hash
+            existing.verification_csrf_hash = digest(csrf)
+            send_action(db, settings, existing.id, email, "verify")
         return
     user_id = uuid4()
     set_context(db, user_id)
@@ -55,6 +68,7 @@ def register(db: Session, settings: Settings, data: Registration) -> None:
             email=email,
             password_hash=hash_password(password),
             verified=False,
+            verification_csrf_hash=digest(csrf),
             suspended=False,
         )
         .on_conflict_do_nothing(index_elements=[User.email])
@@ -67,6 +81,45 @@ def register(db: Session, settings: Settings, data: Registration) -> None:
 
 
 def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purpose: str) -> None:
+    user = db.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if user is None:
+        raise DomainError("ERR_AUTH", "Please sign in again.", 401)
+    instant = now()
+    if purpose == "verify":
+        if user.verification_blocked_until and user.verification_blocked_until > instant:
+            wait = max(1, int((user.verification_blocked_until - instant).total_seconds()))
+            raise DomainError(
+                "ERR_VERIFICATION_LIMIT",
+                "Too many verification requests. Try again in 24 hours, "
+                "or use the newest code already sent.",
+                429,
+                retry_after=wait,
+            )
+        if not user.verification_started_at or user.verification_started_at <= instant - timedelta(
+            hours=24
+        ):
+            user.verification_attempts = 0
+            user.verification_started_at = instant
+            user.verification_blocked_until = None
+        user.verification_attempts += 1
+        if user.verification_attempts >= 3:
+            user.verification_blocked_until = instant + timedelta(hours=24)
+            record(db, user_id, "identity.verification_limited")
+    # Only the newest token of this purpose can be consumed.
+    db.execute(
+        update(ActionToken)
+        .where(
+            ActionToken.user_id == user_id,
+            ActionToken.purpose == purpose,
+            ActionToken.used_at.is_(None),
+        )
+        .values(used_at=instant)
+    )
     token = opaque()
     db.add(
         ActionToken(
@@ -79,27 +132,53 @@ def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purp
     deliver(settings, email, purpose, token)
 
 
-def request_action(db: Session, settings: Settings, email: str, purpose: str) -> None:
+def request_action(db: Session, settings: Settings, email: str, purpose: str, csrf: str) -> None:
     user = repository.by_email(db, canonical_email(email))
     if user and not user.suspended and (purpose == "reset" or not user.verified):
         set_context(db, user.id)
+        user = db.scalar(
+            select(User)
+            .where(User.id == user.id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        if user is None:
+            return
+        if purpose == "verify" and (
+            not user.verification_csrf_hash
+            or not secrets.compare_digest(user.verification_csrf_hash, digest(csrf))
+        ):
+            return
         send_action(db, settings, user.id, user.email, purpose)
 
 
-def consume_action(db: Session, raw: str, purpose: str) -> User:
+def consume_action(db: Session, raw: str, purpose: str, csrf: str = "") -> User:
     token = repository.by_token(db, digest(raw), purpose)
     if not token or token.used_at or token.expires_at <= now():
         raise DomainError("ERR_LINK_EXPIRED", "Token is invalid or expired.", 410)
     user = db.get(User, token.user_id)
     if not user or user.suspended:
         raise DomainError("ERR_AUTH", "Authentication failed.", 401)
+    if purpose == "verify" and (
+        not user.verification_csrf_hash
+        or not secrets.compare_digest(user.verification_csrf_hash, digest(csrf))
+    ):
+        raise DomainError(
+            "ERR_VERIFICATION_SESSION",
+            "Use the browser where you signed up, or restart sign-up here to request a new code.",
+            410,
+        )
     token.used_at = now()
     return user
 
 
-def verify(db: Session, raw: str) -> None:
-    user = consume_action(db, raw, "verify")
+def verify(db: Session, raw: str, csrf: str) -> None:
+    user = consume_action(db, raw, "verify", csrf)
     user.verified = True
+    user.verification_csrf_hash = None
+    user.verification_attempts = 0
+    user.verification_started_at = None
+    user.verification_blocked_until = None
     record(db, user.id, "identity.verified")
 
 
@@ -137,7 +216,9 @@ def consume_mfa(
             .with_for_update()
         )
         if not item or item.used_at:
-            raise DomainError("ERR_AUTH", "Authentication failed.", 401)
+            raise DomainError(
+                "ERR_MFA_CODE", "The recovery code is incorrect or already used.", 401
+            )
         item.used_at = now()
         revoke_all(db, user_id)
         record(db, user_id, "identity.recovery_code_used")

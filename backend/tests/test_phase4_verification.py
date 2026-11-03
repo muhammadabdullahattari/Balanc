@@ -148,7 +148,7 @@ def test_previous_supported_schema_upgrades_without_losing_identity(
             assert db.execute(
                 "SELECT password_version FROM app.users WHERE id=%s", (user_id,)
             ).fetchone() == (1,)
-            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0020",)
+            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0022",)
     finally:
         assert name.startswith("ledgerpilot_upgrade_")
         with connect(admin_url) as db:
@@ -248,7 +248,7 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                     "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user"
                 ).fetchone() == (False,)
                 assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == (
-                    "0020",
+                    "0022",
                 )
             settings = database_settings.model_copy(
                 update={"database_url": SecretStr(runtime.render_as_string(hide_password=False))}

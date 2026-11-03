@@ -51,6 +51,9 @@ class Settings(BaseSettings):
     ocr_enabled: bool = False
     ocr_service_url: str = "http://127.0.0.1:8071/extract"
     ocr_service_token: SecretStr | None = None
+    google_client_id: str | None = Field(
+        default=None, pattern=r"^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$"
+    )
     cookie_samesite: Literal["lax", "none"] = "lax"
     smtp_host: str = "127.0.0.1"
     smtp_port: int = Field(default=1025, ge=1, le=65535)

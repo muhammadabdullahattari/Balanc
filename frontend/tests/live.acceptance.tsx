@@ -222,6 +222,9 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
       ).toBeGreaterThan(1),
     );
     await user.selectOptions(d.getByLabelText("Bank account"), f.accounts.bank);
+    fireEvent.change(d.getByLabelText("Payment date"), {
+      target: { value: day },
+    });
     await user.click(d.getByRole("button", { name: "Review payment" }));
     await d.findByRole("button", { name: "Approve payment record" });
     const before = await r.result(
@@ -329,6 +332,9 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
       screen.getByLabelText("Deposit control account"),
       f.accounts.deposit,
     );
+    fireEvent.change(screen.getByLabelText("Accounting date"), {
+      target: { value: day },
+    });
     await user.type(screen.getByLabelText("Amount", { exact: true }), "15.00");
     await user.click(screen.getByRole("button", { name: "Review entry" }));
     await user.click(
@@ -383,6 +389,9 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
       d.getByLabelText("Issued credit-note reference"),
       credits.items[0].id,
     );
+    fireEvent.change(d.getByLabelText("Refund date"), {
+      target: { value: day },
+    });
     await user.type(d.getByLabelText("Refund amount"), "25.00");
     await user.click(d.getByRole("button", { name: "Review refund" }));
     await user.click(
@@ -436,6 +445,9 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
       await screen.findByRole("button", { name: "Record movement" }),
     );
     d = within(screen.getByRole("dialog"));
+    fireEvent.change(d.getByLabelText("Accounting date"), {
+      target: { value: day },
+    });
     await user.type(d.getByLabelText("Principal"), "200.00");
     await user.selectOptions(d.getByLabelText("Bank account"), f.accounts.bank);
     await user.click(d.getByRole("button", { name: "Review movement" }));
@@ -806,4 +818,26 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
     );
     expect(new Uint8Array(zip).slice(0, 2)).toEqual(new Uint8Array([80, 75]));
   });
+});
+
+it("enforces exact credentialed CORS for the web origin", async () => {
+  const endpoint = "http://127.0.0.1:8000/api/v1/businesses";
+  const preflight = (origin: string) =>
+    originalFetch(endpoint, {
+      method: "OPTIONS",
+      headers: {
+        Origin: origin,
+        "Access-Control-Request-Method": "POST",
+        "Access-Control-Request-Headers": "content-type,x-csrf-token",
+      },
+    });
+  const allowed = await preflight("http://127.0.0.1:5173");
+  expect(allowed.status).toBe(200);
+  expect(allowed.headers.get("access-control-allow-origin")).toBe(
+    "http://127.0.0.1:5173",
+  );
+  expect(allowed.headers.get("access-control-allow-credentials")).toBe("true");
+  const denied = await preflight("http://untrusted.invalid");
+  expect(denied.status).toBe(400);
+  expect(denied.headers.get("access-control-allow-origin")).toBeNull();
 });

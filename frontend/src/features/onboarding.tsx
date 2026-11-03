@@ -1,3 +1,4 @@
+import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Building2, Check, Plus, ShieldCheck } from "lucide-react";
@@ -52,7 +53,18 @@ export function MFASetup({ onComplete }: { onComplete: () => void }) {
             confirm.mutate();
           }}
         >
-          <p>Enter this setup key in your authenticator app:</p>
+          <p>
+            Scan this QR code with your authenticator app, or enter the setup
+            key below.
+          </p>
+          <div className="mfa-qr">
+            <QRCodeSVG
+              value={enroll.data.provisioning_uri}
+              size={192}
+              level="M"
+              title="Scan to add LedgerPilot to your authenticator"
+            />
+          </div>
           <code className="setup-key">{enroll.data.secret}</code>
           <Field label="Six-digit authenticator code">
             <input

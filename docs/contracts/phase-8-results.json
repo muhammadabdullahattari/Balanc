@@ -1,0 +1,64 @@
+{
+  "date": "2026-11-02",
+  "status": "Completed for approved local P1 pilot integration scope",
+  "backend": {
+    "passed": 114,
+    "failed": 0,
+    "skipped": 0,
+    "duration_seconds": 511.09,
+    "services": [
+      "PostgreSQL",
+      "Mailpit",
+      "ClamAV",
+      "local OCR"
+    ],
+    "migration_restore": "passed"
+  },
+  "real_browser": {
+    "passed": 1,
+    "failed": 0,
+    "duration_ms": 13148.525,
+    "engine": "Chromium",
+    "mocked_api": false,
+    "assertions": [
+      "Secure/HttpOnly session cookie",
+      "explicit approval before posting",
+      "100 invoice / 40 receipt / 60 receivable",
+      "exact bank/AR/income and balanced trial",
+      "duplicate replay has one effect",
+      "stale mutation rejected with no extra document",
+      "unshared tenant accounts/private original/jobs/search/exports return 404"
+    ]
+  },
+  "frontend_real_http": {
+    "passed": 18,
+    "failed": 0
+  },
+  "ui": {
+    "component_passed": 27,
+    "isolated_browser_passed": 10,
+    "transport_passed": 7
+  },
+  "checks": {
+    "build": "passed",
+    "browser_types": "passed",
+    "api_contract": "passed",
+    "inventory": "117 call sites / 89 operations",
+    "ruff": "passed",
+    "mypy": "90 files passed",
+    "locked_backend_environment": "checked offline, no changes",
+    "format": "passed",
+    "workflow": "passed",
+    "production_fixture_exclusion": "passed",
+    "credential_cleanup": "passed"
+  },
+  "candidate_sha256": "5bf64a8a38ee504365481acc95dff786604fdc4657fd6ca416f4ef779ade8c6f",
+  "candidate_inputs": 207,
+  "boundaries": [
+    "Approved local pilot, not full SRS certification",
+    "Four manual/browser-matrix checks deferred to Phase 10",
+    "Hosted CI configured, not run remotely",
+    "Existing three moderate development-generator dependency findings remain tracked",
+    "No commit/push/deployment"
+  ]
+}

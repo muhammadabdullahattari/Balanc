@@ -3,7 +3,7 @@
 from fastapi import APIRouter, Request, Response
 
 from ledgerpilot.audit.service import record
-from ledgerpilot.identity import service
+from ledgerpilot.identity import google, service
 from ledgerpilot.identity.dependencies import (
     ACCESS_COOKIE,
     CSRF_COOKIE,
@@ -14,6 +14,7 @@ from ledgerpilot.identity.dependencies import (
 from ledgerpilot.identity.schemas import (
     Credentials,
     EmailRequest,
+    GoogleCredentials,
     MFARequest,
     Registration,
     ResetRequest,
@@ -38,6 +39,18 @@ def cookies(request: Request, response: Response, values: tuple[str, str, str]) 
             httponly=True,
             samesite=request.app.state.settings.cookie_samesite,
             path="/",
+        )
+    response.headers["Cache-Control"] = "no-store"
+
+
+def clear_cookies(request: Request, response: Response) -> None:
+    for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
+        response.delete_cookie(
+            name,
+            path="/",
+            secure=True,
+            httponly=True,
+            samesite=request.app.state.settings.cookie_samesite,
         )
     response.headers["Cache-Control"] = "no-store"
 
@@ -67,7 +80,7 @@ def csrf(request: Request, response: Response) -> dict[str, str]:
     response_model_exclude_unset=True,
 )
 def register(data: Registration, request: Request, db: DB) -> dict[str, str]:
-    service.register(db, request.app.state.settings, data)
+    service.register(db, request.app.state.settings, data, request.headers.get("x-csrf-token", ""))
     return GENERIC
 
 
@@ -76,8 +89,8 @@ def register(data: Registration, request: Request, db: DB) -> dict[str, str]:
     response_model=contracts.responses["identity.verify"],
     response_model_exclude_unset=True,
 )
-def verify(data: TokenRequest, db: DB) -> dict[str, str]:
-    service.verify(db, data.token.get_secret_value())
+def verify(data: TokenRequest, request: Request, db: DB) -> dict[str, str]:
+    service.verify(db, data.token.get_secret_value(), request.headers.get("x-csrf-token", ""))
     return {"status": "verified"}
 
 
@@ -88,7 +101,13 @@ def verify(data: TokenRequest, db: DB) -> dict[str, str]:
     response_model_exclude_unset=True,
 )
 def verification_request(data: EmailRequest, request: Request, db: DB) -> dict[str, str]:
-    service.request_action(db, request.app.state.settings, data.email, "verify")
+    service.request_action(
+        db,
+        request.app.state.settings,
+        data.email,
+        "verify",
+        request.headers.get("x-csrf-token", ""),
+    )
     return GENERIC
 
 
@@ -99,7 +118,9 @@ def verification_request(data: EmailRequest, request: Request, db: DB) -> dict[s
     response_model_exclude_unset=True,
 )
 def reset_request(data: EmailRequest, request: Request, db: DB) -> dict[str, str]:
-    service.request_action(db, request.app.state.settings, data.email, "reset")
+    service.request_action(
+        db, request.app.state.settings, data.email, "reset", request.headers.get("x-csrf-token", "")
+    )
     return GENERIC
 
 
@@ -162,14 +183,7 @@ def me(identity: Identity) -> dict[str, object]:
 def logout(request: Request, response: Response, identity: Identity, db: DB) -> dict[str, str]:
     identity.family.revoked_at = now()
     record(db, identity.user.id, "session.revoked", resource_id=identity.family.id)
-    for name in (ACCESS_COOKIE, REFRESH_COOKIE, CSRF_COOKIE):
-        response.delete_cookie(
-            name,
-            path="/",
-            secure=True,
-            httponly=True,
-            samesite=request.app.state.settings.cookie_samesite,
-        )
+    clear_cookies(request, response)
     return {"status": "logged_out"}
 
 
@@ -178,9 +192,10 @@ def logout(request: Request, response: Response, identity: Identity, db: DB) -> 
     response_model=contracts.responses["identity.logout_all"],
     response_model_exclude_unset=True,
 )
-def logout_all(identity: Identity, db: DB) -> dict[str, str]:
+def logout_all(request: Request, response: Response, identity: Identity, db: DB) -> dict[str, str]:
     service.revoke_all(db, identity.user.id)
     record(db, identity.user.id, "session.all_revoked")
+    clear_cookies(request, response)
     return {"status": "revoked"}
 
 
@@ -208,3 +223,61 @@ def confirm(
             db, request.app.state.settings, identity.family, data.code.get_secret_value()
         )
     }
+
+
+@router.get("/google/config", response_model=contracts.responses["identity.google_config"])
+def google_config(request: Request, response: Response) -> dict[str, object]:
+    settings = request.app.state.settings
+    response.headers["Cache-Control"] = "no-store"
+    mailbox = (
+        "http://127.0.0.1:8025"
+        if settings.app_env == "local"
+        and settings.smtp_host in {"localhost", "127.0.0.1"}
+        and settings.smtp_port == 1025
+        else None
+    )
+    return {
+        "enabled": bool(settings.google_client_id),
+        "client_id": settings.google_client_id,
+        "local_mailbox": mailbox,
+    }
+
+
+@router.post("/google/challenge", response_model=contracts.responses["identity.google_challenge"])
+def google_challenge(request: Request, response: Response, db: DB) -> dict[str, str]:
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "nonce": google.challenge(
+            db, request.app.state.settings, request.headers.get("x-csrf-token", "")
+        )
+    }
+
+
+@router.post(
+    "/google/login",
+    response_model=contracts.responses["identity.google_login"],
+    response_model_exclude_none=True,
+)
+def google_login(
+    data: GoogleCredentials, request: Request, response: Response, db: DB
+) -> dict[str, str]:
+    user, mfa = google.authenticate(
+        db, request.app.state.settings, data, request.headers.get("x-csrf-token", "")
+    )
+    cookies(request, response, service.issue_session(db, request.app.state.settings, user, mfa))
+    return {"status": "authenticated"}
+
+
+@router.post("/google/link", response_model=contracts.Status)
+def google_link(
+    data: GoogleCredentials, request: Request, identity: Identity, db: DB
+) -> dict[str, str]:
+    google.link(
+        db,
+        request.app.state.settings,
+        data,
+        request.headers.get("x-csrf-token", ""),
+        identity.user,
+        identity.family.mfa,
+    )
+    return {"status": "linked"}

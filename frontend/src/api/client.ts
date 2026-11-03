@@ -4,8 +4,26 @@ import type { paths } from "./generated/schema";
 /** One browser transport. Session cookies stay HttpOnly; writes are never retried. */
 export function createApiClient(baseUrl: string, timeoutMs = 30_000) {
   const url = new URL(baseUrl, window.location.origin);
-  if (url.origin !== window.location.origin && url.protocol !== "https:") {
-    throw new Error("Cross-origin API connections require HTTPS");
+  if (
+    url.username ||
+    url.password ||
+    url.pathname !== "/" ||
+    url.search ||
+    url.hash ||
+    !["http:", "https:"].includes(url.protocol)
+  ) {
+    throw new Error(
+      "API configuration must be an HTTP(S) origin without credentials, path, query or fragment",
+    );
+  }
+  const loopback = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (
+    url.protocol !== "https:" &&
+    (url.origin !== window.location.origin || !loopback)
+  ) {
+    throw new Error(
+      "API connections require HTTPS; same-origin loopback HTTP is allowed for local development",
+    );
   }
   let csrf: string | undefined;
   let refreshRequest: Promise<boolean> | undefined;

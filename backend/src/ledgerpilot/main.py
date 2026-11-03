@@ -200,7 +200,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one()
-                if not safe or version != "0020":
+                if not safe or version != "0022":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):

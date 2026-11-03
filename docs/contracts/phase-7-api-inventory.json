@@ -1,0 +1,617 @@
+{
+  "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
+  "call_sites": 122,
+  "distinct_operations": 94,
+  "operations": [
+    {
+      "file": "App.tsx",
+      "method": "GET",
+      "path": "/api/v1/auth/me"
+    },
+    {
+      "file": "App.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "App.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/membership"
+    },
+    {
+      "file": "App.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/logout"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/notifications"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/notification-preferences"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/notifications/{notification_id}/read"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/notification-preferences"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/search"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/advances"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/advances/{advance_id}/applications"
+    },
+    {
+      "file": "features/advances.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/advances"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/verification-request"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/login"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/register"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/verify"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/reset-request"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/reset"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/matches"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-transactions"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-imports/preview"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-imports"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/disposition"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/banking.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-transactions/{row_id}/preview"
+    },
+    {
+      "file": "features/beneficiary-review.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/beneficiary-changes"
+    },
+    {
+      "file": "features/beneficiary-review.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/periods"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/close-tasks"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/readiness"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/memberships"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/close-tasks"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/close-tasks/{task_id}"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/periods"
+    },
+    {
+      "file": "features/close.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/periods/{period_id}"
+    },
+    {
+      "file": "features/dashboard.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/dashboard.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/dashboard"
+    },
+    {
+      "file": "features/directory.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/directory.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/directory.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties/{party_id}/statement"
+    },
+    {
+      "file": "features/directory.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/directory.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/drafts.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/source-drafts"
+    },
+    {
+      "file": "features/drafts.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/drafts.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/source-drafts/{draft_id}/issue"
+    },
+    {
+      "file": "features/drafts.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/source-drafts/{draft_id}/void"
+    },
+    {
+      "file": "features/drafts.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/source-drafts/{draft_id}"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/evidence"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/evidence/upload"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/download"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/notes"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/notes"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/notes"
+    },
+    {
+      "file": "features/evidence.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/links"
+    },
+    {
+      "file": "features/google-signin.tsx",
+      "method": "GET",
+      "path": "/api/v1/auth/google/config"
+    },
+    {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/challenge"
+    },
+    {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/link"
+    },
+    {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/login"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/journals/{journal_id}/reversal"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/ledger"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/journals/{journal_id}"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/exports/journals.csv"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/exports/evidence-pack.zip"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/loans"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/loans"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/loans/{loan_id}/movements"
+    },
+    {
+      "file": "features/loans.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/lookup-more.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/lookup-more.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/enroll"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/mfa/confirm"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "POST",
+      "path": "/api/v1/invitations/accept"
+    },
+    {
+      "file": "features/openings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/opening-balances"
+    },
+    {
+      "file": "features/openings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/openings.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/imports/preview"
+    },
+    {
+      "file": "features/openings.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/imports/apply"
+    },
+    {
+      "file": "features/reconciliation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/reconciliation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/evidence"
+    },
+    {
+      "file": "features/reconciliation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/reconciliation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/statements/sign-off"
+    },
+    {
+      "file": "features/refunds.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/payments"
+    },
+    {
+      "file": "features/refunds.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/refunds.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/payments"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/profit-loss"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/balance-sheet"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/trial-balance"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/aging"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/forecast"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/assistant/report-answer"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/tax-support"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-rules"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-rules"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/preview"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/activation"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/memberships"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/invitations"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/privacy-requests"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/privacy-requests"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/logout-all"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/trade-documents"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/trade-documents/preview"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/trade-documents"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/source-drafts"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/trade-documents/{document_id}/dispute"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/payments"
+    },
+    {
+      "file": "features/trade.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    }
+  ]
+}

@@ -1,3 +1,4 @@
+import { GoogleSignIn } from "./google-signin";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
@@ -79,6 +80,7 @@ export function Settings() {
       queryClient.setQueryData(keys.session, null);
     },
   });
+  const [googleLinked, setGoogleLinked] = useState(false);
   return (
     <>
       <PageHeading
@@ -184,6 +186,15 @@ export function Settings() {
         {section === "security" && (
           <>
             <h2>Keep your workspace protected.</h2>
+            <h3>Link your Google account</h3>
+            {googleLinked && (
+              <p role="status">
+                Google account linked. You can use Google with your LedgerPilot
+                authenticator.
+              </p>
+            )}
+            <GoogleSignIn mode="link" onLinked={() => setGoogleLinked(true)} />
+
             <p className="muted">
               Signing out everywhere revokes all your active sessions.
             </p>

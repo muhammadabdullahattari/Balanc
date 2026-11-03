@@ -194,7 +194,7 @@ async def test_login_verified_before_reset_cannot_create_valid_session_after_res
                 "/api/v1/auth/reset",
                 json={
                     "token": token,
-                    "new_password": "A replacement private phrase " + uuid4().hex,
+                    "new_password": "A replacement private phrase 7! " + uuid4().hex,
                 },
             )
             assert reset.status_code == 200, reset.text

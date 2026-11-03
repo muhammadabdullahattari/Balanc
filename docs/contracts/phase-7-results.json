@@ -1,0 +1,60 @@
+{
+  "date": "2026-11-02",
+  "status": "Completed for approved local pilot integration scope",
+  "real_service_tests": {
+    "passed": 18,
+    "failed": 0,
+    "services": [
+      "isolated PostgreSQL",
+      "real FastAPI HTTP API",
+      "Mailpit",
+      "ClamAV"
+    ],
+    "mocked_financial_responses": false,
+    "duration_ms": 172671.30444335938,
+    "journeys": [
+      "signs in with MFA recovery",
+      "previews and posts an invoice",
+      "confirms receipt before changing outstanding balance",
+      "posts a supplier bill",
+      "saves, edits and issues a prepared draft",
+      "previews and activates a category rule",
+      "records a customer advance",
+      "creates a customer credit and records a linked refund through the payment screen",
+      "records a loan drawdown and verifies the loan subledger",
+      "imports CSV evidence, previews and posts a reviewed bank category",
+      "loads the actual tax workpaper and cited profit lookup",
+      "imports reviewed opening balances into an empty independent business",
+      "uploads actual statement evidence, saves a review note and signs off its ledger balance",
+      "prepares an optional close task and confirms period lock",
+      "holds supplier bank-detail proposals and shows masked change alerts",
+      "flags and resolves a document dispute without editing its posted total",
+      "ties trial balance and exports real CSV and ZIP evidence",
+      "enforces exact credentialed CORS for the web origin"
+    ]
+  },
+  "ui_passed": 26,
+  "transport_passed": 7,
+  "chromium_passed": 10,
+  "contract_inventory": {
+    "call_sites": 117,
+    "distinct_operations": 89
+  },
+  "checks": {
+    "build": "passed",
+    "generated_types": "passed",
+    "browser_types": "passed",
+    "format": "passed",
+    "inventory": "passed",
+    "workflow": "passed",
+    "fixture_exclusion": "passed",
+    "credential_cleanup": "passed"
+  },
+  "boundaries": [
+    "Approved local pilot; documented full-SRS gaps remain open",
+    "Real HTTP React tests are not deployed browser cookie acceptance",
+    "Four manual browser checks deferred to Phase 10",
+    "Hosted CI configured, not executed remotely",
+    "No deployment, commit or push"
+  ]
+}

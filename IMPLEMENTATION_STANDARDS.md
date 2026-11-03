@@ -86,3 +86,11 @@ When reporting completion, briefly state what changed, tests and results, and an
 **Limitations:** Remaining concerns, blockers, or `None`.
 
 Do not describe an unmeasured capacity, unsupported accounting policy, unfinished phase, or free hosting profile as production-ready. Apply this checklist and report format to every implementation task in this repository.
+
+## Identity policy amendment - 2 November 2026
+
+Apply ADR-015 and docs/authentication-improvements.md. New/reset passwords require 15-128 characters with uppercase, lowercase, digit and non-whitespace special character; preserve existing login hashes. Never silently link federated accounts by email or bypass owned MFA. Google is optional and disabled until configured. Verification issuance/consumption is browser-bound, rotates old codes and enforces the documented durable three-issuance/24-hour pause. Do not replace this with an invented risk detector or blanket victim lockout. Keep Mailpit clearly labeled as local capture. Every change to these policies requires explicit scope, server-side enforcement, updated contracts and regression evidence.
+
+## Password/session/CSRF security amendment - 3 November 2026
+
+Follow docs/password-session-csrf-security.md. Never log credentials or serialize them in public responses. Store user passwords with Argon2id and random refresh/action tokens as digests. Keep auth cookies Secure/HttpOnly/host-only with explicit SameSite, bounded expiry and rotation/replay revocation. Clear browser cookies on both logout routes. Validate Origin plus CSRF cookie/header and authenticated session binding on unsafe methods. Hosted requests require a trusted HTTPS scheme; restrict proxy peers and preserve private health probes. HTTP credentials are allowed only for same-origin loopback development in the browser client. Do not promise to hide requests from browser-owner DevTools or replace these controls with client-side obfuscation. Preserve no-store responses and keep Google client IDs public while retaining server secrets exclusively on the server.

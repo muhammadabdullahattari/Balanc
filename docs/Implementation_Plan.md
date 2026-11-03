@@ -2,14 +2,26 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.16
+**Plan version:** 2.21
 **Status:** Governing implementation sequence  
-**Date:** 30 October 2026
+**Date:** 3 November 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
 
-**Phase 5 functional implementation and local HTTP acceptance (30 October 2026):** Completed the approved local-pilot workflows, including the remaining refunds/advances/rules/opening-baseline/draft/reversal paths and discovered integration repairs. The user advanced real integration work into Phase 5; the system architecture is preserved. **17 real-service frontend journeys, 6 component/accessibility-structure checks, 6 transport checks and 26 focused backend regressions passed. Overall visual/browser sign-off remains open:** Computer Use stopped because it could not verify the current browser URL safely. See [the authoritative Phase 5 record](phase-5-responsive-frontend.md) and [machine-readable live results](contracts/phase-5-results.json). This is not full SRS or production certification; Phases 6/8 and deployment gates are not silently closed.
+**Identity/security amendment (3 November 2026): Implemented and locally verified under the user's explicit scope.** Added password eye/composition checks, friendly errors, browser-bound rotating verification/resend with a durable three-issuance/24-hour pause, local MFA QR and optional Google identity proofs that retain owned sessions/MFA. Added hosted HTTPS rejection/HSTS, remote-HTTP browser refusal, logout-all cookie deletion, and no-leak regressions. Passed 58 backend security/identity checks, 33 UI checks, eight transport checks, ten isolated browser regressions and two real Chromium/API/PostgreSQL journeys; bundle private-value matches are zero. See [authentication changes](authentication-improvements.md), [security review](password-session-csrf-security.md), [evidence](contracts/password-session-csrf-results.json) and ADR-015. Local schema is **0022**. Google client ID is configured; live provider consent and deployed TLS/proxy acceptance remain unverified. Mailpit is the selected local capture service. This amendment preserves the architecture/phase sequence; Phase 9 remains next. No commit/push/deployment.
+
+
+**Phase 8 (2 November 2026): Completed for the approved local P1 pilot integration scope.** Fresh independent verification passed 114 all-service backend tests (zero skips), 18 real HTTP frontend checks, one production Chromium/real API/PostgreSQL financial and tenant-isolation journey, 27 component/accessibility tests, ten isolated UI-browser regressions and seven transport tests. Fixed unstable select labels with explicit label/guidance associations. Migration/restore, recovery, source candidate fingerprint, contract/type/build/security regression evidence are in [Phase 8](phase-8-integration-testing.md), [results](contracts/phase-8-results.json) and [candidate manifest](contracts/phase-8-candidate.json). **Next: Phase 9 deployment.** Hosted CI/deployment and Phase 10 manual browser checks are not closed.
+
+
+**Phase 7 (2 November 2026): Completed for the approved local pilot integration scope.** Reviewed and retained the Phase 5 real API integration; added strict API-origin validation, gateway request-reference fallback, contract inventory/CI gate and real credentialed CORS checks. All 18 real-service frontend checks, 26 UI tests, seven transport tests and ten Chromium regressions passed. See [Phase 7 record](phase-7-api-integration.md), [results](contracts/phase-7-results.json) and [API inventory](contracts/phase-7-api-inventory.json). Phase 8 subsequently completed the independent integration gate; see the current status above. Hosted/browser-cookie sign-off and the four approved manual browser checks remain Phase 10 tasks.
+
+
+**Current status (2 November 2026): Phase 5 technical implementation Completed; Phase 6 Completed for the approved local pilot UI-testing scope.** Phase 6 passed 25 UI tests, six transport tests and ten Chromium journeys against the production preview, plus type/build/contract/format checks. CI includes browser execution and evidence upload. See [Phase 6 acceptance](phase-6-ui-testing.md). Phase 7 subsequently verified the existing integration; its completion evidence is recorded above. The four user-approved manual browser checks are Deferred to Phase 10 (Staging & Live E2E Sign-Off), not passed.
+
+
+**Phase 5 functional implementation and local HTTP acceptance (30 October 2026):** Completed the approved local-pilot workflows, including the remaining refunds/advances/rules/opening-baseline/draft/reversal paths and discovered integration repairs. The user advanced real integration work into Phase 5; the system architecture is preserved. **17 real-service frontend journeys, 6 component/accessibility-structure checks, 6 transport checks and 26 focused backend regressions passed. Historical browser blocker (the four manual checks are now deferred to Phase 10):** Computer Use stopped because it could not verify the current browser URL safely. See [the authoritative Phase 5 record](phase-5-responsive-frontend.md) and [machine-readable live results](contracts/phase-5-results.json). This is not full SRS or production certification; Phases 6/8 and deployment gates are not silently closed.
 
 **Phase 4 local verification (30 October 2026): Complete for the approved local pilot.** Implemented reproducible OpenAPI/type generation, the canonical cookie/CSRF browser transport, real synthetic restore and populated migration checks, independent financial assertions, representative Swagger execution and CI evidence collection. The user explicitly selected **"Verify approved local pilot; record SRS gaps."** See [the Phase 4 record](phase-4-backend-verification.md), [results](contracts/phase-4-results.json), [104-requirement registry](contracts/phase-4-traceability.json) and ADR-014. The full baseline passed 112 tests; four final focused checks and one later Swagger check passed. Browser transport/type checks, build/container smoke, Ruff/mypy and contract checks passed. Measured coverage is 79.47% combined with accounting/auth branch targets unmet; detailed SRS differences remain open. This closes local verification, not full SRS or production certification. Phase order and system architecture are preserved; Phase 5 is next. No commit/push/deployment was performed.
 
@@ -204,6 +216,8 @@ For every module:
 
 ## 10. Phase 6 — UI-only testing
 
+Status: **Completed for the approved local pilot UI-testing scope.** See [Phase 6 evidence](phase-6-ui-testing.md). Four manual/browser-matrix checks remain assigned to Phase 10. This approved deferral takes precedence over the original browser-size and manual accessibility requirements in the paragraph below.
+
 Test fields, formatting, filters, permissions presentation, dialogs, loading/empty/error states and charts with unit/component tests. Run Playwright against mocked APIs for core journeys, 401/403/conflict/timeout/retry states and supported browser sizes. Check keyboard, focus, labels, contrast and reduced motion using axe plus manual review. UI hiding is not backend authorization.
 
 **Deliverables:** Frontend test and accessibility reports.  
@@ -211,12 +225,16 @@ Test fields, formatting, filters, permissions presentation, dialogs, loading/emp
 
 ## 11. Phase 7 — Integrate frontend and APIs
 
+Status: **Completed for the approved local pilot integration scope.** See [implementation and acceptance](phase-7-api-integration.md).
+
 Replace mock operations incrementally through the generated client. Configure exact CORS, secure cookies/CSRF and session lifecycle. Integrate identity/business selection first, then sales, purchases, loans, bank review, reconciliation and reports. Map typed errors, conflicts and correlation IDs to the UI. Retry only safe/idempotent requests; never blindly retry a financial POST. Use short-lived upload access and show scan status. Disable mocks in release builds.
 
 **Deliverables:** Integrated P1 web client, environment configuration and contract mismatch log.  
 **Exit gate:** Every P1 workflow uses the real API; no mock-only screen or direct browser DB access remains.
 
 ## 12. Phase 8 — Integration testing
+
+Status: **Completed for the approved local P1 pilot integration scope.** Evidence: [integration acceptance](phase-8-integration-testing.md). The four manual/browser-matrix checks remain deferred to Phase 10.
 
 Run browser + API + PostgreSQL tests with isolated tenants and synthetic data. Verify accounting golden scenarios, report tie-outs, permissions/isolation across APIs/files/search/jobs/exports, duplicate requests, retries, stale edits, rollback, migration/restore, document scan/manual fallback and optional sandbox adapters. Check API/client compatibility and that model/provider outage leaves core bookkeeping usable. Fix critical/high issues and unexplained balances; attach test evidence to SRS IDs.
 
@@ -231,6 +249,15 @@ Deploy the tested web client to Vercel through its Git integration and deploy th
 **Exit gate:** Deployed version equals tested candidate; no real customer books; secrets private; demo can be disabled and data exported. Free-tier status is never represented as production guarantee.
 
 ## 14. Phase 10 — Deployed system and E2E testing
+
+Deferred from Phase 5 by user decision (2 November 2026):
+
+- Review layouts at phone, tablet and desktop sizes.
+- Check contrast, keyboard navigation and screen-reader behavior.
+- Try uploads using the browser file picker.
+- Check the supported browser matrix.
+
+All four remain unverified until staging/live acceptance evidence is recorded.
 
 Against the deployed URL, run full synthetic-tenant browser E2E for account/business setup, MFA, invoice/receipt/payment, bills, loan, CSV, review, reconciliation, reports and export. Verify TLS, cookies/CSRF, CORS, provider credentials, RLS, upload scan, rate limits, auth expiry, isolation and support/admin access. Test enabled email/storage/provider adapters, outage and revoked keys. Restore backup to isolation and tie balances/audit. Run demo-bounded load tests only; never use free hosting to claim 10M/min. Accountant reviews selected policy/jurisdiction scenarios. Capture deployment ID, browser, fixture, result, defect and evidence.
 
@@ -293,6 +320,9 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 
 | Version | Date | Change |
 |---|---|---|
+| 2.21 | 3 Nov 2026 | Identity UX/Google/verification hardening and prioritized password-cookie-CSRF security acceptance recorded |
+| 2.20 | 2 Nov 2026 | Phase 8 integrated acceptance passed; shared form labels repaired; tested source candidate recorded |
+| 2.19 | 2 Nov 2026 | Phase 7 local API integration verified; 18 real-service checks passed; Phase 8 next |
 | 1.0 | 26 Oct 2026 | Initial plan aligned to LedgerPilot SRS |
 | 2.0 | 27 Oct 2026 | Resequenced plan to match LedgerPilot scope |
 | 2.1 | 27 Oct 2026 | Added project standards and ADRs |
@@ -309,7 +339,7 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 
 Track actual code and verification here; a planned item is not complete until its evidence exists. Update this section and the version history whenever implementation changes.
 
-**Current phase:** Phases 2 and 3 are complete for the documented local P1 implementation scope after the [audit repairs](phase-2-3-audit.md); **Phase 4 is next and has not started**. Fresh all-service acceptance passed **110 tests in 572.40 seconds**. Ruff, strict mypy, non-root API build/HTTP/readiness/secure-cookie checks, locked dependencies, compilation and whitespace checks pass. See [the implementation record](phase-3-business-modules.md), [API inventory](contracts/phase-3-api-coverage.md) and [completion contract](contracts/phase-3-completion.md). Reviewed duplicates/rule suggestions, resumable encrypted exports, opening corrections/cash policies, independent manual privacy fulfillment and complete response contracts preserve the modular monolith and PostgreSQL financial authority. Main schema is **0020** with existing data preserved. OpenAPI is unchanged at 121 paths and 229 schemas; CI includes all real-service test modules. ADR-010's audit amendment and ADR-011–013 record implementation details and local limits. Phase 4 independently verifies backend/Swagger/restore and generates the frontend client before frontend feature work. Production capacity and automated P2 privacy execution are not claimed. No commit, push or new hosted CI run was performed. Earlier completion evidence remains historical; the audit record contains the latest result.
+**Current phase:** Phase 6 local UI verification is complete; Phase 7 and Phase 8 local integration are complete; Phase 9 deployment is next. The following Phase 2/3 paragraph is historical evidence. Phases 2 and 3 are complete for the documented local P1 implementation scope after the [audit repairs](phase-2-3-audit.md); **Phase 4 is next and has not started**. Fresh all-service acceptance passed **110 tests in 572.40 seconds**. Ruff, strict mypy, non-root API build/HTTP/readiness/secure-cookie checks, locked dependencies, compilation and whitespace checks pass. See [the implementation record](phase-3-business-modules.md), [API inventory](contracts/phase-3-api-coverage.md) and [completion contract](contracts/phase-3-completion.md). Reviewed duplicates/rule suggestions, resumable encrypted exports, opening corrections/cash policies, independent manual privacy fulfillment and complete response contracts preserve the modular monolith and PostgreSQL financial authority. Main schema is **0020** with existing data preserved. OpenAPI is unchanged at 121 paths and 229 schemas; CI includes all real-service test modules. ADR-010's audit amendment and ADR-011–013 record implementation details and local limits. Phase 4 independently verifies backend/Swagger/restore and generates the frontend client before frontend feature work. Production capacity and automated P2 privacy execution are not claimed. No commit, push or new hosted CI run was performed. Earlier completion evidence remains historical; the audit record contains the latest result.
 
 **Closure evidence:** User confirmation in this conversation on 29 October 2026 is the source for the GitHub result; no Actions run URL was supplied or independently inspected in this documentation update. The local checkout is on `main`, with latest commit `13402b1b8fd8b198f3f9bc57dec086475754d153` (`Phase 1 : completed the project structure and the database connections are done and tested`). This identifies the observed checkout; the exact CI run-to-commit association was not independently verified. The Phase 0/1 audit and its identified fixes are complete. Branch protection and cloud deployment are separate outstanding rollout tasks.
 

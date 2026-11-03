@@ -1,9 +1,3 @@
-"""Bounded local worker: claim/commit, scan outside transactions, leased completion.
-
-Run as a trusted local operator with the application role, not through an HTTP
-endpoint. The job's original actor must still have an active scoped membership.
-"""
-
 import argparse
 import json
 from typing import Any

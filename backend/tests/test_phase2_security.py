@@ -45,7 +45,7 @@ def test_email_canonicalization_preserves_local_case_and_aliases() -> None:
 
 
 def test_password_policy_preserves_spaces_and_rejects_common_credentials() -> None:
-    assert normalized_password("   strong private phrase   ") == "   strong private phrase   "
+    assert normalized_password("   Strong private phrase 7!   ") == "   Strong private phrase 7!   "
     with pytest.raises(DomainError):
         normalized_password("passwordpassword")
     with pytest.raises(DomainError):

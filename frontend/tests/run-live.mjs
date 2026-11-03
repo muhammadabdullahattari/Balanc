@@ -3,7 +3,12 @@ import { readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 const root = path.resolve("..");
-const directory = path.join(root, "tmp", "phase5");
+const browserIntegration = process.env.LEDGERPILOT_BROWSER_INTEGRATION === "1";
+const directory = path.join(
+  root,
+  "tmp",
+  browserIntegration ? "phase8" : "phase5",
+);
 await mkdir(directory, { recursive: true });
 const fixture = path.join(directory, "live.json");
 await unlink(fixture).catch(() => {});
@@ -49,18 +54,25 @@ try {
     throw new Error("Isolated API did not become ready: " + serverErrors);
   const child = spawn(
     process.execPath,
-    [
-      "node_modules/vitest/vitest.mjs",
-      "run",
-      "--config",
-      "vitest.live.config.ts",
-      "--reporter=default",
-      "--reporter=json",
-      "--outputFile=../tmp/phase5/live-results.json",
-      ...(process.env.LEDGERPILOT_LIVE_FILTER
-        ? ["--testNamePattern=" + process.env.LEDGERPILOT_LIVE_FILTER]
-        : []),
-    ],
+    browserIntegration
+      ? [
+          "node_modules/@playwright/test/cli.js",
+          "test",
+          "--config",
+          "playwright.integration.config.ts",
+        ]
+      : [
+          "node_modules/vitest/vitest.mjs",
+          "run",
+          "--config",
+          "vitest.live.config.ts",
+          "--reporter=default",
+          "--reporter=json",
+          "--outputFile=../tmp/phase5/live-results.json",
+          ...(process.env.LEDGERPILOT_LIVE_FILTER
+            ? ["--testNamePattern=" + process.env.LEDGERPILOT_LIVE_FILTER]
+            : []),
+        ],
     {
       stdio: "inherit",
       windowsHide: true,

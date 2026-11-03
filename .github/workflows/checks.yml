@@ -77,12 +77,25 @@ jobs:
         env:
           LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
         run: npm run test:live
+      - name: Verify production browser with real API and PostgreSQL
+        working-directory: frontend
+        env:
+          LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
+        run: |
+          npm run build
+          npx playwright install --with-deps chromium
+          npm run test:browser:types
+          npm run test:browser:live
       - name: Save frontend integration evidence
         if: always()
         uses: actions/upload-artifact@v7
         with:
           name: ledgerpilot-web-live-${{ github.sha }}
-          path: tmp/phase5/live-results.json
+          path: |
+            tmp/phase5/live-results.json
+            tmp/phase8/browser-results.json
+            tmp/phase8/browser-artifacts/
+            frontend/test-results/
           if-no-files-found: warn
           retention-days: 7
       - name: Save backend verification evidence
@@ -124,12 +137,29 @@ jobs:
       - run: npm ci
       - name: Check generated API types and browser transport
         run: |
+          npm run integration:check
           npm run api:check
           npm run test:api
           npm run test:ui
           npm run format:check
       - name: Build production web application
         run: npm run build
+      - name: Install Chromium for UI acceptance
+        run: npx playwright install --with-deps chromium
+      - name: Run isolated browser UI journeys
+        run: |
+          npm run test:browser:types
+          npm run test:browser
+      - name: Save browser acceptance evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ledgerpilot-phase6-browser-${{ github.sha }}
+          path: |
+            tmp/phase6/
+            frontend/test-results/
+          if-no-files-found: warn
+          retention-days: 7
       - name: Save production bundle
         uses: actions/upload-artifact@v7
         with:

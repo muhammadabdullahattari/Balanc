@@ -528,6 +528,11 @@ Member = obj(
     version=int,
 )
 responses: dict[str, Any] = {
+    "identity.google_config": obj(
+        "GoogleConfiguration", enabled=bool, client_id=opt(str), local_mailbox=opt(str)
+    ),
+    "identity.google_challenge": obj("GoogleChallengeRead", nonce=str),
+    "identity.google_login": obj("GoogleLoginRead", status=str),
     "identity.csrf": obj("CSRFRead", csrf_token=str),
     "identity.me": obj("IdentityRead", id=UUID, email=str, verified=bool, mfa=bool),
     "identity.enroll": obj("MFAEnrollment", secret=str, provisioning_uri=str),

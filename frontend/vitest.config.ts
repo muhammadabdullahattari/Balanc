@@ -4,6 +4,7 @@ export default defineConfig({
   plugins: [react()],
   test: {
     environment: "jsdom",
+    maxWorkers: 1,
     include: ["tests/**/*.test.tsx"],
     setupFiles: ["./tests/setup.ts"],
   },

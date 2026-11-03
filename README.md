@@ -114,3 +114,19 @@ The web implementation and evidence are recorded in [Phase 5](docs/phase-5-respo
 From `frontend`, run `npm run test:ui`, `npm run test:api` and `npm run test:live`. The last command needs PostgreSQL/Mailpit/ClamAV and an unused local port 8000; it creates and removes an isolated synthetic database. On Linux set `LEDGERPILOT_TEST_PYTHON` to the backend virtual environment's Python. Results are written to ignored `tmp/phase5/live-results.json`; CI retains them as an artifact.
 
 For Vercel, configure `VITE_API_ORIGIN` to the approved HTTPS API origin before building; the checked-in SPA rewrite supports deep links. Hosted cookie/CORS behavior still needs the Phase 9 deployment checks. Prefer web/API hostnames under the same approved site; a cross-site arrangement needs explicit SameSite/credentialed-CORS and browser verification. No hosted deployment is performed by these local checks.
+
+### Phase 6 UI acceptance
+
+From `frontend`, run `npm ci`, `npx playwright install chromium`, then `npm run test:phase6`. This builds the production frontend and tests it on a dedicated loopback preview server at port 4176 using isolated synthetic API responses. It does not require the database or provider keys. Browser evidence is written to `tmp/phase6/`; failure traces/screenshots are under `frontend/test-results/`. CI runs the browser gate and uploads evidence. See [the Phase 6 record](docs/phase-6-ui-testing.md) for scope and Phase 10 deferrals.
+
+### Phase 7 real API integration
+
+`npm run integration:check` in frontend verifies the recorded OpenAPI call-site inventory. With local PostgreSQL, Mailpit and ClamAV healthy and port 8000 unused, `npm run test:phase7` runs contracts, UI/transport/build/browser checks and isolated real-service journeys. Set LEDGERPILOT_TEST_PYTHON on Linux. Only VITE_API_ORIGIN belongs in frontend configuration; it must contain an origin without credentials, path, query or fragment. See [the integration record](docs/phase-7-api-integration.md) for environment and hosted-cookie boundaries.
+
+### Phase 8 independent integrated acceptance
+
+With the local PostgreSQL/Mailpit/ClamAV/OCR services healthy, run the full backend pytest suite with the four service flags described in [Phase 8](docs/phase-8-integration-testing.md). From frontend, `npm run test:phase8` runs contract, build, UI/browser and real-service integration checks. `npm run test:browser:live` alone creates a disposable API/database fixture and drives the built frontend in Chromium on port 4178; port 8000 must be free. Install dependencies and Chromium first. After successful checks, run `node scripts/record-phase8-candidate.mjs` from the repository root to identify the tested source candidate. Secrets and raw local fixtures are excluded from the candidate manifest.
+
+### Password, cookie and CSRF transport boundary
+
+Hosted profiles reject non-HTTPS API requests before reading credential bodies, except GET/HEAD health probes, and issue HSTS on HTTPS responses. TLS must terminate at the trusted proxy; keep API port 8000 private and configure Uvicorn FORWARDED_ALLOW_IPS with only the actual proxy peers. Do not trust arbitrary X-Forwarded-Proto headers or set a public wildcard. Validate proxy forwarding during Phase 9/10. The browser transport permits HTTP only for same-origin loopback development. HttpOnly protects cookies from scripts; browser-owner DevTools can still inspect cookies and request payloads. See [the focused security review](docs/password-session-csrf-security.md).

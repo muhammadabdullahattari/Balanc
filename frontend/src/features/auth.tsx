@@ -1,31 +1,76 @@
-import { useState } from "react";
+import { GoogleSignIn, useAuthConfiguration } from "./google-signin";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowUpRight, ShieldCheck, Sparkles } from "lucide-react";
-import { api, keys, queryClient, result } from "../api/runtime";
-import { Button, ErrorNotice, Field } from "../components/ui";
+import { api, keys, queryClient, result, ApiError } from "../api/runtime";
+import { Button, ErrorNotice, Field, PasswordInput } from "../components/ui";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email address."),
   password: z.string().min(1, "Enter your password."),
   mfa: z.string(),
 });
+const strongPassword = z
+  .string()
+  .min(15, "Use at least 15 characters.")
+  .max(128)
+  .regex(/[A-Z]/, "Add an uppercase letter.")
+  .regex(/[a-z]/, "Add a lowercase letter.")
+  .regex(/[0-9]/, "Add a number.")
+  .regex(/[^\p{L}\p{N}\s]/u, "Add a special character.");
 type Credentials = z.infer<typeof schema>;
 export function Auth() {
   const [mode, setMode] = useState<
     "login" | "register" | "verify" | "reset-request" | "reset"
   >("login");
+  const config = useAuthConfiguration();
+  const [verificationEmail, setVerificationEmail] = useState("");
+  const [resendWait, setResendWait] = useState(0);
+  useEffect(() => {
+    if (!resendWait) return;
+    const timer = window.setTimeout(
+      () => setResendWait((v) => Math.max(0, v - 1)),
+      1000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [resendWait]);
+  const resend = useMutation({
+    mutationFn: () =>
+      result(
+        api.POST("/api/v1/auth/verification-request", {
+          body: { email: verificationEmail },
+        }),
+      ),
+    onError: (error) => {
+      if (error instanceof ApiError && error.retryAfter)
+        setResendWait(Math.min(error.retryAfter, 86400));
+    },
+    onSuccess: () => {
+      setToken("");
+      setNotice(
+        "If eligible, a new code has been sent. Use only the newest email; older codes no longer work.",
+      );
+      setResendWait(60);
+    },
+  });
   const [recoveryCode, setRecoveryCode] = useState("");
   const [token, setToken] = useState("");
   const [notice, setNotice] = useState("");
   const {
     register,
+    getValues,
+    setValue,
     handleSubmit,
     formState: { errors },
   } = useForm<Credentials>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(
+      mode === "register"
+        ? schema.extend({ password: strongPassword })
+        : schema,
+    ),
     defaultValues: { email: "", password: "", mfa: "" },
   });
   const mutation = useMutation({
@@ -50,11 +95,12 @@ export function Auth() {
         }),
       );
     },
-    onSuccess: () => {
+    onSuccess: (_data, values) => {
       if (mode === "login")
         void queryClient.invalidateQueries({ queryKey: keys.session });
       else {
-        setNotice("Check your email for your verification token.");
+        setVerificationEmail(values.email);
+        setNotice("Check your email for your verification code.");
         setMode("verify");
       }
     },
@@ -96,8 +142,13 @@ export function Auth() {
   };
   const change = (next: typeof mode) => {
     setMode(next);
+    setValue("password", "");
+    setValue("mfa", "");
+    setRecoveryCode("");
+    setToken("");
     mutation.reset();
     recovery.reset();
+    resend.reset();
     setNotice("");
   };
   return (
@@ -144,7 +195,9 @@ export function Auth() {
               {notice}
             </div>
           )}
-          <ErrorNotice error={mutation.error || recovery.error} />
+          <ErrorNotice
+            error={mutation.error || recovery.error || resend.error}
+          />
           {mode === "login" || mode === "register" ? (
             <form onSubmit={handleSubmit((v) => mutation.mutate(v))}>
               <Field label="Email address">
@@ -162,12 +215,13 @@ export function Auth() {
                 label="Password"
                 hint={
                   mode === "register"
-                    ? "Use at least 15 characters. A memorable phrase works well."
+                    ? "15–128 characters, with uppercase, lowercase, a number and a special character."
                     : undefined
                 }
               >
-                <input
-                  type="password"
+                <PasswordInput
+                  key={mode}
+                  maxLength={128}
                   autoComplete={
                     mode === "login" ? "current-password" : "new-password"
                   }
@@ -230,10 +284,15 @@ export function Auth() {
                 </Field>
               )}
               {mode === "reset" && (
-                <Field label="New password">
-                  <input
+                <Field
+                  label="New password"
+                  hint="15–128 characters, including uppercase, lowercase, a number and a special character."
+                >
+                  <PasswordInput
                     name="password"
-                    type="password"
+                    pattern={
+                      "(?=.*[A-Z])(?=.*[a-z])(?=.*[0-9])(?=.*[^\\p{L}\\p{N}\\s]).{15,128}"
+                    }
                     autoComplete="new-password"
                     minLength={15}
                     maxLength={128}
@@ -245,6 +304,63 @@ export function Auth() {
                 Continue
               </Button>
             </form>
+          )}
+          {mode === "verify" && (
+            <div className="verification-resend">
+              <Field label="Verification email address">
+                <input
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={verificationEmail}
+                  onChange={(e) => setVerificationEmail(e.target.value)}
+                />
+              </Field>
+              <Button
+                variant="secondary"
+                type="button"
+                busy={resend.isPending}
+                disabled={
+                  !z.string().email().safeParse(verificationEmail).success ||
+                  resendWait > 0
+                }
+                onClick={() => resend.mutate()}
+              >
+                {resendWait > 0
+                  ? resendWait > 3600
+                    ? `Resend available in about ${Math.ceil(resendWait / 3600)} hours`
+                    : `Resend available in ${resendWait}s`
+                  : "Resend verification code"}
+              </Button>
+              <p className="muted">
+                Use the same browser and app address where you signed up. If you
+                cleared cookies or changed browsers, start sign-up again here.
+                Codes expire in 15 minutes. Requesting a new code replaces the
+                previous one. After three unverified requests, new requests
+                pause for 24 hours.
+              </p>
+            </div>
+          )}
+          {(mode === "login" || mode === "register") && (
+            <GoogleSignIn
+              factors={() => ({
+                ...(getValues("mfa") ? { mfa_code: getValues("mfa") } : {}),
+                ...(recoveryCode ? { recovery_code: recoveryCode } : {}),
+              })}
+            />
+          )}
+          {config.data?.local_mailbox && (
+            <p className="notice">
+              Local development: verification and reset emails appear in{" "}
+              <a
+                href={config.data.local_mailbox}
+                target="_blank"
+                rel="noreferrer"
+              >
+                Mailpit
+              </a>
+              . They are not delivered to your personal inbox.
+            </p>
           )}
           <div className="auth-links">
             {mode === "login" ? (

@@ -1,7 +1,23 @@
 import { useAccess } from "../features/context";
-import { useId, type ReactNode } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  useId,
+  useState,
+  type ReactNode,
+  type ReactElement,
+} from "react";
 import * as Dialog from "@radix-ui/react-dialog";
-import { AlertCircle, ArrowRight, LoaderCircle, X, Inbox } from "lucide-react";
+import {
+  AlertCircle,
+  ArrowRight,
+  LoaderCircle,
+  X,
+  Inbox,
+  Eye,
+  EyeOff,
+} from "lucide-react";
 import { ApiError, queryClient } from "../api/runtime";
 
 export function Button({
@@ -42,14 +58,65 @@ export function Field({
   children: ReactNode;
   hint?: string;
 }) {
+  const labelId = useId();
+  const hintId = useId();
+  const controlId = useId();
+  const controls = Children.toArray(children);
+  const first = controls.find(
+    (c) =>
+      isValidElement(c) &&
+      (["input", "select", "textarea"].includes(String(c.type)) ||
+        c.type === PasswordInput),
+  ) as ReactElement<{ id?: string }> | undefined;
+  const inputId = first?.props.id || controlId;
   return (
-    <label className="field">
-      <span>{label}</span>
-      {children}
-      {hint && <small>{hint}</small>}
-    </label>
+    <div className="field">
+      <label id={labelId} htmlFor={inputId}>
+        {label}
+      </label>
+      {Children.map(children, (child) => {
+        if (
+          !isValidElement(child) ||
+          (!["input", "select", "textarea"].includes(String(child.type)) &&
+            child.type !== PasswordInput)
+        )
+          return child;
+        const control = child as ReactElement<{
+          id?: string;
+          "aria-labelledby"?: string;
+          "aria-describedby"?: string;
+        }>;
+        return cloneElement(control, {
+          id: control.props.id || controlId,
+          "aria-labelledby": control.props["aria-labelledby"] || labelId,
+          "aria-describedby":
+            [control.props["aria-describedby"], hint ? hintId : undefined]
+              .filter(Boolean)
+              .join(" ") || undefined,
+        });
+      })}
+      {hint && <small id={hintId}>{hint}</small>}
+    </div>
   );
 }
+export function PasswordInput(props: React.ComponentProps<"input">) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="password-control">
+      <input {...props} type={visible ? "text" : "password"} />
+      <button
+        type="button"
+        className="icon-button"
+        aria-label={visible ? "Hide password" : "Show password"}
+        aria-pressed={visible}
+        onClick={() => setVisible((v) => !v)}
+      >
+        {visible ? <EyeOff size={18} /> : <Eye size={18} />}
+      </button>
+    </div>
+  );
+}
+
 export function ErrorNotice({
   error,
   retry,
@@ -72,13 +139,16 @@ export function ErrorNotice({
                   .filter((p) => p !== "body" && p !== "query")
                   .join(" / ")
                   .replaceAll("_", " ")}
-                : {field.type.replaceAll("_", " ")}
+                : {validationMessage(field.type)}
               </li>
             ))}
           </ul>
         ) : null}
         {error instanceof ApiError && error.requestId && (
-          <small>Reference: {error.requestId}</small>
+          <details>
+            <summary>Support reference</summary>
+            <small>{error.requestId}</small>
+          </details>
         )}
       </div>
       {!retry && error instanceof ApiError && error.status === 409 && (
@@ -267,4 +337,17 @@ export function money(value: string, currency: string) {
     }).resolvedOptions().maximumFractionDigits ?? 2;
   const sign = whole.startsWith("-") ? "-" : "";
   return `${currency} ${sign}${BigInt(whole.replace(/^-/, "")).toLocaleString("en")}${digits ? "." + decimal.padEnd(digits, "0").slice(0, digits) : ""}`;
+}
+
+function validationMessage(type: string) {
+  const messages: Record<string, string> = {
+    missing: "This field is required.",
+    string_too_short: "This value is too short.",
+    string_too_long: "This value is too long.",
+    string_pattern_mismatch: "Use the requested format.",
+    value_error: "Check this value.",
+    extra_forbidden: "Refresh this form and try again.",
+    int_parsing: "Enter a whole number.",
+  };
+  return messages[type] || "Check this field and try again.";
 }
