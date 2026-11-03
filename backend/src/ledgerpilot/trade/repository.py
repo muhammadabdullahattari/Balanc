@@ -14,6 +14,10 @@ from ledgerpilot.workspace.models import AdvanceApplication
 
 def party(db: Session, bid: UUID, pid: UUID, role: str | None = None) -> Party:
     item = db.scalar(select(Party).where(Party.business_id == bid, Party.id == pid))
+    return validate_party(item, role)
+
+
+def validate_party(item: Party | None, role: str | None = None) -> Party:
     if not item or not item.active or (role and role not in item.roles):
         raise DomainError("ERR_PARTY", "Party is unavailable or has an incompatible role.")
     return item
@@ -27,6 +31,26 @@ def document(db: Session, bid: UUID, did: UUID) -> TradeDocument:
         )
     )
     if not item:
+        raise DomainError("ERR_NOT_FOUND", "Document not found.", 404)
+    return item
+
+
+def documents(db: Session, bid: UUID, ids: list[UUID]) -> dict[UUID, TradeDocument]:
+    if not ids:
+        return {}
+    return {
+        item.id: item
+        for item in db.scalars(
+            select(TradeDocument).where(
+                TradeDocument.business_id == bid, TradeDocument.id.in_(set(ids))
+            )
+        )
+    }
+
+
+def require_document(items: dict[UUID, TradeDocument], did: UUID) -> TradeDocument:
+    item = items.get(did)
+    if item is None:
         raise DomainError("ERR_NOT_FOUND", "Document not found.", 404)
     return item
 

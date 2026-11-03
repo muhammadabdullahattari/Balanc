@@ -72,23 +72,27 @@ def reminders(db: Session, who: Principal, bid: UUID, as_of: date) -> int:
     )
     if len(rows) > 10000:
         raise DomainError("ERR_QUOTA", "The pilot reminder batch exceeds 10,000 invoices.", 413)
+    values = [
+        {
+            "business_id": bid,
+            "recipient_id": who.user.id,
+            "kind": "invoice_overdue",
+            "resource_id": doc.id,
+            "dedupe_key": f"invoice:{doc.id}:{as_of}",
+        }
+        for doc in rows
+        if balances.get(doc.id, 0) > 0 and current.get(doc.id, 0) > 0
+    ]
     created = 0
-    for doc in rows:
-        if balances.get(doc.id, 0) <= 0 or current.get(doc.id, 0) <= 0:
-            continue
-        result = db.execute(
+    # Bounded batches stay below PostgreSQL's bind-parameter limit.
+    for offset in range(0, len(values), 500):
+        result = db.scalars(
             insert(Notification)
-            .values(
-                business_id=bid,
-                recipient_id=who.user.id,
-                kind="invoice_overdue",
-                resource_id=doc.id,
-                dedupe_key=f"invoice:{doc.id}:{as_of}",
-            )
+            .values(values[offset : offset + 500])
             .on_conflict_do_nothing()
             .returning(Notification.id)
-        ).scalar_one_or_none()
-        created += result is not None
+        )
+        created += len(result.all())
     record(db, who.user.id, "reminders.reviewed", bid)
     return created
 
@@ -175,8 +179,7 @@ def readiness(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
             .select_from(CloseTask)
             .join(
                 Period,
-                (Period.id == CloseTask.period_id)
-                & (Period.business_id == CloseTask.business_id),
+                (Period.id == CloseTask.period_id) & (Period.business_id == CloseTask.business_id),
             )
             .where(
                 CloseTask.business_id == bid,

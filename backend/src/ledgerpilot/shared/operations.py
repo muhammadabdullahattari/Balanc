@@ -128,6 +128,29 @@ def account(
     plain: bool = False,
 ) -> Account:
     item = db.scalar(select(Account).where(Account.business_id == bid, Account.id == aid))
+    return validate_account(item, kinds, control, plain=plain)
+
+
+def load_accounts(db: Session, bid: UUID, ids: Sequence[UUID]) -> dict[UUID, Account]:
+    """Load a bounded command's accounts once, always within its tenant."""
+    if not ids:
+        return {}
+    return {
+        item.id: item
+        for item in db.scalars(
+            select(Account).where(Account.business_id == bid, Account.id.in_(set(ids)))
+        )
+    }
+
+
+def validate_account(
+    item: Account | None,
+    kinds: set[str],
+    control: str | None = None,
+    *,
+    plain: bool = False,
+) -> Account:
+    """Apply the same policy to single and batch-loaded accounts; never query."""
     if (
         not item
         or not item.active

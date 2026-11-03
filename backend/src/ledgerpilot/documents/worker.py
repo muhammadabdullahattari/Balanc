@@ -4,6 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import sessionmaker
 
 from ledgerpilot.config import Settings
@@ -93,6 +94,12 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
             "outcome": status,
             "error_code": error,
         }
+    except SQLAlchemyError:
+        # The transaction contexts have rolled back. Leave an existing lease to
+        # expire normally; never report completion or blindly replay a commit.
+        raise DomainError(
+            "ERR_DEPENDENCY", "Document processing could not complete.", 503
+        ) from None
     finally:
         engine.dispose()
 
@@ -104,7 +111,11 @@ def main() -> None:
     parser.add_argument("--actor", required=True, type=UUID)
     parser.add_argument("--business", required=True, type=UUID)
     args = parser.parse_args()
-    print(json.dumps(run_once(Settings(), args.actor, args.business)))
+    try:
+        print(json.dumps(run_once(Settings(), args.actor, args.business)))
+    except DomainError as error:
+        print(json.dumps({"error": {"code": error.code, "message": error.message}}))
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

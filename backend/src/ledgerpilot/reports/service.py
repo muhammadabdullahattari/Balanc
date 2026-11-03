@@ -1,6 +1,7 @@
 """Ledger-backed reports and allocation-based cash recognition with source drill-down."""
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
@@ -12,14 +13,18 @@ from sqlalchemy.orm import Session
 from ledgerpilot.accounting.models import Account, Journal, JournalLine
 from ledgerpilot.accounting.money import allocate
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.tenancy.models import Business
 from ledgerpilot.tenancy.service import get_business
 from ledgerpilot.trade import repository as repo
 from ledgerpilot.trade.models import Allocation, Loan, LoanMovement, Payment, TradeDocument
 from ledgerpilot.workspace.models import AdvanceApplication
+from ledgerpilot.workspace.opening_cash import OpeningSources
 
 
-def context(db: Session, bid: UUID, as_of: date, basis: str) -> dict[str, Any]:
-    business = get_business(db, bid)
+def context(
+    db: Session, bid: UUID, as_of: date, basis: str, business: Business | None = None
+) -> dict[str, Any]:
+    business = business or get_business(db, bid)
     return {
         "report_id": str(uuid4()),
         "as_of": as_of,
@@ -50,42 +55,149 @@ def balances(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
     )
 
 
-def cash_adjustments(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
+def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, dict[UUID, Decimal]]:
+    """A single grouped query for the dashboard's bounded month-end checkpoints."""
+    dates = sorted(set(dates))
+    values: dict[date, dict[UUID, Decimal]] = {day: {} for day in dates}
+    if not dates:
+        return values
+    amounts = [
+        func.coalesce(
+            func.sum(JournalLine.debit - JournalLine.credit).filter(Journal.accounting_date <= day),
+            0,
+        )
+        for day in dates
+    ]
+    for aid, *totals in db.execute(
+        select(JournalLine.account_id, *amounts)
+        .join(
+            Journal,
+            (Journal.id == JournalLine.journal_id)
+            & (Journal.business_id == JournalLine.business_id),
+        )
+        .where(
+            Journal.business_id == bid,
+            Journal.status == "posted",
+            Journal.accounting_date <= dates[-1],
+        )
+        .group_by(JournalLine.account_id)
+    ):
+        for day, amount in zip(dates, totals, strict=True):
+            values[day][aid] = amount
+    return values
+
+
+@dataclass
+class CashSources:
+    business: Business
+    accounts: list[Account]
+    documents: list[TradeDocument]
+    applications: list[tuple[UUID, date, Decimal]]
+    allocations: list[tuple[UUID, date, Decimal]]
+    payments: list[Payment]
+    openings: OpeningSources
+
+    @classmethod
+    def load(
+        cls, db: Session, bid: UUID, end: date, business: Business, accounts: list[Account]
+    ) -> "CashSources":
+        return cls(
+            business,
+            accounts,
+            list(
+                db.scalars(
+                    select(TradeDocument).where(
+                        TradeDocument.business_id == bid, TradeDocument.accounting_date <= end
+                    )
+                )
+            ),
+            [
+                (did, day, amount)
+                for did, day, amount in db.execute(
+                    select(
+                        AdvanceApplication.document_id,
+                        AdvanceApplication.accounting_date,
+                        func.sum(AdvanceApplication.amount),
+                    )
+                    .where(
+                        AdvanceApplication.business_id == bid,
+                        AdvanceApplication.accounting_date <= end,
+                    )
+                    .group_by(AdvanceApplication.document_id, AdvanceApplication.accounting_date)
+                )
+            ],
+            [
+                (did, day, amount)
+                for did, day, amount in db.execute(
+                    select(
+                        Allocation.document_id,
+                        Allocation.accounting_date,
+                        func.sum(Allocation.amount),
+                    )
+                    .where(Allocation.business_id == bid, Allocation.accounting_date <= end)
+                    .group_by(Allocation.document_id, Allocation.accounting_date)
+                )
+            ],
+            list(
+                db.scalars(
+                    select(Payment).where(
+                        Payment.business_id == bid, Payment.accounting_date <= end
+                    )
+                )
+            ),
+            OpeningSources.load(db, bid, end, business.currency_precision),
+        )
+
+
+@dataclass
+class FinancialInputs:
+    """Explicit read-only inputs for one calculation; never cached on pooled sessions."""
+
+    business: Business
+    accounts: list[Account]
+    ledger: dict[date, dict[UUID, Decimal]]
+    cash: CashSources | None
+
+    @classmethod
+    def load(cls, db: Session, bid: UUID, dates: list[date], basis: str) -> "FinancialInputs":
+        business = get_business(db, bid)
+        accounts = list(
+            db.scalars(select(Account).where(Account.business_id == bid).order_by(Account.code))
+        )
+        return cls(
+            business,
+            accounts,
+            balance_snapshots(db, bid, dates),
+            CashSources.load(db, bid, max(dates), business, accounts) if basis == "cash" else None,
+        )
+
+
+def cash_adjustments(
+    db: Session,
+    bid: UUID,
+    as_of: date,
+    sources: CashSources | None = None,
+    ledger: dict[UUID, Decimal] | None = None,
+) -> dict[UUID, Decimal]:
     """Convert tracked trade accruals to realized cash, preserving exact remainder.
 
     Explicit manual journals remain approved exceptions. Refunds recognize the
     original payment's categories on the refund date. Tax is allocated separately.
     """
-    business = get_business(db, bid)
-    docs = list(
-        db.scalars(
-            select(TradeDocument).where(
-                TradeDocument.business_id == bid,
-                TradeDocument.accounting_date <= as_of,
-            )
-        )
-    )
+    if sources is None:
+        business = get_business(db, bid)
+        accounts = list(db.scalars(select(Account).where(Account.business_id == bid)))
+        sources = CashSources.load(db, bid, as_of, business, accounts)
+    business = sources.business
+    docs = [doc for doc in sources.documents if doc.accounting_date <= as_of]
     realized: dict[UUID, Decimal] = defaultdict(Decimal)
-    for did, amount in db.execute(
-        select(AdvanceApplication.document_id, func.sum(AdvanceApplication.amount))
-        .where(AdvanceApplication.business_id == bid, AdvanceApplication.accounting_date <= as_of)
-        .group_by(AdvanceApplication.document_id)
-    ):
-        realized[did] += amount
-    for did, amount in db.execute(
-        select(Allocation.document_id, func.sum(Allocation.amount))
-        .where(Allocation.business_id == bid, Allocation.accounting_date <= as_of)
-        .group_by(Allocation.document_id)
-    ):
-        realized[did] += amount
-    payments = list(
-        db.scalars(
-            select(Payment).where(
-                Payment.business_id == bid,
-                Payment.accounting_date <= as_of,
-            )
-        )
-    )
+    for did, day, amount in sources.applications:
+        if day <= as_of:
+            realized[did] += amount
+    for did, day, amount in sources.allocations:
+        if day <= as_of:
+            realized[did] += amount
+    payments = [payment for payment in sources.payments if payment.accounting_date <= as_of]
     for payment in payments:
         if payment.kind in {"customer_refund", "vendor_refund"}:
             for allocation in payment.allocations:
@@ -96,7 +208,7 @@ def cash_adjustments(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]
                 realized[UUID(allocation["credit_note_id"])] -= Decimal(allocation["amount"])
     from ledgerpilot.workspace.opening_cash import adjustments
 
-    skip, opening_changes = adjustments(db, bid, as_of, docs, realized, payments)
+    skip, opening_changes = adjustments(db, bid, as_of, docs, realized, payments, sources.openings)
     adjustment: dict[UUID, Decimal] = defaultdict(Decimal, opening_changes)
     for doc in docs:
         if doc.kind == "sales_receipt" or doc.id in skip:
@@ -120,16 +232,9 @@ def cash_adjustments(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]
             adjustment[aid] += part * sign * (-1 if sale else 1)
         adjustment[doc.control_account_id] += difference * (1 if sale else -1)
     # Avoid silently treating unmatched historic control entries as recognized cash.
-    controls = {
-        a.id
-        for a in db.scalars(
-            select(Account).where(
-                Account.business_id == bid,
-                Account.control.in_(["ar", "ap"]),
-            )
-        )
-    }
-    ledger = balances(db, bid, as_of)
+    controls = {a.id for a in sources.accounts if a.control in {"ar", "ap"}}
+    if ledger is None:
+        ledger = balances(db, bid, as_of)
     if any(ledger.get(aid, Decimal(0)) + adjustment.get(aid, Decimal(0)) != 0 for aid in controls):
         raise DomainError(
             "ERR_CASH_POLICY", "Unmatched AR/AP entries require an approved cash exception.", 409
@@ -144,18 +249,26 @@ def financial(
     end: date,
     basis: str,
     kind: str,
+    *,
+    inputs: FinancialInputs | None = None,
 ) -> dict[str, Any]:
     if end < start or start == date.min or end == date.max:
         raise DomainError("ERR_DATE_RANGE", "Report dates must be ordered.")
-    accounts = list(
-        db.scalars(select(Account).where(Account.business_id == bid).order_by(Account.code))
-    )
-    closing = balances(db, bid, end)
-    opening = balances(db, bid, start - timedelta(days=1))
+    if inputs is None:
+        inputs = FinancialInputs.load(db, bid, [end, start - timedelta(days=1)], basis)
+    accounts = inputs.accounts
+    closing = inputs.ledger[end].copy()
+    opening = inputs.ledger[start - timedelta(days=1)].copy()
     if basis == "cash":
-        for aid, value in cash_adjustments(db, bid, end).items():
+        for aid, value in cash_adjustments(db, bid, end, inputs.cash, inputs.ledger[end]).items():
             closing[aid] = closing.get(aid, Decimal(0)) + value
-        for aid, value in cash_adjustments(db, bid, start - timedelta(days=1)).items():
+        for aid, value in cash_adjustments(
+            db,
+            bid,
+            start - timedelta(days=1),
+            inputs.cash,
+            inputs.ledger[start - timedelta(days=1)],
+        ).items():
             opening[aid] = opening.get(aid, Decimal(0)) + value
     rows = []
     income, expense = Decimal(0), Decimal(0)
@@ -188,7 +301,7 @@ def financial(
                 }
             )
     result = {
-        **context(db, bid, end, basis),
+        **context(db, bid, end, basis, inputs.business),
         "start_date": start,
         "kind": kind,
         "items": rows,
@@ -324,14 +437,15 @@ def controls(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
 
 
 def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[str, Any]:
-    from ledgerpilot.shared.operations import account
+    from ledgerpilot.shared.operations import load_accounts, validate_account
 
     if as_of > date.max - timedelta(days=91):
         raise DomainError("ERR_DATE_RANGE", "Forecast needs 91 days after its start date.", 422)
     if not bank_ids or len(bank_ids) != len(set(bank_ids)):
         raise DomainError("ERR_FORECAST", "Select unique cash accounts.")
+    accounts = load_accounts(db, bid, bank_ids)
     for aid in bank_ids:
-        account(db, bid, aid, {"asset"}, plain=True)
+        validate_account(accounts.get(aid), {"asset"}, plain=True)
     current = balances(db, bid, as_of)
     cash = sum((current.get(aid, Decimal(0)) for aid in bank_ids), Decimal(0))
     due = repo.due(db, bid, as_of)
@@ -480,16 +594,23 @@ def dashboard(
     basis: str,
     bank_ids: list[UUID],
 ) -> dict[str, Any]:
-    if (end - start).days > 366 or end < start:
+    if (end - start).days > 366 or end < start or start == date.min or end == date.max:
         raise DomainError("ERR_DATE_RANGE", "Dashboard range must be ordered and at most 366 days.")
     from calendar import monthrange
 
-    totals = financial(db, bid, start, end, basis, "profit-loss")
-    trends = []
+    periods = []
     day = start
     while day <= end:
         last = min(end, date(day.year, day.month, monthrange(day.year, day.month)[1]))
-        part = financial(db, bid, day, last, basis, "profit-loss")
+        periods.append((day, last))
+        day = last + timedelta(days=1)
+    inputs = FinancialInputs.load(
+        db, bid, [start - timedelta(days=1), *(last for _, last in periods)], basis
+    )
+    totals = financial(db, bid, start, end, basis, "profit-loss", inputs=inputs)
+    trends = []
+    for day, last in periods:
+        part = financial(db, bid, day, last, basis, "profit-loss", inputs=inputs)
         trends.append(
             {
                 "start_date": day,
@@ -499,14 +620,14 @@ def dashboard(
                 "net_profit": part["net_profit"],
             }
         )
-        day = last + timedelta(days=1)
-    current = balances(db, bid, end)
-    from ledgerpilot.shared.operations import account
+    current = inputs.ledger[end]
+    from ledgerpilot.shared.operations import validate_account
 
     if len(bank_ids) != len(set(bank_ids)):
         raise DomainError("ERR_ACCOUNT", "Cash accounts cannot be selected twice.")
+    accounts = {a.id: a for a in inputs.accounts}
     for aid in bank_ids:
-        account(db, bid, aid, {"asset"}, plain=True)
+        validate_account(accounts.get(aid), {"asset"}, plain=True)
     return {
         **totals,
         "kind": "dashboard",

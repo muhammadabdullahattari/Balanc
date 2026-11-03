@@ -22,6 +22,9 @@ SESSION_COOKIE = APIKeyCookie(name=ACCESS_COOKIE, scheme_name="BrowserSession", 
 
 
 def db_session(request: Request) -> Iterator[Session]:
+    # begin() commits only after successful handling and rolls back body, flush
+    # and commit failures. Let the central safe error handler see the exception;
+    # never continue querying an aborted transaction or return partial success.
     with request.app.state.sessions.begin() as db:
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path

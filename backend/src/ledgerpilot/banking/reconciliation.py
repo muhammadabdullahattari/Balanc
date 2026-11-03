@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, tuple_
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Journal, JournalLine
@@ -33,37 +33,65 @@ def sign_off(
     if len({(r.journal_id, r.position) for r in data.outstanding}) != len(data.outstanding):
         raise DomainError("ERR_RECONCILIATION", "An outstanding item cannot be selected twice.")
     outstanding = Decimal(0)
+    selected = [(item.journal_id, item.position) for item in data.outstanding]
+    values = (
+        {
+            (jid, position): amount
+            for jid, position, amount in db.execute(
+                select(
+                    JournalLine.journal_id,
+                    JournalLine.position,
+                    JournalLine.debit - JournalLine.credit,
+                )
+                .join(
+                    Journal,
+                    (Journal.id == JournalLine.journal_id)
+                    & (Journal.business_id == JournalLine.business_id),
+                )
+                .where(
+                    JournalLine.business_id == bid,
+                    JournalLine.account_id == data.account_id,
+                    tuple_(JournalLine.journal_id, JournalLine.position).in_(selected),
+                    Journal.status == "posted",
+                    Journal.accounting_date <= data.as_of,
+                )
+            )
+        }
+        if selected
+        else {}
+    )
+    matched = (
+        set(
+            db.scalars(
+                select(BankMatch.journal_id)
+                .join(
+                    BankRow,
+                    (BankMatch.row_id == BankRow.id)
+                    & (BankMatch.business_id == BankRow.business_id),
+                )
+                .where(
+                    BankRow.business_id == bid,
+                    BankRow.account_id == data.account_id,
+                    BankMatch.business_id == bid,
+                    BankMatch.journal_id.in_([jid for jid, _ in selected]),
+                    BankRow.accounting_date <= data.as_of,
+                )
+                .union(
+                    select(BankRow.journal_id).where(
+                        BankRow.business_id == bid,
+                        BankRow.account_id == data.account_id,
+                        BankRow.journal_id.in_([jid for jid, _ in selected]),
+                        BankRow.accounting_date <= data.as_of,
+                    )
+                )
+            )
+        )
+        if selected
+        else set()
+    )
     for item in data.outstanding:
-        value = db.scalar(
-            select(JournalLine.debit - JournalLine.credit)
-            .join(
-                Journal,
-                (Journal.id == JournalLine.journal_id)
-                & (Journal.business_id == JournalLine.business_id),
-            )
-            .where(
-                JournalLine.business_id == bid,
-                JournalLine.account_id == data.account_id,
-                JournalLine.journal_id == item.journal_id,
-                JournalLine.position == item.position,
-                Journal.status == "posted",
-                Journal.accounting_date <= data.as_of,
-            )
-        )
-        matched = db.scalar(
-            select(BankMatch.id)
-            .join(
-                BankRow,
-                (BankMatch.row_id == BankRow.id) & (BankMatch.business_id == BankRow.business_id),
-            )
-            .where(
-                BankRow.business_id == bid,
-                BankRow.account_id == data.account_id,
-                BankMatch.journal_id == item.journal_id,
-                BankRow.accounting_date <= data.as_of,
-            )
-        )
-        if value is None or matched:
+        value = values.get((item.journal_id, item.position))
+        if value is None or item.journal_id in matched:
             raise DomainError(
                 "ERR_RECONCILIATION", "Outstanding item is unavailable or already bank-matched."
             )

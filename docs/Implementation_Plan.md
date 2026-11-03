@@ -2,12 +2,14 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.21
+**Plan version:** 2.22
 **Status:** Governing implementation sequence  
 **Date:** 3 November 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**Database query audit amendment (3 November 2026): Completed for the approved local pilot.** Batched account/source/external-ID/reconciliation lookups, shared dashboard month inputs, loan-history validation and notification inserts. Preserved transaction rollback and centralized safe errors; sanitized worker database failures. Closed the reconciliation guard for journals already represented by imported bank rows. Added real PostgreSQL query-budget and failure regressions and updated implementation standards. See [the audit](database-query-audit.md). No API/schema migration, architecture or phase-order change; Phase 9 remains next. Final verification passed **150 backend tests (zero failures/skips)**, including 12 new audit regressions, Ruff/format/mypy and OpenAPI/traceability/generated-type checks. Query counts stayed constant for tested increases in source lines, imports, payment allocations, reconciliation items, dashboard months/accounts and later loan dates. See [the results](contracts/database-query-audit-results.json). No commit/push/deployment.
 
 **Identity/security amendment (3 November 2026): Implemented and locally verified under the user's explicit scope.** Added password eye/composition checks, friendly errors, browser-bound rotating verification/resend with a durable three-issuance/24-hour pause, local MFA QR and optional Google identity proofs that retain owned sessions/MFA. Added hosted HTTPS rejection/HSTS, remote-HTTP browser refusal, logout-all cookie deletion, and no-leak regressions. Passed 58 backend security/identity checks, 33 UI checks, eight transport checks, ten isolated browser regressions and two real Chromium/API/PostgreSQL journeys; bundle private-value matches are zero. See [authentication changes](authentication-improvements.md), [security review](password-session-csrf-security.md), [evidence](contracts/password-session-csrf-results.json) and ADR-015. Local schema is **0022**. Google client ID is configured; live provider consent and deployed TLS/proxy acceptance remain unverified. Mailpit is the selected local capture service. This amendment preserves the architecture/phase sequence; Phase 9 remains next. No commit/push/deployment.
 

@@ -1,0 +1,133 @@
+{
+  "date": "2026-11-03",
+  "status": "passed-local-pilot",
+  "recorded_at": "2026-11-03T11:28:21.855609+00:00",
+  "scope": "Database error boundaries, application N+1 queries, reconciliation and pilot regressions",
+  "schema_revision": "0022",
+  "public_api_schema_changed": false,
+  "tests": {
+    "total": 150,
+    "passed": 150,
+    "failed": 0,
+    "errors": 0,
+    "skipped": 0,
+    "seconds": 450.45,
+    "new_database_audit_cases": 12,
+    "case_names": [
+      "test_document_lines_and_import_preview_have_constant_query_counts",
+      "test_bank_import_external_ids_are_loaded_once_and_conflicts_roll_back",
+      "test_dashboard_months_and_cash_accounts_do_not_increase_query_count[accrual]",
+      "test_dashboard_months_and_cash_accounts_do_not_increase_query_count[cash]",
+      "test_payment_allocation_lookup_is_constant_and_all_balances_settle",
+      "test_database_failures_roll_back_and_never_expose_sql_or_bindings[constraint-409]",
+      "test_database_failures_roll_back_and_never_expose_sql_or_bindings[commit-409]",
+      "test_database_failures_roll_back_and_never_expose_sql_or_bindings[timeout-503]",
+      "test_worker_database_outage_is_sanitized",
+      "test_reconciliation_batches_items_and_rejects_unknown_sources",
+      "test_reminders_use_batch_insert_and_preserve_deduplication",
+      "test_backdated_loan_checks_do_not_query_each_future_date"
+    ]
+  },
+  "services": [
+    "Local PostgreSQL",
+    "Mailpit",
+    "ClamAV",
+    "Local OCR"
+  ],
+  "enabled_test_profiles": [
+    "RUN_PHASE2_INTEGRATION",
+    "RUN_DOCUMENT_SCANNER_TESTS",
+    "RUN_LOCAL_OCR_TESTS",
+    "RUN_DB_BOOTSTRAP_TESTS"
+  ],
+  "query_counts": {
+    "document_lines_1_60": [
+      2,
+      2
+    ],
+    "preview_rows_1_25": [
+      3,
+      3
+    ],
+    "bank_import_rows_1_100": [
+      13,
+      13
+    ],
+    "dashboard_accrual_2_12_months_1_5_accounts": [
+      27,
+      27
+    ],
+    "dashboard_cash_2_12_months_1_5_accounts": [
+      32,
+      32
+    ],
+    "payment_allocations_1_7": [
+      31,
+      31
+    ],
+    "reconciliation_item_queries_1_6": [
+      3,
+      3
+    ],
+    "notification_insert_statements_for_6_invoices": 1,
+    "loan_repayment_0_5_future_dates": [
+      20,
+      20
+    ]
+  },
+  "query_count_scope": "SQLAlchemy SELECT round trips; application engine only, excludes rate-limit engine and internal PostgreSQL function statements; notification metric counts INSERT statements.",
+  "other_checks": {
+    "ruff": "passed",
+    "changed_python_format": "passed; 15 files",
+    "mypy": "passed; 91 source files",
+    "openapi": "passed; 126 paths",
+    "traceability": "passed; 104 requirement references; not an acceptance verdict",
+    "frontend_generated_api_types": "passed",
+    "git_diff_whitespace": "passed"
+  },
+  "transaction_failure_checks": [
+    "Immediate unique-constraint violation: 409, SQLSTATE 23505, rollback",
+    "Commit-time flush violation: 409, SQLSTATE 23505, rollback before response",
+    "Statement timeout: 503, SQLSTATE 57014, rollback",
+    "No SQL, bindings or private test values in application logs/responses",
+    "Pooled connection reuse after rollback",
+    "Partial bank-import source conflict rolls back",
+    "Evidence-worker real database connection refusal becomes sanitized ERR_DEPENDENCY"
+  ],
+  "financial_checks": [
+    "Accrual and cash dashboard monthly totals reconcile",
+    "Allocated payments retain control-account tie-outs",
+    "Backdated loan validation includes later daily balances",
+    "Reconciliation rejects unknown and already-bank-recorded journal items",
+    "Notification deduplication retained with batched inserts"
+  ],
+  "raw_evidence": [
+    "tmp/database-audit/final.xml",
+    "tmp/database-audit/final.log",
+    "tmp/database-audit/query-counts.json"
+  ],
+  "source_sha256": {
+    "backend/src/ledgerpilot/banking/corrections.py": "64b15cf1f1f9ab37a1d86c6456f7f7ac11fb609f04206bc88c7380fa034e4f84",
+    "backend/src/ledgerpilot/banking/reconciliation.py": "b65cd0d44704920f1dbebb19c76f3d6855a116b229fd51d619132e0598a658e2",
+    "backend/src/ledgerpilot/banking/service.py": "ca8a8b59fa4046597455f083d0ce0691f26b807a6396a27a3bc1ccdb0d8c7f2c",
+    "backend/src/ledgerpilot/documents/worker.py": "ecc072637bfa7dcb084478e6a1ccf0c7e8dbfd93e6104c6045a800beabd485cf",
+    "backend/src/ledgerpilot/identity/dependencies.py": "eacd54b97d644993d8703b207b5c9a43568a58f42f93051705b4f6ff9372153a",
+    "backend/src/ledgerpilot/reports/service.py": "764f0fbe732992bd34b006a164a1b099cdc37df0866659d8fdd37d7581c01d64",
+    "backend/src/ledgerpilot/shared/operations.py": "52cab0fd7e8e1976933d09cc50e85116b6e863910a053a1447aae77b88d3b6a8",
+    "backend/src/ledgerpilot/trade/repository.py": "b7639739cd010011299d8e562ae15aae3e074fbf59499066182b335ba9804c7e",
+    "backend/src/ledgerpilot/trade/service.py": "fc37e8393f99949e767c2e1ebbd5cf139b5cd042a6ca62d4af390996aefc835d",
+    "backend/src/ledgerpilot/workspace/imports.py": "f8929281fc8f67e0da6388a840f810e9a2dc22e54f26e49fe4cc6a91aa0da818",
+    "backend/src/ledgerpilot/workspace/opening_adjustments.py": "30d590ea75653b726886883cd3d378c987a6c1b6659a3b6b9cead2228c1b76b3",
+    "backend/src/ledgerpilot/workspace/opening_cash.py": "36f4f5eb30077274d66a1f4c52f22cd782e2bd6f4c9f8257d011a3b8356db764",
+    "backend/src/ledgerpilot/workspace/openings.py": "aa8a9697192ee7251dca20d3b3826fad944d8fb3877c4597e5619370e2620e7c",
+    "backend/src/ledgerpilot/workspace/service.py": "8c49c41ce141ce6fad8a947d4ec387b874cb0b19608ca5424cbab7482efea89c",
+    "backend/tests/test_database_audit.py": "08f5c655158d17f977b5459a0afb1ef156aecff6cf22ca8ebd5c275ba86eb902"
+  },
+  "limits": [
+    "Local pilot; no production throughput or ten-million-user capacity claim",
+    "Cash histories remain bounded by pilot quotas/timeouts and are held in memory per calculation",
+    "Existing READ COMMITTED isolation is not a cross-statement MVCC report snapshot",
+    "Canonical database posting retains bounded in-database validation/insertion and integrity triggers; internal query profiling requires production-sized data"
+  ],
+  "commit_push_deployment": "None performed"
+}

@@ -245,11 +245,10 @@ def cash_policy(
             raise DomainError(
                 "ERR_CASH_POLICY", "Select distinct recognition accounts and exact weights.", 422
             )
+        accounts = ops.load_accounts(db, bid, [c.account_id for c in data.components])
         for component in data.components:
-            ops.account(
-                db,
-                bid,
-                component.account_id,
+            ops.validate_account(
+                accounts.get(component.account_id),
                 {"income"} if original.kind == "customer" else {"expense"},
                 plain=True,
             )

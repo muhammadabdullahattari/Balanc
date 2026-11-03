@@ -131,6 +131,18 @@ def import_csv(
     db.flush()
     created = 0
     source_ids: set[str] = set()
+    existing_rows = {
+        row.external_id: row
+        for row in db.scalars(
+            select(BankRow).where(
+                BankRow.business_id == bid,
+                BankRow.account_id == data.account_id,
+                BankRow.external_id.in_(
+                    [r["external_id"] for r in result["rows"] if r["external_id"]]
+                ),
+            )
+        )
+    }
     for row in result["rows"]:
         external_id = row["external_id"]
         if external_id:
@@ -139,13 +151,7 @@ def import_csv(
                     "ERR_SOURCE_DUPLICATE", "Duplicate source identifier within file."
                 )
             source_ids.add(external_id)
-            existing = db.scalar(
-                select(BankRow).where(
-                    BankRow.business_id == bid,
-                    BankRow.account_id == data.account_id,
-                    BankRow.external_id == external_id,
-                )
-            )
+            existing = existing_rows.get(external_id)
             if existing:
                 if (
                     existing.accounting_date.isoformat() != row["accounting_date"]
@@ -385,14 +391,13 @@ def dispose(
             if not data.splits or (data.action == "categorize" and len(data.splits) != 1):
                 raise DomainError("ERR_SPLIT", "Supply the explicit category allocations.")
             total = Decimal(0)
+            accounts = ops.load_accounts(db, bid, [s.account_id for s in data.splits])
             for split in data.splits:
                 if split.account_id == row.account_id:
                     raise DomainError("ERR_SPLIT", "Category cannot equal the bank account.")
                 # AR/AP/loans require the source modules to keep control tie-outs intact.
-                ops.account(
-                    db,
-                    bid,
-                    split.account_id,
+                ops.validate_account(
+                    accounts.get(split.account_id),
                     {"asset", "liability", "equity", "income", "expense"},
                     plain=True,
                 )

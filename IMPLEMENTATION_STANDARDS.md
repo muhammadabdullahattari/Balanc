@@ -94,3 +94,14 @@ Apply ADR-015 and docs/authentication-improvements.md. New/reset passwords requi
 ## Password/session/CSRF security amendment - 3 November 2026
 
 Follow docs/password-session-csrf-security.md. Never log credentials or serialize them in public responses. Store user passwords with Argon2id and random refresh/action tokens as digests. Keep auth cookies Secure/HttpOnly/host-only with explicit SameSite, bounded expiry and rotation/replay revocation. Clear browser cookies on both logout routes. Validate Origin plus CSRF cookie/header and authenticated session binding on unsafe methods. Hosted requests require a trusted HTTPS scheme; restrict proxy peers and preserve private health probes. HTTP credentials are allowed only for same-origin loopback development in the browser client. Do not promise to hide requests from browser-owner DevTools or replace these controls with client-side obfuscation. Preserve no-store responses and keep Google client IDs public while retaining server secrets exclusively on the server.
+
+## Database safety and query budgets amendment - 3 November 2026
+
+- Handle database failures at the transaction/HTTP/worker boundary. `Session.begin()` / `sessionmaker.begin()` must roll back query, flush and commit failures; the HTTP database handler returns a safe error envelope. The evidence worker translates database failures after rollback and the CLI exits nonzero. Never swallow a failure, return partial success, or query an aborted transaction. A `try/except` around every statement is not a substitute for this boundary.
+- Use bound values in SQLAlchemy/SQL. Dynamic identifiers in administrative tools require `psycopg.sql.Identifier`; never interpolate user input into SQL. Keep driver parameter hiding, least-privilege roles, tenant predicates and RLS.
+- Batch related account, document and bank-row lookups before item loops. Keep batch-loaded objects local to the current tenant/operation; never cache authorization or ORM objects across requests. Apply identical validation to single and batch lookups.
+- Dashboard month checkpoints share one grouped balance query and explicitly loaded read inputs. Do not reintroduce per-month report queries, per-line account reads, per-allocation source reads or per-outstanding-item reconciliation reads.
+- Reminders use bounded bulk inserts with database conflict handling. Preserve deliberate serialized financial command execution, leases, bounded export paging and rate-bucket lock ordering; these are not permission to add item-by-item read fan-out.
+- Extend the real PostgreSQL query-budget and failure regressions in `backend/tests/test_database_audit.py` when changing these paths. Verify rollback, safe errors, tenant isolation, idempotency and exact accounting outputs. Never blindly retry financial commits with an uncertain outcome; use existing idempotency/reconciliation semantics.
+
+See `docs/database-query-audit.md` for audit scope, evidence and capacity limits.

@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
+from ledgerpilot.accounting.models import Account
 from ledgerpilot.accounting.schemas import LineCreate
 from ledgerpilot.audit.service import record
 from ledgerpilot.identity.dependencies import Principal
@@ -98,13 +99,30 @@ def document_impact(
     db: Session,
     business: Business,
     data: DocumentCreate,
+    *,
+    accounts: dict[UUID, Account] | None = None,
+    parties: dict[UUID, Party] | None = None,
 ) -> tuple[list[LineCreate], Decimal, Decimal]:
     bid = business.id
     sale = data.kind in {"invoice", "sales_receipt", "customer_credit"}
     credit = data.kind in {"customer_credit", "vendor_credit"}
-    repo.party(db, bid, data.party_id, "customer" if sale else "supplier")
+    if parties is None:
+        repo.party(db, bid, data.party_id, "customer" if sale else "supplier")
+    else:
+        repo.validate_party(parties.get(data.party_id), "customer" if sale else "supplier")
+    if accounts is None:
+        ids = [
+            data.control_account_id,
+            *(r.account_id for r in data.lines),
+            *(r.tax_account_id for r in data.lines if r.tax_account_id),
+        ]
+        if data.bank_account_id:
+            ids.append(data.bank_account_id)
+        accounts = ops.load_accounts(db, bid, ids)
     control = "ar" if sale else "ap"
-    ops.account(db, bid, data.control_account_id, {"asset"} if sale else {"liability"}, control)
+    ops.validate_account(
+        accounts.get(data.control_account_id), {"asset"} if sale else {"liability"}, control
+    )
     if data.original_id:
         original = repo.document(db, bid, data.original_id)
         if (
@@ -131,14 +149,18 @@ def document_impact(
     for source in data.lines:
         amount = ops.money(source.amount, business)
         tax = ops.money(source.tax_amount, business, positive=False)
-        ops.account(
-            db, bid, source.account_id, {"income"} if sale else {"expense", "asset"}, plain=True
+        ops.validate_account(
+            accounts.get(source.account_id),
+            {"income"} if sale else {"expense", "asset"},
+            plain=True,
         )
         lines.append(ops.line(source.account_id, amount, debit=(not sale) != credit))
         if tax:
             if source.tax_account_id is None or not source.tax_code:
                 raise DomainError("ERR_TAX", "Explicit tax account and policy code are required.")
-            ops.account(db, bid, source.tax_account_id, {"liability"} if sale else {"asset"}, "tax")
+            ops.validate_account(
+                accounts.get(source.tax_account_id), {"liability"} if sale else {"asset"}, "tax"
+            )
             lines.append(ops.line(source.tax_account_id, tax, debit=(not sale) != credit))
         total += amount + tax
         tax_total += tax
@@ -184,7 +206,7 @@ def document_impact(
     offset = data.control_account_id
     if data.kind == "sales_receipt":
         assert data.bank_account_id
-        ops.account(db, bid, data.bank_account_id, {"asset"}, plain=True)
+        ops.validate_account(accounts.get(data.bank_account_id), {"asset"}, plain=True)
         offset = data.bank_account_id
     lines.append(ops.line(offset, total, debit=sale != credit))
     return lines, total, tax_total
@@ -257,6 +279,10 @@ def create_payment(
         raise DomainError("ERR_ALLOCATION", "A document may occur only once per payment.")
     balances = repo.due(db, bid, data.accounting_date)
     closing_balances = repo.due(db, bid, date.max)
+    document_ids = [a.document_id for a in data.allocations] + [
+        a.credit_note_id for a in data.allocations if a.credit_note_id
+    ]
+    documents = repo.documents(db, bid, document_ids)
     if refund:
         if not data.allocations or not data.original_payment_id:
             raise DomainError(
@@ -304,7 +330,7 @@ def create_payment(
                 raise DomainError(
                     "ERR_REFUND", "Select the credit note funding each refund allocation."
                 )
-            credit_note = repo.document(db, bid, allocation.credit_note_id)
+            credit_note = repo.require_document(documents, allocation.credit_note_id)
             if (
                 credit_note.original_id != allocation.document_id
                 or credit_note.party_id != data.party_id
@@ -334,7 +360,7 @@ def create_payment(
                 raise DomainError(
                     "ERR_ALLOCATION", "Credit-note references are only valid on refunds."
                 )
-            doc = repo.document(db, bid, allocation.document_id)
+            doc = repo.require_document(documents, allocation.document_id)
             value = ops.money(allocation.amount, business)
             if (
                 doc.kind != ("invoice" if sale else "bill")
@@ -484,8 +510,22 @@ def loan_movement(
                 ),
             }
         )
-        if any(repo.principal(db, bid, lid, day) < principal for day in days):
-            raise DomainError("ERR_LOAN_BALANCE", "Repayment exceeds available principal.", 409)
+        # One loaded movement history, including same-day entries; no query per date.
+        daily: dict[date, Decimal] = {}
+        for movement in movements:
+            delta = movement.principal * (
+                1 if movement.kind in {"drawdown", "opening", "opening_increase"} else -1
+            )
+            daily[movement.accounting_date] = (
+                daily.get(movement.accounting_date, Decimal(0)) + delta
+            )
+        balance = sum(
+            (value for day, value in daily.items() if day < data.accounting_date), Decimal(0)
+        )
+        for day in days:
+            balance += daily.get(day, Decimal(0))
+            if balance < principal:
+                raise DomainError("ERR_LOAN_BALANCE", "Repayment exceeds available principal.", 409)
     ops.account(db, bid, data.bank_account_id, {"asset"}, plain=True)
     lines = []
     if principal:

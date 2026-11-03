@@ -8,13 +8,15 @@ from uuid import UUID
 from pydantic import Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
+from ledgerpilot.accounting.models import Account
 from ledgerpilot.accounting.schemas import LineCreate
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.shared import operations as ops
 from ledgerpilot.shared.schemas import Schema
+from ledgerpilot.tenancy.models import Business
 from ledgerpilot.tenancy.service import authorize
-from ledgerpilot.trade.models import Loan, LoanMovement, TradeDocument
-from ledgerpilot.trade.repository import party
+from ledgerpilot.trade.models import Loan, LoanMovement, Party, TradeDocument
+from ledgerpilot.trade.repository import party, validate_party
 from ledgerpilot.workspace.models import OpeningItem
 
 
@@ -45,7 +47,17 @@ class OpeningCommand(OpeningRow, ops.Command):
     review_reason: str = Field(min_length=1, max_length=1000)
 
 
-def validate(db: Session, bid: UUID, row: OpeningRow, cutover: date, equity: UUID) -> None:
+def validate(
+    db: Session,
+    bid: UUID,
+    row: OpeningRow,
+    cutover: date,
+    equity: UUID,
+    *,
+    accounts: dict[UUID, Account] | None = None,
+    parties: dict[UUID, Party] | None = None,
+    business: Business | None = None,
+) -> None:
     from ledgerpilot.shared.errors import DomainError
     from ledgerpilot.tenancy.service import get_business
 
@@ -57,10 +69,15 @@ def validate(db: Session, bid: UUID, row: OpeningRow, cutover: date, equity: UUI
         "loan_payable": ("lender", "liability", "loan_payable"),
         "loan_receivable": ("borrower", "asset", "loan_receivable"),
     }[row.kind]
-    party(db, bid, row.party_id, role)
-    ops.account(db, bid, row.control_account_id, {kind}, control)
-    ops.account(db, bid, equity, {"equity"}, plain=True)
-    ops.money(row.amount, get_business(db, bid))
+    if parties is None:
+        party(db, bid, row.party_id, role)
+    else:
+        validate_party(parties.get(row.party_id), role)
+    if accounts is None:
+        accounts = ops.load_accounts(db, bid, [row.control_account_id, equity])
+    ops.validate_account(accounts.get(row.control_account_id), {kind}, control)
+    ops.validate_account(accounts.get(equity), {"equity"}, plain=True)
+    ops.money(row.amount, business or get_business(db, bid))
 
 
 def create(db: Session, who: Principal, bid: UUID, data: OpeningCommand) -> dict[str, Any]:

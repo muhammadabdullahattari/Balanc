@@ -9,6 +9,7 @@ import hashlib
 import io
 import json
 import re
+from contextlib import suppress
 from datetime import date
 from decimal import Decimal
 from typing import Any, Literal
@@ -27,7 +28,7 @@ from ledgerpilot.shared import operations as ops
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
 from ledgerpilot.tenancy.service import authorize, get_business
-from ledgerpilot.trade.models import Loan, TradeDocument
+from ledgerpilot.trade.models import Loan, Party, TradeDocument
 from ledgerpilot.trade.schemas import DocumentCreate, LoanCreate, LoanMovementCreate, PaymentCreate
 from ledgerpilot.trade.service import (
     create_document,
@@ -103,6 +104,22 @@ def compile_rows(
     business = get_business(db, bid)
     accounts = {a.code: a for a in db.scalars(select(Account).where(Account.business_id == bid))}
     rows = source_rows(data)
+    account_ids = {a.id: a for a in accounts.values()}
+    party_ids = set()
+    for row in rows:
+        # The row validator below records malformed/missing identifiers.
+        with suppress(ValueError):
+            party_ids.add(UUID(row.get("party_id", "")))
+    parties = (
+        {
+            p.id: p
+            for p in db.scalars(
+                select(Party).where(Party.business_id == bid, Party.id.in_(party_ids))
+            )
+        }
+        if party_ids
+        else {}
+    )
     commands: list[dict[str, Any]] = []
     errors: list[dict[str, Any]] = []
     grouped: dict[str, dict[str, Any]] = {}
@@ -148,7 +165,16 @@ def compile_rows(
                         "control_account_id": accounts[row["control_account_code"]].id,
                     }
                 )
-                openings.validate(db, bid, opening_row, data.cutover_date, equity.id)
+                openings.validate(
+                    db,
+                    bid,
+                    opening_row,
+                    data.cutover_date,
+                    equity.id,
+                    accounts=account_ids,
+                    parties=parties,
+                    business=business,
+                )
                 opening_ref = (opening_row.kind, opening_row.party_id, opening_row.reference)
                 if opening_ref in opening_refs:
                     raise ValueError("Repeated opening source")
@@ -243,7 +269,7 @@ def compile_rows(
                     source = DocumentCreate.model_validate(
                         {**payload, "expected_version": 0, "idempotency_key": "validation-only-key"}
                     )
-                    document_impact(db, business, source)
+                    document_impact(db, business, source, accounts=account_ids, parties=parties)
                     commands.append({"row": position, "action": "document", "payload": payload})
                 elif kind in {"receipt", "payment"}:
                     payload.update(

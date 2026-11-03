@@ -74,13 +74,12 @@ def correct(db: Session, who: Principal, bid: UUID, rid: UUID, data: Reclassify)
     )
     desired: dict[UUID, Decimal] = defaultdict(Decimal)
     total = Decimal(0)
+    accounts = ops.load_accounts(db, bid, [*current, *(s.account_id for s in data.splits)])
     for split in data.splits:
         if split.account_id == row.account_id:
             raise DomainError("ERR_CORRECTION", "Reclassification cannot change the bank movement.")
-        ops.account(
-            db,
-            bid,
-            split.account_id,
+        ops.validate_account(
+            accounts.get(split.account_id),
             {"income", "expense", "asset", "liability", "equity"},
             plain=True,
         )
@@ -96,8 +95,8 @@ def correct(db: Session, who: Principal, bid: UUID, rid: UUID, data: Reclassify)
     for aid in sorted(set(current) | set(desired), key=str):
         delta = desired.get(aid, Decimal(0)) - current.get(aid, Decimal(0))
         if delta:
-            ops.account(
-                db, bid, aid, {"income", "expense", "asset", "liability", "equity"}, plain=True
+            ops.validate_account(
+                accounts.get(aid), {"income", "expense", "asset", "liability", "equity"}, plain=True
             )
             lines.append(ops.line(aid, abs(delta), debit=delta > 0))
     if not lines:
