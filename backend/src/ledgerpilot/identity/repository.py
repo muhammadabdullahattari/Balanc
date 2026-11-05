@@ -46,10 +46,9 @@ def refresh_record(db: Session, token_hash: str) -> RefreshToken | None:
     return None
 
 
-def session_record(db: Session, user_id: UUID, session_id: UUID) -> AuthSession | None:
+def session_record(
+    db: Session, user_id: UUID, session_id: UUID, *, lock: bool = True
+) -> AuthSession | None:
     set_context(db, user_id)
-    return db.scalar(
-        select(AuthSession)
-        .where(AuthSession.id == session_id, AuthSession.user_id == user_id)
-        .with_for_update()
-    )
+    query = select(AuthSession).where(AuthSession.id == session_id, AuthSession.user_id == user_id)
+    return db.scalar(query.with_for_update() if lock else query)

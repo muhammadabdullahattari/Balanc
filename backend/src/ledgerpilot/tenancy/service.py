@@ -95,7 +95,11 @@ def authorize(
                 "This business currently permits read/export and privacy access only.",
                 403,
             )
-    if db.info.get("http_method") == "GET" and db.info.get("snapshot_scope") != business_id:
+    if (
+        db.info.get("http_method") == "GET"
+        and not db.info.get("consistent_snapshot")
+        and db.info.get("snapshot_scope") != business_id
+    ):
         # The bounded local profile assembles reports under a shared business lock.
         # Canonical financial writers take FOR UPDATE, so totals cannot mix versions.
         db.execute(text("SELECT id FROM app.businesses WHERE id=:b FOR SHARE"), {"b": business_id})

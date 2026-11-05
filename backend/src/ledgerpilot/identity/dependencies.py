@@ -27,6 +27,13 @@ def db_session(request: Request) -> Iterator[Session]:
     # and commit failures. Let the central safe error handler see the exception;
     # never continue querying an aborted transaction or return partial success.
     with request.app.state.sessions.begin() as db:
+        # Set isolation before authentication establishes the transaction snapshot.
+        # Commands retain READ COMMITTED; reports may persist their report artifacts.
+        snapshot = (request.method == "GET" and "/businesses/" in request.url.path) or (
+            request.method == "POST" and request.url.path.endswith("/exports/snapshots")
+        )
+        if snapshot:
+            db.info["consistent_snapshot"] = True
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path
         db.info["rate_factory"] = request.app.state.rate_sessions
@@ -51,10 +58,23 @@ def principal(
     request: Request, db: DB, token: Annotated[str | None, Security(SESSION_COOKIE)] = None
 ) -> Principal:
     uid, sid = decode_access(request.app.state.settings, token or "")
-    family = repository.session_record(db, uid, sid)
+    snapshot = bool(db.info.get("consistent_snapshot"))
+    if snapshot:
+        # Authenticate and touch activity in a short transaction, before the report
+        # establishes its MVCC snapshot. Never hold the session write lock during IO.
+        with request.app.state.sessions.begin() as auth_db:
+            principal(request, auth_db, token)
+        # Acquire the report connection only after releasing the auth connection;
+        # otherwise concurrent reads can exhaust the pool while awaiting a second slot.
+        db.connection(
+            execution_options={
+                "isolation_level": "SERIALIZABLE" if request.method == "POST" else "REPEATABLE READ"
+            }
+        )
+    family = repository.session_record(db, uid, sid, lock=not snapshot)
     if family is None:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
-    user = service.valid_family(db, family)
+    user = service.valid_family(db, family, touch=not snapshot)
     bind_identity(user.id)
     # Session CSRF binding is checked against this exact request's header.
     # FoundationMiddleware additionally checks its cookie and allowed Origin.

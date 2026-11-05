@@ -4,6 +4,7 @@ import hashlib
 import os
 import socket
 import struct
+import time
 from pathlib import Path
 from uuid import UUID
 
@@ -12,42 +13,57 @@ from cryptography.fernet import Fernet, InvalidToken
 from ledgerpilot.config import Settings
 from ledgerpilot.shared.errors import DomainError
 
+SCAN_DEADLINE_SECONDS = 10.0
+
 
 def scan(content: bytes, settings: Settings) -> str:
     """Obtain version and positive INSTREAM verdict in one clamd IDSESSION."""
 
+    deadline = time.monotonic() + SCAN_DEADLINE_SECONDS
+
+    def remaining() -> float:
+        value = deadline - time.monotonic()
+        if value <= 0:
+            raise TimeoutError("Scanner deadline exceeded")
+        return value
+
+    def send(conn: socket.socket, value: bytes) -> None:
+        conn.settimeout(remaining())
+        conn.sendall(value)
+
     def reply(conn: socket.socket, command_id: int) -> bytes:
         value = bytearray()
-        # Only one command is in flight; do not consume a subsequent reply.
         while len(value) < 4096:
-            part = conn.recv(1)
-            if part == b"\0":
-                prefix = f"{command_id}: ".encode()
-                if value.startswith(prefix):
-                    return bytes(value[len(prefix) :])
-                break
+            conn.settimeout(remaining())
+            part = conn.recv(min(1024, 4096 - len(value)))
             if not part:
                 break
             value.extend(part)
+            if b"\0" in value:
+                prefix = f"{command_id}: ".encode()
+                # There is only one outstanding command. Reject trailing data.
+                if value.endswith(b"\0") and value.count(0) == 1 and value.startswith(prefix):
+                    return bytes(value[len(prefix) : -1])
+                break
         raise DomainError("ERR_SCAN_UNAVAILABLE", "Scanner response could not be verified.", 503)
 
     try:
         with socket.create_connection(
-            (settings.clamav_host, settings.clamav_port), timeout=10
+            (settings.clamav_host, settings.clamav_port), timeout=remaining()
         ) as conn:
-            conn.sendall(b"zIDSESSION\0zVERSION\0")
+            send(conn, b"zIDSESSION\0zVERSION\0")
             version = reply(conn, 1).decode("ascii", errors="replace")
             if not version.startswith("ClamAV ") or len(version) > 160:
                 raise DomainError(
                     "ERR_SCAN_UNAVAILABLE", "Scanner version could not be verified.", 503
                 )
-            conn.sendall(b"zINSTREAM\0")
+            send(conn, b"zINSTREAM\0")
             for start in range(0, len(content), 65536):
                 chunk = content[start : start + 65536]
-                conn.sendall(struct.pack("!I", len(chunk)) + chunk)
-            conn.sendall(struct.pack("!I", 0))
+                send(conn, struct.pack("!I", len(chunk)) + chunk)
+            send(conn, struct.pack("!I", 0))
             verdict = reply(conn, 2)
-            conn.sendall(b"zEND\0")
+            send(conn, b"zEND\0")
         if verdict.startswith(b"stream: ") and verdict.endswith(b" FOUND"):
             raise DomainError("ERR_MALWARE", "The upload was rejected by malware scanning.", 422)
         if verdict != b"stream: OK":

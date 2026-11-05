@@ -308,7 +308,7 @@ def login(db: Session, settings: Settings, data: Credentials) -> tuple[str, str,
     return issue_session(db, settings, user, mfa)
 
 
-def valid_family(db: Session, family: AuthSession | None) -> User:
+def valid_family(db: Session, family: AuthSession | None, *, touch: bool = True) -> User:
     user = db.get(User, family.user_id) if family else None
     if not family or not user:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
@@ -337,7 +337,8 @@ def valid_family(db: Session, family: AuthSession | None) -> User:
         raise DomainError(
             "ERR_SESSION_IDLE", "Your session expired through inactivity. Sign in again.", 401
         )
-    family.last_seen_at = now()
+    if touch:
+        family.last_seen_at = now()
     return user
 
 

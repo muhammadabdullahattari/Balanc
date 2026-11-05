@@ -14,7 +14,7 @@ from zipfile import ZIP_DEFLATED, ZipFile
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import select
+from sqlalchemy import Select, Text, cast, func, select
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Journal
@@ -24,6 +24,7 @@ from ledgerpilot.documents import storage
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.reports import service as reports
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.query_limits import bounded_scalars as limited_scalars
 from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.trade.models import TradeDocument
 from ledgerpilot.workspace.models import (
@@ -36,6 +37,15 @@ from ledgerpilot.workspace.models import (
     OpeningItem,
 )
 from ledgerpilot.workspace.service import journal_csv
+
+
+def bounded_scalars[T](db: Session, query: Select[T]) -> list[T]:
+    # Reject oversized JSON/text metadata in SQL before constructing ORM objects.
+    rows = query.limit(10001).subquery()
+    size = db.scalar(select(func.sum(func.octet_length(cast(rows.table_valued(), Text))))) or 0
+    if size > 10 * 1024 * 1024:
+        raise DomainError("ERR_QUOTA", "Narrow the pack metadata to at most 10 MiB.", 413)
+    return limited_scalars(db, query)
 
 
 def signing_key(settings: Settings) -> Ed25519PrivateKey:
@@ -67,7 +77,8 @@ def pack(
     from ledgerpilot.workspace.service import save_report
 
     journal_ids = list(
-        db.scalars(
+        bounded_scalars(
+            db,
             select(Journal.id)
             .where(
                 Journal.business_id == bid,
@@ -75,36 +86,41 @@ def pack(
                 Journal.accounting_date >= start,
                 Journal.accounting_date <= end,
             )
-            .limit(10001)
+            .limit(10001),
         )
     )
     if len(journal_ids) > 10000:
         raise DomainError("ERR_QUOTA", "Narrow the evidence pack to at most 10,000 journals.", 413)
     documents = list(
-        db.scalars(
+        bounded_scalars(
+            db,
             select(TradeDocument.id).where(
                 TradeDocument.business_id == bid, TradeDocument.journal_id.in_(journal_ids)
-            )
+            ),
         )
     )
     links = list(
-        db.scalars(
+        bounded_scalars(
+            db,
             select(EvidenceLink.evidence_id).where(
                 EvidenceLink.business_id == bid,
                 EvidenceLink.resource_id.in_([*journal_ids, *documents]),
-            )
+            ),
         )
     )
     statements = list(
-        db.scalars(
+        bounded_scalars(
+            db,
             select(Statement).where(
                 Statement.business_id == bid, Statement.as_of >= start, Statement.as_of <= end
-            )
+            ),
         )
     )
     links += [s.evidence_id for s in statements]
     evidence = list(
-        db.scalars(select(Evidence).where(Evidence.business_id == bid, Evidence.id.in_(set(links))))
+        bounded_scalars(
+            db, select(Evidence).where(Evidence.business_id == bid, Evidence.id.in_(set(links)))
+        )
     )
     if len(evidence) > 20 or sum(e.size for e in evidence) > 5 * 1024 * 1024:
         raise DomainError(
@@ -114,10 +130,28 @@ def pack(
         raise DomainError(
             "ERR_EVIDENCE_QUARANTINED", "Selected evidence has not passed scanning.", 409
         )
-    files: dict[str, bytes] = {"journals.csv": journal_csv(db, bid, start, end).encode("utf-8")}
+
+    class BudgetFiles(dict[str, bytes]):
+        size = 0
+
+        def __setitem__(self, name: str, body: bytes) -> None:
+            next_size = self.size - len(self.get(name, b"")) + len(body)
+            if next_size > 10 * 1024 * 1024:
+                raise DomainError("ERR_QUOTA", "Narrow the pack to at most 10 MiB.", 413)
+            super().__setitem__(name, body)
+            self.size = next_size
+
+    files = BudgetFiles()
+    files["journals.csv"] = journal_csv(db, bid, start, end).encode("utf-8")
 
     def add_json(name: str, value: Any) -> None:
-        files[name] = json.dumps(jsonable_encoder(value), sort_keys=True, indent=2).encode()
+        output = io.BytesIO()
+        for chunk in json.JSONEncoder(sort_keys=True, indent=2).iterencode(jsonable_encoder(value)):
+            encoded = chunk.encode()
+            if files.size + output.tell() + len(encoded) > 10 * 1024 * 1024:
+                raise DomainError("ERR_QUOTA", "Narrow the pack to at most 10 MiB.", 413)
+            output.write(encoded)
+        files[name] = output.getvalue()
 
     add_json(
         "opening-balances.json",
@@ -142,10 +176,11 @@ def pack(
                 },
                 "amount": str(r.amount),
             }
-            for r in db.scalars(
+            for r in bounded_scalars(
+                db,
                 select(OpeningItem)
                 .where(OpeningItem.business_id == bid, OpeningItem.cutover_date <= end)
-                .order_by(OpeningItem.id)
+                .order_by(OpeningItem.id),
             )
         ],
     )
@@ -169,10 +204,11 @@ def pack(
                 },
                 "delta": str(r.delta),
             }
-            for r in db.scalars(
+            for r in bounded_scalars(
+                db,
                 select(OpeningCorrection).where(
                     OpeningCorrection.business_id == bid, OpeningCorrection.accounting_date <= end
-                )
+                ),
             )
         ],
     )
@@ -192,8 +228,8 @@ def pack(
                     "reviewed_by",
                 )
             }
-            for r in db.scalars(
-                select(OpeningCashPolicy).where(OpeningCashPolicy.business_id == bid)
+            for r in bounded_scalars(
+                db, select(OpeningCashPolicy).where(OpeningCashPolicy.business_id == bid)
             )
         ],
     )
@@ -246,8 +282,8 @@ def pack(
                     "book",
                 )
             }
-            for j in db.scalars(
-                select(Journal).where(Journal.business_id == bid, Journal.id.in_(journal_ids))
+            for j in bounded_scalars(
+                db, select(Journal).where(Journal.business_id == bid, Journal.id.in_(journal_ids))
             )
         ],
     )
@@ -266,17 +302,20 @@ def pack(
                     "history",
                 )
             }
-            for r in db.scalars(select(BankRule).where(BankRule.business_id == bid).limit(201))
+            for r in bounded_scalars(
+                db, select(BankRule).where(BankRule.business_id == bid).limit(201)
+            )
         ],
     )
     notes = list(
-        db.scalars(
+        bounded_scalars(
+            db,
             select(EvidenceNote)
             .where(
                 EvidenceNote.business_id == bid,
                 EvidenceNote.evidence_id.in_([e.id for e in evidence]),
             )
-            .limit(201)
+            .limit(201),
         )
     )
     if len(notes) > 200:
@@ -318,14 +357,14 @@ def pack(
                 },
                 "total": str(r.total),
             }
-            for r in db.scalars(
+            for r in bounded_scalars(
+                db,
                 select(DocumentIdentity)
                 .where(
                     DocumentIdentity.business_id == bid,
                     DocumentIdentity.evidence_id.in_([e.id for e in evidence]),
                 )
-                .order_by(DocumentIdentity.evidence_id, DocumentIdentity.version)
-                .limit(2000)
+                .order_by(DocumentIdentity.evidence_id, DocumentIdentity.version),
             )
         ],
     )

@@ -45,6 +45,14 @@ export function Evidence() {
           params: { path: { ...path, evidence_id: selected! } },
         }),
       ),
+    refetchInterval: (query) =>
+      query.state.data &&
+      !["extracted", "unsupported", "rejected"].includes(
+        query.state.data.status,
+      )
+        ? 3000
+        : false,
+    refetchIntervalInBackground: false,
   });
   const upload = useMutation({
     mutationFn: async () => {

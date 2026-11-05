@@ -8,7 +8,7 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from pydantic import Field
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
@@ -48,7 +48,16 @@ def create(
     db: Session, who: Principal, bid: UUID, data: ExportCreate, settings: Settings
 ) -> dict[str, Any]:
     authorize(db, who, bid)
-    business = get_business(db, bid, lock=True)
+    # Separate export admission from financial-writer serialization. Try-lock avoids
+    # waiting with a stale REPEATABLE READ snapshot on a concurrent export.
+    lock_id = int.from_bytes(
+        hashlib.sha256(f"export:{bid}:{who.user.id}".encode()).digest()[:8], "big", signed=True
+    )
+    if not db.scalar(text("SELECT pg_try_advisory_xact_lock(:key)"), {"key": lock_id}):
+        raise DomainError(
+            "ERR_CONFLICT", "An export is already being prepared. Retry shortly.", 409
+        )
+    business = get_business(db, bid)
     if data.end < data.start:
         raise DomainError("ERR_DATE_RANGE", "Export dates must be ordered.", 422)
     db.execute(

@@ -184,6 +184,10 @@ jobs:
       - uses: actions/checkout@v7
       - name: Build API image
         run: docker build --file backend/Dockerfile --tag ledgerpilot-api:${{ github.sha }} backend
+      - name: Verify deployment failure and rollback control flow
+        run: docker run --rm --user 0 --entrypoint python --mount type=bind,source=${{ github.workspace }},target=/source,readonly ledgerpilot-api:${{ github.sha }} /source/backend/tests/deploy_shell_harness.py
+      - name: Verify persistent originals and invalid-database readiness
+        run: python scripts/check-deployment-container.py ledgerpilot-api:${{ github.sha }}
       - name: Save checked API image
         run: docker save ledgerpilot-api:${{ github.sha }} --output /tmp/api-image.tar
       - name: Upload checked API image

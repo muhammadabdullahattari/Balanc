@@ -65,3 +65,10 @@ Measured prior service-level read counts: dashboard accrual 13 (previously 27), 
 ## Delivery status
 
 Audit findings recorded; application fixes are not applied in this audit. Phase 9 remains next, with A1–A2 as explicit deployment blockers for the supplied topology. Prior phase completion does not imply production scale, regional recovery or independent penetration-test sign-off. No commit, push or cloud deployment performed.
+
+
+## Remediation follow-up (5 November 2026)
+
+The user authorized applying A1-A7. See [implementation and hosted setup](deployment-audit-fixes.md), [ADR-016](architecture/ADR-016-report-snapshots-and-pilot-deployment.md), and [verification results](contracts/deployment-audit-results.json). The original findings above are retained as the audit-time record; current remediation status supersedes the original "not applied" verdict.
+
+Clarification to A6: the current authorization helper already acquired a shared business lock for GET requests. That protected canonical financial writes in that request path, but incurred contention and was not a general snapshot guarantee for all report inputs. Remediation replaces that path with explicit snapshot isolation and short authentication activity transactions; it does not claim every prior HTTP financial report was demonstrably inconsistent.
