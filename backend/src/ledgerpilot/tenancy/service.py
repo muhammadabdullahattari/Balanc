@@ -5,6 +5,7 @@ from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
@@ -14,6 +15,7 @@ from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.identity.mail import deliver
 from ledgerpilot.identity.security import canonical_email, digest, now, opaque
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import bind_identity
 from ledgerpilot.tenancy.models import Business, Invitation, Membership, PolicyHistory
 from ledgerpilot.tenancy.schemas import CURRENCIES, BusinessCreate, InviteCreate
 
@@ -34,6 +36,7 @@ def authorize(
     )
     if not membership:
         raise DomainError("ERR_NOT_FOUND", "Record not found.", 404)
+    bind_identity(identity.user.id, business_id)
     if (membership.role in {"owner", "accountant"} or posting) and not identity.family.mfa:
         raise DomainError("ERR_MFA_REQUIRED", "MFA authentication is required.", 403)
     if roles is not None and membership.role not in roles:
@@ -52,6 +55,8 @@ def authorize(
                 (digest(f"business:{business_id}"), 600),
                 (digest(f"business-user:{business_id}:{identity.user.id}"), 120),
             ],
+            window_seconds=db.info.get("rate_window_seconds", 60),
+            cooldown_max_seconds=db.info.get("rate_cooldown_max_seconds", 60),
         )
         if delay:
             raise DomainError(
@@ -144,7 +149,19 @@ def invite(
 def accept(db: Session, identity: Principal, token: str) -> UUID:
     if not identity.family.mfa:
         raise DomainError("ERR_MFA_REQUIRED", "MFA authentication is required.", 403)
-    bid: UUID = db.execute(text("SELECT app.accept_invite(:h)"), {"h": digest(token)}).scalar_one()
+    try:
+        bid = db.execute(
+            text("SELECT app.accept_invite(:h)"), {"h": digest(token)}
+        ).scalar_one_or_none()
+    except DBAPIError as error:
+        message = getattr(getattr(error.orig, "diag", None), "message_primary", "")
+        if message == "Invitation is invalid or expired":
+            raise DomainError(
+                "ERR_LINK_EXPIRED", "Invitation is invalid or expired.", 410
+            ) from None
+        raise
+    if bid is None:
+        raise DomainError("ERR_LINK_EXPIRED", "Invitation is invalid or expired.", 410)
     record(db, identity.user.id, "business.invitation_accepted", bid)
     return bid
 

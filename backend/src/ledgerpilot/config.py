@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     db_max_overflow: int = Field(default=5, ge=0, le=20)
     db_pool_timeout_seconds: int = Field(default=10, ge=1, le=60)
     rate_db_pool_size: int = Field(default=2, ge=1, le=4)
+    rate_window_seconds: int = Field(default=60, ge=1, le=3600)
+    rate_cooldown_max_seconds: int = Field(default=60, ge=1, le=3600)
     db_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
     db_statement_timeout_ms: int = Field(default=15000, ge=100, le=60000)
     db_idle_transaction_timeout_ms: int = Field(default=15000, ge=5000, le=60000)
@@ -57,6 +59,7 @@ class Settings(BaseSettings):
     cookie_samesite: Literal["lax", "none"] = "lax"
     smtp_host: str = "127.0.0.1"
     smtp_port: int = Field(default=1025, ge=1, le=65535)
+    mailpit_ui_port: int = Field(default=8025, ge=1, le=65535)
     smtp_from: str = "accounts@ledgerpilot.local"
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None
@@ -186,7 +189,7 @@ class Settings(BaseSettings):
         if self.session_previous_key_id == self.jwt_key_id:
             raise ValueError("JWT key identifiers must be distinct")
         if self.session_previous_signing_key:
-            self.validate_signing_key(self.session_previous_signing_key)
+            type(self).validate_signing_key(self.session_previous_signing_key)
         if self.auth_delivery_enabled and not self.mfa_encryption_key:
             raise ValueError("Identity features require a dedicated MFA encryption key")
         if self.mfa_encryption_key and (

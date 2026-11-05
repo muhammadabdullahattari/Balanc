@@ -13,6 +13,10 @@ if [[ ! -r "$env_file" ]]; then
   echo "Missing readable runtime environment file: $env_file" >&2
   exit 1
 fi
+if [[ "$(stat -c '%u:%a' "$env_file")" != "0:600" ]]; then
+  echo "Runtime environment file must be root-owned with permissions 600." >&2
+  exit 1
+fi
 
 aws ecr get-login-password --region "$region" | docker login --username AWS --password-stdin "$registry"
 docker pull "$image"
@@ -31,6 +35,7 @@ rollback() {
     if [[ -n "$previous_image" ]]; then
       echo "New API did not become healthy; restoring $previous_image" >&2
       docker run --detach --name "$container" --restart unless-stopped \
+        --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 \
         --env-file "$env_file" --publish 127.0.0.1:8000:8000 \
         "$previous_image" >/dev/null
     fi
@@ -40,6 +45,7 @@ rollback() {
 trap rollback EXIT
 
 id="$(docker run --detach --name "$container" --restart unless-stopped \
+  --cap-drop ALL --security-opt no-new-privileges:true --pids-limit 128 \
   --env-file "$env_file" --publish 127.0.0.1:8000:8000 \
   "$image")"
 for attempt in $(seq 1 30); do

@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.money import allocate
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.query_limits import bounded_scalars
 from ledgerpilot.tenancy.service import get_business
 from ledgerpilot.trade.models import Payment, TradeDocument
 from ledgerpilot.workspace.models import OpeningCashPolicy, OpeningCorrection, OpeningItem
@@ -25,38 +26,35 @@ class OpeningSources:
 
     @classmethod
     def load(cls, db: Session, bid: UUID, end: date, precision: int) -> "OpeningSources":
-        roots = list(
-            db.scalars(
-                select(OpeningItem).where(
-                    OpeningItem.business_id == bid,
-                    OpeningItem.document_id.is_not(None),
-                    OpeningItem.cutover_date <= end,
-                )
-            )
+        roots = bounded_scalars(
+            db,
+            select(OpeningItem).where(
+                OpeningItem.business_id == bid,
+                OpeningItem.document_id.is_not(None),
+                OpeningItem.cutover_date <= end,
+            ),
         )
         ids = [r.id for r in roots]
         return cls(
             roots,
-            list(
-                db.scalars(
-                    select(OpeningCashPolicy).where(
-                        OpeningCashPolicy.business_id == bid,
-                        OpeningCashPolicy.opening_id.in_(ids),
-                    )
-                )
+            bounded_scalars(
+                db,
+                select(OpeningCashPolicy).where(
+                    OpeningCashPolicy.business_id == bid,
+                    OpeningCashPolicy.opening_id.in_(ids),
+                ),
             )
             if ids
             else [],
-            list(
-                db.scalars(
-                    select(OpeningCorrection).where(
-                        OpeningCorrection.business_id == bid,
-                        OpeningCorrection.opening_id.in_(ids),
-                        OpeningCorrection.delta > 0,
-                        OpeningCorrection.document_id.is_not(None),
-                        OpeningCorrection.accounting_date <= end,
-                    )
-                )
+            bounded_scalars(
+                db,
+                select(OpeningCorrection).where(
+                    OpeningCorrection.business_id == bid,
+                    OpeningCorrection.opening_id.in_(ids),
+                    OpeningCorrection.delta > 0,
+                    OpeningCorrection.document_id.is_not(None),
+                    OpeningCorrection.accounting_date <= end,
+                ),
             )
             if ids
             else [],

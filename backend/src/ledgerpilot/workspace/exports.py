@@ -4,6 +4,7 @@ import hashlib
 import html
 import io
 import json
+import logging
 from datetime import date
 from pathlib import Path
 from typing import Any
@@ -23,6 +24,7 @@ from ledgerpilot.documents import storage
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.reports import service as reports
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.trade.models import TradeDocument
 from ledgerpilot.workspace.models import (
     DocumentIdentity,
@@ -331,7 +333,18 @@ def pack(
     for item in evidence:
         # Generated filenames keep original untrusted names out of archive paths.
         name = f"evidence/{item.id}{Path(item.filename).suffix.lower()}"
-        files[name] = storage.get(settings, item.object_key, item.content_hash)
+        try:
+            files[name] = storage.get(settings, item.object_key, item.content_hash)
+        except DomainError as error:
+            emit(
+                "export.evidence_failed",
+                level=logging.ERROR,
+                error=error,
+                code=error.code,
+                resource_id=item.id,
+                business_id=bid,
+            )
+            raise
         index.append(f'<li><a href="{name}">{html.escape(item.filename)}</a></li>')
     files["index.html"] = (
         '<!doctype html><meta charset="utf-8"><title>LedgerPilot evidence pack</title>'

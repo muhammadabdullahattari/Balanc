@@ -74,6 +74,18 @@ test("expired safe reads share refresh rotation and retry once", async (t) => {
  assert.equal(rotations,1);assert.ok(responses.every(r=>r.response.ok));
 });
 
+test("terminal session errors return once without attempting refresh", async (t) => {
+  const calls = [];
+  browser(t, async request => {
+    calls.push(request.url);
+    return Response.json({error: {code: "ERR_SESSION_IDLE", message: "Sign in again."}}, {status: 401});
+  });
+  const {client} = createApiClient("https://api.ledgerpilot.test");
+  const response = await client.GET("/api/v1/auth/me");
+  assert.equal(response.error.error.code, "ERR_SESSION_IDLE");
+  assert.equal(calls.length, 1);
+});
+
  test("read timeouts are bounded without automatic replay", async t=>{
  let reads=0;
  browser(t,request=>new Promise((resolve,reject)=>{reads++;request.signal.addEventListener("abort",()=>reject(request.signal.reason),{once:true});}));

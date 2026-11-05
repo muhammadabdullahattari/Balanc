@@ -268,7 +268,10 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Verification Request */
+        /**
+         * Verification Request
+         * @description Resend verification from the original registration browser: retain its CSRF cookie and matching X-CSRF-Token. A different browser receives the same generic 202 without issuing a code. Pending accounts survive SMTP outages; failed delivery does not consume an issuance. Retry resend when mail recovers; no automatic mail queue.
+         */
         post: operations["verification_request_api_v1_auth_verification_request_post"];
         delete?: never;
         options?: never;

@@ -26,6 +26,8 @@ from ledgerpilot.reports.router import router as reports_router
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.middleware import FoundationMiddleware
 from ledgerpilot.shared.responses import ErrorEnvelope, ReadinessResponse
+from ledgerpilot.shared.security_headers import SecurityHeadersMiddleware, security_headers
+from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.swagger import local_swagger
 from ledgerpilot.tenancy.router import router as tenancy_router
 from ledgerpilot.trade.router import router as trade_router
@@ -36,6 +38,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     configured = settings or get_settings()
     logger = logging.getLogger("ledgerpilot")
+    logger.disabled = False
+    # Alembic fileConfig can disable existing loggers in an embedded invocation.
+    for name in ("ledgerpilot.requests", "ledgerpilot.errors", "ledgerpilot.operations"):
+        logging.getLogger(name).disabled = False
     logger.setLevel(configured.log_level)
     logger.propagate = False
     if not logger.handlers:
@@ -72,10 +78,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     application.state.settings = configured
     if local_docs:
+
         @application.get("/docs", include_in_schema=False)
         def documentation() -> HTMLResponse:
             return local_swagger(
-                "/openapi.json", f"{configured.app_name} - Swagger UI",
+                "/openapi.json",
+                f"{configured.app_name} - Swagger UI",
                 f"{configured.api_v1_prefix}/auth/csrf",
             )
 
@@ -95,9 +103,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "Content-Disposition",
         ],
     )
+    application.add_middleware(SecurityHeadersMiddleware)
 
     @application.exception_handler(DomainError)
     async def domain_error(request: Request, error: DomainError) -> JSONResponse:
+        emit(
+            "request.rejected",
+            level=logging.WARNING if error.status >= 400 else logging.INFO,
+            code=error.code,
+            status=error.status,
+            request_id=getattr(request.state, "request_id", None),
+            user_id=getattr(request.state, "user_id", None),
+            business_id=getattr(request.state, "business_id", None),
+        )
         return JSONResponse(
             {
                 "error": {"code": error.code, "message": error.message},
@@ -174,6 +192,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 "request_id": getattr(request.state, "request_id", None),
             },
             status_code=500,
+            # Starlette's outer ServerErrorMiddleware creates this response
+            # outside user middleware; attach the same protections explicitly.
+            headers=security_headers(configured, request.url.scheme, request.url.path),
         )
 
     @application.get("/health/live", tags=["health"], response_model=ReadinessResponse)

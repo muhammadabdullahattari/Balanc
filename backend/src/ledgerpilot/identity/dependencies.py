@@ -14,6 +14,7 @@ from ledgerpilot.identity import repository, service
 from ledgerpilot.identity.models import AuthSession, User
 from ledgerpilot.identity.security import decode_access, digest
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import bind_identity
 
 ACCESS_COOKIE = "__Host-lp_access"
 REFRESH_COOKIE = "__Host-lp_refresh"
@@ -29,6 +30,8 @@ def db_session(request: Request) -> Iterator[Session]:
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path
         db.info["rate_factory"] = request.app.state.rate_sessions
+        db.info["rate_window_seconds"] = request.app.state.settings.rate_window_seconds
+        db.info["rate_cooldown_max_seconds"] = request.app.state.settings.rate_cooldown_max_seconds
         admitted = getattr(request.state, "upload_rate_scope", None)
         if admitted is not None:
             db.info["admitted_scope"] = admitted
@@ -49,13 +52,35 @@ def principal(
 ) -> Principal:
     uid, sid = decode_access(request.app.state.settings, token or "")
     family = repository.session_record(db, uid, sid)
-    user = service.valid_family(db, family)
     if family is None:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
+    user = service.valid_family(db, family)
+    bind_identity(user.id)
+    # Session CSRF binding is checked against this exact request's header.
+    # FoundationMiddleware additionally checks its cookie and allowed Origin.
     if request.method not in {"GET", "HEAD", "OPTIONS"}:
         csrf = request.headers.get("x-csrf-token", "")
         if not secrets.compare_digest(family.csrf_hash, digest(csrf)):
             raise DomainError("ERR_CSRF", "CSRF check failed.", 403)
+    if getattr(request.state, "authenticated_rate_scope", None) != user.id:
+        from ledgerpilot.shared.middleware import rate_limited
+
+        delay = rate_limited(
+            request.app.state.rate_sessions,
+            [(digest(f"user:{user.id}"), 240)],
+            window_seconds=request.app.state.settings.rate_window_seconds,
+            cooldown_max_seconds=request.app.state.settings.rate_cooldown_max_seconds,
+        )
+        if delay:
+            raise DomainError(
+                "ERR_RATE_LIMIT",
+                "Account request limit reached. Retry shortly.",
+                429,
+                retry_after=delay,
+            )
+        # Upload admission and its handler revalidate identity in two sessions,
+        # but consume only one authenticated-user admission for this request.
+        request.state.authenticated_rate_scope = user.id
     return Principal(user, family)
 
 
@@ -70,6 +95,8 @@ def upload_preflight(request: Request, business_id: UUID) -> None:
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path
         db.info["rate_factory"] = request.app.state.rate_sessions
+        db.info["rate_window_seconds"] = request.app.state.settings.rate_window_seconds
+        db.info["rate_cooldown_max_seconds"] = request.app.state.settings.rate_cooldown_max_seconds
         who = principal(request, db, request.cookies.get(ACCESS_COOKIE))
         authorize(db, who, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
         request.state.upload_rate_scope = (who.user.id, business_id)

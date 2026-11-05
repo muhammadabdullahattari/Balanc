@@ -2,12 +2,16 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.22
+**Plan version:** 2.24
 **Status:** Governing implementation sequence  
-**Date:** 3 November 2026
+**Date:** 5 November 2026
 **Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**Senior QA findings amendment (5 November 2026): Completed for the approved local pilot; explicit production gates remain open.** Reviewed all 37 numbered report items against current sources. Repaired MFA stale-state handling, configurable admission timing/cooldown rollover, SMTP registration/savepoint recovery, batched outstanding balances/dashboard reuse, bounded report inputs, invalid-invitation responses, safe operational logging, explicit bank inserts and actionable auth states. Split import responsibilities and bank disposition validation while preserving canonical posting, public facade imports, RLS and transaction boundaries. Documented existing controls and incorrect audit assumptions rather than duplicating them. See [the resolution record](qa-findings-resolution.md). Final verification passed **163 backend tests (zero failures/errors/skips)**, including eight new QA regressions, plus **40 component, nine transport and 11 Chromium checks**, lint/type/contract/build checks. Dashboard calculation reads dropped from 27/32 to 13/18 for accrual/cash; 500 bank rows use one insert and reimport creates zero new rows. See [results and verified source fingerprints](contracts/qa-findings-results.json). SMTP retry remains manual, with no durable mail queue; deployment/scale/signing-boundary gates are explicit. No new migration/provider or phase-order change; schema **0022**, **Phase 9 remains next**. No commit/push/deployment.
+
+**Security checklist audit amendment (3 November 2026): Completed for the local pilot; explicit dependency/deployment gates remain open.** Reviewed all 20 controls from the supplied checklist; repaired response/CORS/error header coverage, production browser CSP, account-level throttling outside workspaces, OCR malformed bearer handling and Linux deployment permission/container guards. Updated security-patched cryptography/test dependencies and CI auditing; rebuilt the healthy local OCR service. Python and production web dependency scans report zero known advisories; one underlying moderate development-tool advisory remains explicitly open across three packages. See [the complete checklist and deployment gates](security-checklist-audit.md). No architecture, phase-order, public API schema or database revision change; Phase 9 remains next. Evidence covers all **155 backend cases across full/focused runs**: the initial full run passed 154 and exposed one backpressure-sensitive test; its stronger durable-state assertions and all identity/checklist checks passed in the 25-case follow-up. Also passed 40 component checks, eight transport checks, 11 Chromium checks, build/types/contracts/lock/scan checks and bundle privacy inspection. See [the results](contracts/security-checklist-results.json). No commit/push/cloud deployment.
 
 **Database query audit amendment (3 November 2026): Completed for the approved local pilot.** Batched account/source/external-ID/reconciliation lookups, shared dashboard month inputs, loan-history validation and notification inserts. Preserved transaction rollback and centralized safe errors; sanitized worker database failures. Closed the reconciliation guard for journals already represented by imported bank rows. Added real PostgreSQL query-budget and failure regressions and updated implementation standards. See [the audit](database-query-audit.md). No API/schema migration, architecture or phase-order change; Phase 9 remains next. Final verification passed **150 backend tests (zero failures/skips)**, including 12 new audit regressions, Ruff/format/mypy and OpenAPI/traceability/generated-type checks. Query counts stayed constant for tested increases in source lines, imports, payment allocations, reconciliation items, dashboard months/accounts and later loan dates. See [the results](contracts/database-query-audit-results.json). No commit/push/deployment.
 
@@ -411,4 +415,9 @@ Verify package versions and provider terms when implementing:
 
 
 
+
+
+## Implemented-system audit — 5 November 2026
+
+Fresh cross-cutting review recorded in [system audit](system-audit-2026-11-05.md). Seven findings remain open: conditional container evidence durability, deployment readiness/rollback timing, scanner overall deadline, export allocation bounds, export business-lock duration, multi-query report consistency, and stale selected evidence details. No application fixes applied in this audit. Phase 9 must address deployment durability/readiness before hosting originals. Existing test evidence was fingerprint-verified, not rerun; production load, penetration and manual accessibility checks remain outstanding.
 

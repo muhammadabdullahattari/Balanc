@@ -1,0 +1,434 @@
+{
+  "date": "2026-11-05",
+  "recorded_at": "2026-11-05T05:44:33.395082+00:00",
+  "status": "implemented-and-locally-verified-with-explicit-production-gates",
+  "scope": "37 numbered Senior QA findings; approved local P1 pilot",
+  "schema_revision": "0022",
+  "new_migrations": false,
+  "public_api_shape_changed": false,
+  "openapi_documentation_changed": true,
+  "next_phase": 9,
+  "resolution_document": "docs/qa-findings-resolution.md",
+  "findings": [
+    {
+      "id": "1.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.3",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.4",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.5",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.6",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "1.7",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.3",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.4",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.5",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.6",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "2.7",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.3",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.4",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.5",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "3.6",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "4.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "4.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "4.3",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "4.4",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "5.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "5.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "5.3",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "5.4",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "6.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "6.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "6.3",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "6.4",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "6.5",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "7.1",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "7.2",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "7.3",
+      "disposition": "repaired-or-hardened",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    },
+    {
+      "id": "7.4",
+      "disposition": "existing-protection-or-explicit-design-boundary-verified",
+      "details": "See the numbered resolution record; some original causes were incorrect."
+    }
+  ],
+  "checks": {
+    "initial_backend": {
+      "passed": 32,
+      "failures": 0
+    },
+    "focused_final": {
+      "passed": 8,
+      "failures": 0
+    },
+    "frontend_transport": {
+      "passed": 9,
+      "failures": 0
+    },
+    "frontend_components": {
+      "passed": 40,
+      "failures": 0
+    },
+    "browser_chromium": {
+      "passed": 11,
+      "failures": 0
+    },
+    "ruff": "passed src and tests",
+    "format": "passed src and changed Python test files",
+    "mypy": "passed 98 source files",
+    "openapi": "passed 126 paths",
+    "traceability": "passed 104 references; not an acceptance verdict",
+    "generated_types": "passed",
+    "typescript_build": "passed",
+    "frontend_format": "passed",
+    "whitespace": "passed",
+    "full_backend": {
+      "tests": 163,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0,
+      "passed": 163,
+      "seconds": 823.089,
+      "junit_artifact": "tmp/qa-audit/full-final.xml",
+      "new_qa_regressions": [
+        "test_diagnostic_logs_preserve_context_without_exception_messages",
+        "test_smtp_outage_keeps_pending_signup_and_rotates_codes_safely",
+        "test_mfa_enrollment_refreshes_preloaded_user_and_verified_factor",
+        "test_outstanding_snapshots_share_query_and_keep_historical_dates",
+        "test_configured_rate_window_and_existing_indexes",
+        "test_maximum_bank_import_is_one_insert_and_reimport_is_idempotent",
+        "test_scanner_session_clean_and_eicar",
+        "test_valid_session_error_codes_are_actionable"
+      ]
+    }
+  },
+  "enabled_test_profiles": [
+    "RUN_PHASE2_INTEGRATION",
+    "RUN_DOCUMENT_SCANNER_TESTS",
+    "RUN_LOCAL_OCR_TESTS",
+    "RUN_DB_BOOTSTRAP_TESTS"
+  ],
+  "services": [
+    "Local PostgreSQL",
+    "Mailpit",
+    "ClamAV",
+    "Local OCR"
+  ],
+  "query_counts": {
+    "document_lines_1_60": [
+      2,
+      2
+    ],
+    "preview_rows_1_25": [
+      3,
+      3
+    ],
+    "bank_import_rows_1_100": [
+      13,
+      13
+    ],
+    "dashboard_accrual_2_12_months_1_5_accounts": [
+      13,
+      13
+    ],
+    "dashboard_cash_2_12_months_1_5_accounts": [
+      18,
+      18
+    ],
+    "payment_allocations_1_7": [
+      23,
+      23
+    ],
+    "reconciliation_item_queries_1_6": [
+      3,
+      3
+    ],
+    "notification_insert_statements_for_6_invoices": 1,
+    "loan_repayment_0_5_future_dates": [
+      20,
+      20
+    ]
+  },
+  "specific_regressions": {
+    "outstanding_snapshots_one_and_two_dates_sql_statements": 1,
+    "bank_rows_500_insert_statements": 1,
+    "bank_reimport_additional_rows": 0,
+    "smtp_unavailability": "pending signup retained; unsent issuance/counters rolled back; resend recovery verified",
+    "mfa": "stale verified factor refreshed under lock; overwrite rejected",
+    "cooldown": "survives window rollover; expired window resets after block expiry",
+    "logs": "error class and stack locations retained; exception message and arbitrary fields excluded"
+  },
+  "discarded_runs": [
+    "5 November initial full run: local Docker/services were stopped; interrupted, not counted as a pass",
+    "Intermediate restored-service run: interrupted to include final cooldown fix; not final evidence"
+  ],
+  "limits": [
+    "Local pilot verification only; no production throughput/latency/HA claim",
+    "Synchronous SMTP with manual original-browser resend; no durable mail queue or automatic retry",
+    "Large-history report isolation and production query plans require measured deployment verification",
+    "HS256 remains monolith-only; separate verify-only trust domains require an ADR and signing rollout",
+    "Prior moderate development-tool advisory remains open per security checklist record",
+    "Phase 9 deployment and Phase 10 live/manual sign-off remain open"
+  ],
+  "commit": false,
+  "push": false,
+  "deployment": false,
+  "source_sha256": {
+    "backend/src/ledgerpilot/__init__.py": "e551f6ff6c725a9473aef39a82aa39d79917eb7d5024a103ead157e9f3c62c03",
+    "backend/src/ledgerpilot/accounting/__init__.py": "924bbd8f2cdbb04676ea2906032b51e7b4685a0799ce740fe0d488152671db19",
+    "backend/src/ledgerpilot/accounting/drafts.py": "10e54e814e6401a20cd879868e2e25c07e59fd92d17a19d70a43815fd5d78f30",
+    "backend/src/ledgerpilot/accounting/models.py": "e982c9dae536fbb5cbfecaa4bae0a0637ef55a1dacdd6d1f79f2b2ae3eebfb2b",
+    "backend/src/ledgerpilot/accounting/money.py": "b1f0f43ce2bc1371d2f4d0f2d1779365af08dce64f37be1301013005436aa55a",
+    "backend/src/ledgerpilot/accounting/reconciliation.py": "a94a5d0d7019422ae936e1e5f825ea393a191a68fd81336f715a42cb3ba11f45",
+    "backend/src/ledgerpilot/accounting/repository.py": "a5780a8e4b577aa632a920b33679493f3549a8ea056775e866adf191b6c947e1",
+    "backend/src/ledgerpilot/accounting/router.py": "f980056521bfca5b0bf56b69af4b3b01838a78f28adc8a80d97836d7487a1e07",
+    "backend/src/ledgerpilot/accounting/schemas.py": "a52167f914b8186d13403d27e5a30ccf975112805f051c3974254dcb500dddf7",
+    "backend/src/ledgerpilot/accounting/service.py": "3062359438c9cd4dd6bfbb720ddc9d0f9677f8759f699c2a2b9185ce3e5a9e12",
+    "backend/src/ledgerpilot/accounting/tax.py": "1eea977fd08167dd098a34abbd3f0ecf353429b81e9a8c1bfaea16720d17ad6e",
+    "backend/src/ledgerpilot/api/__init__.py": "c5e79b75137811726e30acef2fa5cfc649514fce1c86da771535b368f43238c0",
+    "backend/src/ledgerpilot/api/v1/__init__.py": "cfca912e946ee82b374998942327f270fc461ff5b2196f8bd5895d437f8e643e",
+    "backend/src/ledgerpilot/audit/__init__.py": "223d2dd6ec9c4f877886ab8d3c902357e7a70d431872ec1e2e851ca8a3806bea",
+    "backend/src/ledgerpilot/audit/models.py": "846db76a453d3d9e67342f521ac652ca02ad0751032a679ef455d3822230b01b",
+    "backend/src/ledgerpilot/audit/service.py": "7048b5cc8a5099b00af3737e55bd96cf6549cf0ac119c71ac3a10c1a1e8197d6",
+    "backend/src/ledgerpilot/banking/__init__.py": "eed1f4377516c9f0771bd5ab7bbcfb79f2062b2b93c19efb597fa494c8ddbfaf",
+    "backend/src/ledgerpilot/banking/corrections.py": "64b15cf1f1f9ab37a1d86c6456f7f7ac11fb609f04206bc88c7380fa034e4f84",
+    "backend/src/ledgerpilot/banking/models.py": "522defb7363fff2fc8cbcbe1447c8af9f955bf6584644f8045e94c58b3243479",
+    "backend/src/ledgerpilot/banking/read.py": "cc0549ee82a13e96cf0672b22b684e494665d88672f7e11009729c6c875f9dc8",
+    "backend/src/ledgerpilot/banking/reconciliation.py": "b65cd0d44704920f1dbebb19c76f3d6855a116b229fd51d619132e0598a658e2",
+    "backend/src/ledgerpilot/banking/router.py": "a542fead122c0c045cb554c240e8161402b0227e62f6b68752f6e998030a9fbc",
+    "backend/src/ledgerpilot/banking/schemas.py": "29b2e2c97dbb892b0d0fac2a473bc9cbafc1144d72d1500de8f65449eee44fd3",
+    "backend/src/ledgerpilot/banking/service.py": "b99119f793e002642a24c58da3c787b6efc7d1abaab6b4155793a3547d23a962",
+    "backend/src/ledgerpilot/banking/suggestions.py": "af9573ad4754f875b1cf423afe149ba4583706a4c69d12a0ce5e98648fbf9914",
+    "backend/src/ledgerpilot/config.py": "bad9adf779fb0f742916b7bcf10d554bf13d9ae90ddc6f2136c54edfdb2a37c7",
+    "backend/src/ledgerpilot/database.py": "7176db6b218b6d0f157f0a3da1fa61ed8a1c9db32f1bbb1bfa5cafc222f7738b",
+    "backend/src/ledgerpilot/documents/__init__.py": "80fe7642191d00aafe4baebe80a97ee94bea06d7d38daf346ce45be23b0320af",
+    "backend/src/ledgerpilot/documents/duplicates.py": "b77b928351a366a082565dee24a98715bf70409bd4342ef7d301e6a5082f9531",
+    "backend/src/ledgerpilot/documents/extraction.py": "3ee7b8d51ba797d8c172d2472198d401aa2b77a1890648642d0973584462f87a",
+    "backend/src/ledgerpilot/documents/ocr_service.py": "092b96a90ed961b268cfbe3e7a85ec4c9d84f42684103be145bfac65935cf3ff",
+    "backend/src/ledgerpilot/documents/router.py": "5fd83e7507e4b711ecb0936bd8b9c6efa5e4ae9d97c497afd1ffe5f3163d7122",
+    "backend/src/ledgerpilot/documents/storage.py": "aff6ee3b7ccc9380a5d937160b81daef112fa8a47f728666d86f1deed6decd48",
+    "backend/src/ledgerpilot/documents/worker.py": "dfc0d74948374403d997c218d2239a10ca92ca1c3b76bc149bc89cd70f46aca2",
+    "backend/src/ledgerpilot/export_openapi.py": "bbc5e352a7000cbfe25d10697ebf180134eb9bf5e152bd32564847d0f24fc727",
+    "backend/src/ledgerpilot/identity/__init__.py": "ea10c0ca881a96d66cb6e492eb9465218d2573e1b6e6854d37b17de175c20872",
+    "backend/src/ledgerpilot/identity/dependencies.py": "d887ffc135297e1cf892967f1ebab45c1db4619e86377a042d2f10625ae3576c",
+    "backend/src/ledgerpilot/identity/google.py": "46eb2a83f3107676028411936bf8a4ee8dbebc2102ad39b945a887492d4f0c51",
+    "backend/src/ledgerpilot/identity/mail.py": "bed26eaaeb629ca57cc22db52099b0a4289d38bda3ecec87d3e73dde902f7a5a",
+    "backend/src/ledgerpilot/identity/models.py": "3193d15a43cf373ce1b43d8afb54108c7f7d3c05ef00da720bc6148141798cb7",
+    "backend/src/ledgerpilot/identity/repository.py": "2a5f723b89477308d3274b93c51aa36771c6d8cef18e60b37efc6a408f421bdb",
+    "backend/src/ledgerpilot/identity/router.py": "eb794784c5c116de256d1419b9d009245916d1f1e353578551b4409b83e1e8cd",
+    "backend/src/ledgerpilot/identity/schemas.py": "854c1c2dd708cadffcc46d2a030855c9c26b2881025f313b581b3c6c33724c41",
+    "backend/src/ledgerpilot/identity/security.py": "86d096af7f6907a7793baec991709f04d0c7a97c024d0ff7a869a928f498590f",
+    "backend/src/ledgerpilot/identity/service.py": "d706fa8bae9a1c9598b92cbfcc235ea3db0a9cdba6c2f8a71717732f90527a65",
+    "backend/src/ledgerpilot/local_setup.py": "22ecb3535cd52c5a177739bb42f380aa6be96381efcadc6f6e3760675d9c291c",
+    "backend/src/ledgerpilot/main.py": "d8e94bbbe23d47edbc0689bda8ca2121204301284eb43ec41bfaf8495413ec30",
+    "backend/src/ledgerpilot/models.py": "035a7dd10f607423d28d9e44505fffd59ee39239898f0e5c30fcf2e4babe3608",
+    "backend/src/ledgerpilot/notifications/__init__.py": "eec45d2827f1dd75b9c0e0e11cb39d4e8d896dd5c507056f0c921d12e3c17565",
+    "backend/src/ledgerpilot/purchases/__init__.py": "383d9367355680c8205d0c666289941b3ea450cc705b836e6c697c4457b2de40",
+    "backend/src/ledgerpilot/reports/__init__.py": "bf76714202f578679bcbfbff2710f98dee1da10ccbe1b7dbd7ffbeaabd3cdf00",
+    "backend/src/ledgerpilot/reports/router.py": "b7b69f9fcdb26216abec60022d7cf73b0fb9ac39c73a056b01be520f7bdda32d",
+    "backend/src/ledgerpilot/reports/service.py": "5c1383d86d14e0befcbc14fba810d32e9e4f498fb4f381578284a0e8207f7f73",
+    "backend/src/ledgerpilot/sales/__init__.py": "d5f36a23fa24d0e63973fd02dd9cc8ac76ab50b2c95d6351e84890ff5362d421",
+    "backend/src/ledgerpilot/shared/__init__.py": "4adef212413731827c8049ad42d385728b6bfc421f95a50e0c3367a94882aba2",
+    "backend/src/ledgerpilot/shared/contracts.py": "eed78c6acf954e63799a6fd79a76c1e657a45f93a24df45adc948e20d1829415",
+    "backend/src/ledgerpilot/shared/errors.py": "a38cddea658167959619059e529004e200a2faf538b80f39710d19a83140ea41",
+    "backend/src/ledgerpilot/shared/middleware.py": "df1a639e950d782c317d644ce6019052190e146ea72d07ca5a3e7a019818992b",
+    "backend/src/ledgerpilot/shared/operations.py": "1c60f0608ec37fce7ea0af9c8ea5809908c0cc5c8894f1167107352b559ef40a",
+    "backend/src/ledgerpilot/shared/query_limits.py": "3d2edcaf85993bcfd3aee0d7014f4fcf4ce08fa7e0fe2c6975b0dd70eff7989d",
+    "backend/src/ledgerpilot/shared/responses.py": "616ea076ecfea0a89b3575ab17c3cd8ea2c6de9e2034f8c57b9da1dd8c8e8f40",
+    "backend/src/ledgerpilot/shared/schemas.py": "d2a62cac7aa0fd5bb22b95a9126f5e2f3227af2ff2cf37f99e382432cca69d11",
+    "backend/src/ledgerpilot/shared/security_headers.py": "94b0183f35c2f08cd881c7ea06d73cfc51f57db8bceaf9c6308eac7930af5550",
+    "backend/src/ledgerpilot/shared/telemetry.py": "768aaef41dbe4608372a9467a6497ad4fb86923b3ceaf507e68c741360014977",
+    "backend/src/ledgerpilot/swagger.py": "15659b524c055c81ec333394070bdb83536f7a45193e0e68c5fe5e2f2a077a93",
+    "backend/src/ledgerpilot/tenancy/__init__.py": "948c03df0a2d60d423580ed947a3aa79e22c0b9612b69972e1bfcd90072ebdd9",
+    "backend/src/ledgerpilot/tenancy/models.py": "15d1f1dd30a96a98d664829aa614b72f49472110458741e013bbdb88b1f49165",
+    "backend/src/ledgerpilot/tenancy/router.py": "9388f3944f813a64bd292aa58760b210a56f6872530156c30331f073a9cb90f5",
+    "backend/src/ledgerpilot/tenancy/schemas.py": "320ba5048b88f4f269b47f550a93832ce8fd8ce11f29c8fec6a939e0bdea0b32",
+    "backend/src/ledgerpilot/tenancy/service.py": "bdc783fc6dbc3bf98e9521ba905defe04062dd8c1eeefd866ac7821ce6ceb0b1",
+    "backend/src/ledgerpilot/trade/__init__.py": "e5b40a7181bed1afc61d5a91d9b49910f46cdbbcdea41c7b1de2196aa3002f9c",
+    "backend/src/ledgerpilot/trade/advances.py": "c2283675cb673b0889578c7fb2e07089b5a842c009a590f63522cafee8f2a4b4",
+    "backend/src/ledgerpilot/trade/drafts.py": "c34de34a509bf5e8f1cd93c8fe41f87ba992eb6d2b548a32c796d179313a0b7d",
+    "backend/src/ledgerpilot/trade/models.py": "cb7142fd4825403925d12c1f4be13682aaf49870a741a427caf84f3fb15eaf1c",
+    "backend/src/ledgerpilot/trade/read.py": "f3261ea969e08deff1e6e98a72dce01862d4d43f2d2006d51073701de1b9d477",
+    "backend/src/ledgerpilot/trade/repository.py": "f9c0a5a3ddfa93e7af0c3d5f249ac4936357731d593516dbbd17eca92204fafb",
+    "backend/src/ledgerpilot/trade/router.py": "98361c6719081dcd23ccece84a890177c3dead296362c6591add35c8de9b3092",
+    "backend/src/ledgerpilot/trade/schemas.py": "83c880d241077d85383a1406f78152ce54a369205b745a16c25a5b356af047b5",
+    "backend/src/ledgerpilot/trade/service.py": "fc37e8393f99949e767c2e1ebbd5cf139b5cd042a6ca62d4af390996aefc835d",
+    "backend/src/ledgerpilot/trade/statements.py": "4e27e27524b440508d42374c16b41a0a0b91b12097aad0aee000771ef78dd264",
+    "backend/src/ledgerpilot/verify_traceability.py": "164c9e234d6b24a55f471432943eda3c19f3228cd2fb9746d72b12335e97913a",
+    "backend/src/ledgerpilot/workspace/__init__.py": "70ee79f10dcb4d7809de143766b1dec3fb62b376753c747f2d7c33bc6771746a",
+    "backend/src/ledgerpilot/workspace/beneficiaries.py": "9f3ed95102ada2ce943646bf0bf6d0e32ba8722785a7fae1bc5669a6e6194c3f",
+    "backend/src/ledgerpilot/workspace/exports.py": "47308b328f23d2b9587cc31094a5b850ce4bcba46b96f5b6b674f29a4d2f6c39",
+    "backend/src/ledgerpilot/workspace/importing/__init__.py": "3d03d455ff26ac712a17499a18b121e231ada7e1c8f6c097d94ce33babb3dbc4",
+    "backend/src/ledgerpilot/workspace/importing/compiler.py": "2d11dc30c0625f2790d57afff9e1f6a196c373538a003a1b48fcee67e097aaef",
+    "backend/src/ledgerpilot/workspace/importing/schemas.py": "1f508c683dc14772d4337f85357be1410580f3cdb8ca9a2d7d47ba0ba663b2ef",
+    "backend/src/ledgerpilot/workspace/importing/workflow.py": "0d526bd68663b1088bb5193c46b848cff3be5c498c57c5ea5669f3f7d0e8bf5c",
+    "backend/src/ledgerpilot/workspace/imports.py": "14135f6026073e34a79e98bb29cbf8584c39708408c16a9dfd06f5ffeb02b4a3",
+    "backend/src/ledgerpilot/workspace/models.py": "ce4b0207b14373edbc9cf690005036394cf613ddc816f33e41e6c6950b03cd27",
+    "backend/src/ledgerpilot/workspace/opening_adjustments.py": "30d590ea75653b726886883cd3d378c987a6c1b6659a3b6b9cead2228c1b76b3",
+    "backend/src/ledgerpilot/workspace/opening_cash.py": "c9baa0545938726f0b9a5976b365e006a9ff5705a82825a611b511da5f392c58",
+    "backend/src/ledgerpilot/workspace/openings.py": "aa8a9697192ee7251dca20d3b3826fad944d8fb3877c4597e5619370e2620e7c",
+    "backend/src/ledgerpilot/workspace/privacy.py": "d54227cef8c31e8f137edfbb24aa8ffc3b7f2c39ea3d34dc9ca97fe64c893915",
+    "backend/src/ledgerpilot/workspace/resumable.py": "bd865d9f8c10ca5a9bbd830af9b899d215bdaa353cf3ae99c20f716ec6565d47",
+    "backend/src/ledgerpilot/workspace/router.py": "616096a1b49c2050d44e5b6a6bc98771e104a31292c6bfc33b979537d18d3634",
+    "backend/src/ledgerpilot/workspace/schemas.py": "c9e6eb6db76ca5413334815582aaf8622095bfd7a85bf9e0f2859da9b3a2a4b4",
+    "backend/src/ledgerpilot/workspace/service.py": "88e667736e23964d06bb66843c9bd563b0aa761614fb3a0105e20768b2f19d45",
+    "backend/tests/test_qa_findings.py": "78077afbce54ba8432408f60d610b460befaea54e2b4096cadd6e13f18bd10d0",
+    "backend/tests/test_database_audit.py": "050f2865bba752765d5a9668ea4ba96b26b8b15f8473c234357390dd0d95f7de",
+    "frontend/src/api/client.ts": "16f72b47070e9416cb6e308de9606aa6ab0d3b97e8536e4e06c4dbf6d19c08f1",
+    "frontend/src/features/auth.tsx": "c5d6c0471742521dae9c052031daa1951120b8b6017f50b48252bf006d82ffcb",
+    "frontend/tests/api-client.test.mjs": "135cdabc2437225b0af4fd427643cbb556731f2beb6af58bcec9bae5948ca84d",
+    "docs/contracts/openapi.json": "b1d88f860c2dd9c30c590d870e6d1315a6c3a125cd1f29f3d8dfe72a4883facf",
+    "frontend/src/api/generated/schema.ts": "76678bdf5cc2a650de22df974e5f18a719aad1fc0d1aa3cee2517c494c699ed1",
+    ".env.example": "2ffb14a3d992dfa8402cb2e046ff7e281ae29658849b015f065631fa4424fcf6",
+    "docker-compose.auth.yml": "2d4db4cf6caac513c91b31ff6c87319fa5e21e80b14466585801cf14acddf8a1",
+    "backend/pyproject.toml": "2829e9bb184f741d828dbf45cb9ed23a7c1f0daa72de01694a5f25eefc209e21",
+    "backend/uv.lock": "eaeb6f40e667213d83d3f27ef0e1ebf43c44a2c41b99c5ac8d4877862be64bd5",
+    "frontend/package.json": "dfc3cae34c831293ec649ba5ea10c6b24626f102f1cd8f8288a0cb5a0d6322ce",
+    "frontend/package-lock.json": "14c6074a4edba03890f7a61be31661f874beb0647358fbd83203563d2e9143e2"
+  },
+  "source_fingerprints_rechecked_after_tests": true
+}

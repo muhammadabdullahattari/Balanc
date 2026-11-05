@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from ledgerpilot.accounting.models import Account, Journal, JournalLine
 from ledgerpilot.accounting.money import allocate
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.query_limits import bounded_rows, bounded_scalars
 from ledgerpilot.tenancy.models import Business
 from ledgerpilot.tenancy.service import get_business
 from ledgerpilot.trade import repository as repo
@@ -37,8 +38,10 @@ def context(
 
 
 def balances(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
-    return dict(
-        db.execute(
+    return {
+        aid: amount
+        for aid, amount in bounded_rows(
+            db,
             select(JournalLine.account_id, func.sum(JournalLine.debit - JournalLine.credit))
             .join(
                 Journal,
@@ -50,14 +53,18 @@ def balances(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
                 Journal.status == "posted",
                 Journal.accounting_date <= as_of,
             )
-            .group_by(JournalLine.account_id)
-        ).all()
-    )
+            .group_by(JournalLine.account_id),
+        )
+    }
 
 
 def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, dict[UUID, Decimal]]:
     """A single grouped query for the dashboard's bounded month-end checkpoints."""
     dates = sorted(set(dates))
+    if len(dates) > 14:
+        raise DomainError(
+            "ERR_QUOTA", "The pilot report supports at most 14 date checkpoints.", 413
+        )
     values: dict[date, dict[UUID, Decimal]] = {day: {} for day in dates}
     if not dates:
         return values
@@ -68,7 +75,8 @@ def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, d
         )
         for day in dates
     ]
-    for aid, *totals in db.execute(
+    for aid, *totals in bounded_rows(
+        db,
         select(JournalLine.account_id, *amounts)
         .join(
             Journal,
@@ -80,7 +88,7 @@ def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, d
             Journal.status == "posted",
             Journal.accounting_date <= dates[-1],
         )
-        .group_by(JournalLine.account_id)
+        .group_by(JournalLine.account_id),
     ):
         for day, amount in zip(dates, totals, strict=True):
             values[day][aid] = amount
@@ -104,16 +112,16 @@ class CashSources:
         return cls(
             business,
             accounts,
-            list(
-                db.scalars(
-                    select(TradeDocument).where(
-                        TradeDocument.business_id == bid, TradeDocument.accounting_date <= end
-                    )
-                )
+            bounded_scalars(
+                db,
+                select(TradeDocument).where(
+                    TradeDocument.business_id == bid, TradeDocument.accounting_date <= end
+                ),
             ),
             [
                 (did, day, amount)
-                for did, day, amount in db.execute(
+                for did, day, amount in bounded_rows(
+                    db,
                     select(
                         AdvanceApplication.document_id,
                         AdvanceApplication.accounting_date,
@@ -123,27 +131,29 @@ class CashSources:
                         AdvanceApplication.business_id == bid,
                         AdvanceApplication.accounting_date <= end,
                     )
-                    .group_by(AdvanceApplication.document_id, AdvanceApplication.accounting_date)
+                    .group_by(AdvanceApplication.document_id, AdvanceApplication.accounting_date),
                 )
             ],
             [
                 (did, day, amount)
-                for did, day, amount in db.execute(
+                for did, day, amount in bounded_rows(
+                    db,
                     select(
                         Allocation.document_id,
                         Allocation.accounting_date,
                         func.sum(Allocation.amount),
                     )
                     .where(Allocation.business_id == bid, Allocation.accounting_date <= end)
-                    .group_by(Allocation.document_id, Allocation.accounting_date)
+                    .group_by(Allocation.document_id, Allocation.accounting_date),
                 )
             ],
-            list(
-                db.scalars(
-                    select(Payment).where(
-                        Payment.business_id == bid, Payment.accounting_date <= end
-                    )
-                )
+            bounded_scalars(
+                db,
+                select(Payment).where(
+                    Payment.business_id == bid,
+                    Payment.accounting_date <= end,
+                    Payment.kind.in_(["customer_refund", "vendor_refund"]),
+                ),
             ),
             OpeningSources.load(db, bid, end, business.currency_precision),
         )
@@ -161,8 +171,8 @@ class FinancialInputs:
     @classmethod
     def load(cls, db: Session, bid: UUID, dates: list[date], basis: str) -> "FinancialInputs":
         business = get_business(db, bid)
-        accounts = list(
-            db.scalars(select(Account).where(Account.business_id == bid).order_by(Account.code))
+        accounts = bounded_scalars(
+            db, select(Account).where(Account.business_id == bid).order_by(Account.code)
         )
         return cls(
             business,
@@ -186,7 +196,7 @@ def cash_adjustments(
     """
     if sources is None:
         business = get_business(db, bid)
-        accounts = list(db.scalars(select(Account).where(Account.business_id == bid)))
+        accounts = bounded_scalars(db, select(Account).where(Account.business_id == bid))
         sources = CashSources.load(db, bid, as_of, business, accounts)
     business = sources.business
     docs = [doc for doc in sources.documents if doc.accounting_date <= as_of]
@@ -320,8 +330,15 @@ def financial(
     return result
 
 
-def aging(db: Session, bid: UUID, as_of: date, kind: str) -> dict[str, Any]:
-    due = repo.due(db, bid, as_of)
+def aging(
+    db: Session,
+    bid: UUID,
+    as_of: date,
+    kind: str,
+    *,
+    outstanding: dict[UUID, Decimal] | None = None,
+) -> dict[str, Any]:
+    due = outstanding if outstanding is not None else repo.due(db, bid, as_of)
     rows = list(
         db.scalars(
             select(TradeDocument)
@@ -373,16 +390,19 @@ def aging(db: Session, bid: UUID, as_of: date, kind: str) -> dict[str, Any]:
     }
 
 
-def controls(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
+def controls(
+    db: Session, bid: UUID, as_of: date, *, outstanding: dict[UUID, Decimal] | None = None
+) -> dict[str, Any]:
     ledger = balances(db, bid, as_of)
     source: dict[UUID, Decimal] = defaultdict(Decimal)
-    due = repo.due(db, bid, as_of)
-    for item in db.scalars(
+    due = outstanding if outstanding is not None else repo.due(db, bid, as_of)
+    for item in bounded_scalars(
+        db,
         select(TradeDocument).where(
             TradeDocument.business_id == bid,
             TradeDocument.kind.in_(["invoice", "bill"]),
             TradeDocument.accounting_date <= as_of,
-        )
+        ),
     ):
         source[item.control_account_id] += due[item.id] * (1 if item.kind == "invoice" else -1)
     movements = (
@@ -409,14 +429,15 @@ def controls(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
         )
         .group_by(Loan.control_account_id, Loan.direction)
     )
-    for aid, direction, amount in db.execute(movements):
+    for aid, direction, amount in bounded_rows(db, movements):
         source[UUID(str(aid))] += Decimal(str(amount)) * (-1 if direction == "payable" else 1)
     items: list[dict[str, Any]] = []
-    for account in db.scalars(
+    for account in bounded_scalars(
+        db,
         select(Account).where(
             Account.business_id == bid,
             Account.control.in_(["ar", "ap", "loan_payable", "loan_receivable"]),
-        )
+        ),
     ):
         gl, sl = ledger.get(account.id, Decimal(0)), source[account.id]
         items.append(
@@ -448,16 +469,17 @@ def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[
         validate_account(accounts.get(aid), {"asset"}, plain=True)
     current = balances(db, bid, as_of)
     cash = sum((current.get(aid, Decimal(0)) for aid in bank_ids), Decimal(0))
-    due = repo.due(db, bid, as_of)
-    docs = list(
-        db.scalars(
-            select(TradeDocument).where(
-                TradeDocument.business_id == bid,
-                TradeDocument.kind.in_(["invoice", "bill"]),
-                TradeDocument.accounting_date <= as_of,
-            )
-        )
+    docs = bounded_scalars(
+        db,
+        select(TradeDocument).where(
+            TradeDocument.business_id == bid,
+            TradeDocument.kind.in_(["invoice", "bill"]),
+            TradeDocument.accounting_date <= as_of,
+            TradeDocument.due_date.between(as_of + timedelta(days=1), as_of + timedelta(days=91)),
+            TradeDocument.disputed.is_(False),
+        ),
     )
+    due = repo.due_snapshots(db, bid, [as_of], [d.id for d in docs])[as_of]
     rows = []
     for index in range(13):
         start = as_of + timedelta(days=1 + index * 7)
@@ -532,14 +554,13 @@ def tax_support(db: Session, bid: UUID, start: date, end: date) -> dict[str, Any
     if baseline:
         for account in accounts:
             source[account.id] = Decimal(baseline.expected_trial.get(account.code, "0"))
-    documents = list(
-        db.scalars(
-            select(TradeDocument).where(
-                TradeDocument.business_id == bid,
-                TradeDocument.accounting_date <= end,
-                TradeDocument.accounting_date > cutoff,
-            )
-        )
+    documents = bounded_scalars(
+        db,
+        select(TradeDocument).where(
+            TradeDocument.business_id == bid,
+            TradeDocument.accounting_date <= end,
+            TradeDocument.accounting_date > cutoff,
+        ),
     )
     references: dict[UUID, list[str]] = defaultdict(list)
     for doc in documents:
@@ -550,11 +571,12 @@ def tax_support(db: Session, bid: UUID, start: date, end: date) -> dict[str, Any
                 aid = UUID(row["tax_account_id"])
                 source[aid] += Decimal(row["tax_amount"]) * (-1 if sale != credit else 1)
                 references[aid].append(str(doc.id))
-    for operation in db.scalars(
+    for operation in bounded_scalars(
+        db,
         select(Operation).where(
             Operation.business_id == bid,
             Operation.action == "tax.remitted",
-        )
+        ),
     ):
         if cutoff < date.fromisoformat(operation.result["accounting_date"]) <= end:
             aid = UUID(operation.result["tax_account_id"])
@@ -628,13 +650,14 @@ def dashboard(
     accounts = {a.id: a for a in inputs.accounts}
     for aid in bank_ids:
         validate_account(accounts.get(aid), {"asset"}, plain=True)
+    outstanding = repo.due(db, bid, end)
     return {
         **totals,
         "kind": "dashboard",
         "trend": trends,
         "cash_balance": str(sum((current.get(aid, Decimal(0)) for aid in bank_ids), Decimal(0))),
         "cash_account_ids": [str(aid) for aid in bank_ids],
-        "receivables": aging(db, bid, end, "invoice"),
-        "payables": aging(db, bid, end, "bill"),
-        "controls": controls(db, bid, end),
+        "receivables": aging(db, bid, end, "invoice", outstanding=outstanding),
+        "payables": aging(db, bid, end, "bill", outstanding=outstanding),
+        "controls": controls(db, bid, end, outstanding=outstanding),
     }

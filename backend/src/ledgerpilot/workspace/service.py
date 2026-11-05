@@ -56,8 +56,8 @@ def reminders(db: Session, who: Principal, bid: UUID, as_of: date) -> int:
     )
     if preference and not preference.reminders:
         return 0
-    balances = repo.due(db, bid, as_of)
-    current = repo.due(db, bid, date.max)
+    snapshots = repo.due_snapshots(db, bid, [as_of, date.max])
+    balances, current = snapshots[as_of], snapshots[date.max]
     rows = list(
         db.scalars(
             select(TradeDocument)

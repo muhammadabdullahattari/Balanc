@@ -250,7 +250,11 @@ async def test_parallel_registration_cannot_bypass_daily_limit_and_expiry_restor
 ) -> None:
     import asyncio
 
-    from ledgerpilot.identity import service
+    from sqlalchemy import text
+
+    from ledgerpilot.database import set_context
+    from ledgerpilot.identity import repository, service
+    from ledgerpilot.identity.security import digest
 
     api = auth_client
     email = uuid4().hex + "@example.com"
@@ -258,7 +262,43 @@ async def test_parallel_registration_cannot_bypass_daily_limit_and_expiry_restor
     responses = await asyncio.gather(
         *(api.post("/api/v1/auth/register", json=body) for _ in range(3))
     )
-    assert all(r.status_code == 202 for r in responses), [r.status_code for r in responses]
+    # Bounded hash/lock/mail admission can reject a concurrent attempt safely.
+    # Assert the durable security invariant, not unlimited concurrent availability.
+    assert all(r.status_code in {202, 503} for r in responses)
+    for response in responses:
+        if response.status_code == 503:
+            assert response.json()["error"]["code"] in {
+                "ERR_AUTH_BUSY",
+                "ERR_DEPENDENCY",
+                "ERR_MAIL_UNAVAILABLE",
+            }
+    accepted = sum(r.status_code == 202 for r in responses)
+    assert accepted > 0
+    app = api._transport.app
+    with app.state.sessions.begin() as db:
+        user = repository.by_email(db, email)
+        assert user is not None
+        set_context(db, user.id)
+        assert user.verification_attempts == accepted
+        assert (user.verification_blocked_until is not None) == (accepted == 3)
+    for _ in range(3 - accepted):
+        retry = await api.post("/api/v1/auth/register", json=body)
+        assert retry.status_code == 202, retry.text
+    # The following checks cover the daily policy, independently of the separate
+    # five-per-minute email throttle consumed by any safely rejected attempts.
+    with app.state.rate_sessions.begin() as db:
+        db.execute(
+            text(
+                "UPDATE app.auth_rate_buckets SET started_at=now()-interval '2 minutes',"
+                "attempts=0,blocked_until=NULL WHERE key=:key"
+            ),
+            {"key": digest("identity:" + email.casefold())},
+        )
+    with app.state.sessions.begin() as db:
+        user = repository.by_email(db, email)
+        assert user is not None
+        set_context(db, user.id)
+        assert user.verification_attempts == 3 and user.verification_blocked_until is not None
     assert (
         await api.post("/api/v1/auth/verification-request", json={"email": email})
     ).status_code == 429

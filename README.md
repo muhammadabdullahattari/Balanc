@@ -99,6 +99,8 @@ Posted journals must be balanced, immutable, idempotent, auditable, and scoped t
 
 ## Local identity mailbox
 
+Mailpit's browser port is configured with `MAILPIT_UI_PORT` (default `8025`); this sets both the Compose host port and the local mailbox link. It does not change `SMTP_PORT` (default `1025`). Pending signup survives a temporary SMTP outage; use the original registration browser to resend when delivery recovers. No automatic email queue is configured. `RATE_WINDOW_SECONDS` and `RATE_COOLDOWN_MAX_SECONDS` default to `60` and support values from 1 to 3600; defaults need no `.env` changes. See [the QA resolution record](docs/qa-findings-resolution.md).
+
 Start `docker compose -f docker-compose.auth.yml up -d` from the repository root and enable `AUTH_DELIVERY_ENABLED=true` in the private environment. Mailpit captures real local verification/reset messages at `http://127.0.0.1:8025`. Keep the generated MFA encryption key backed up privately. Browser authentication requires HTTPS and an explicitly allowed origin; see the Phase 2 record for Secure-cookie and CSRF setup.
 
 ## Local document scanning and OCR

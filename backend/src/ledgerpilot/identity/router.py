@@ -24,7 +24,7 @@ from ledgerpilot.identity.security import now, opaque
 from ledgerpilot.shared import contracts
 
 router = APIRouter(prefix="/auth", tags=["identity"])
-GENERIC = {"message": "If the request is eligible, an email has been sent."}
+GENERIC = {"message": "Your request was received. Check your inbox, or try resending shortly."}
 
 
 def cookies(request: Request, response: Response, values: tuple[str, str, str]) -> None:
@@ -96,6 +96,12 @@ def verify(data: TokenRequest, request: Request, db: DB) -> dict[str, str]:
 
 @router.post(
     "/verification-request",
+    description=(
+        "Resend verification from the original registration browser: retain its CSRF cookie "
+        "and matching X-CSRF-Token. A different browser receives the same generic 202 "
+        "without issuing a code. Pending accounts survive SMTP outages; failed delivery "
+        "does not consume an issuance. Retry resend when mail recovers; no automatic mail queue."
+    ),
     status_code=202,
     response_model=contracts.responses["identity.verification_request"],
     response_model_exclude_unset=True,
@@ -230,7 +236,7 @@ def google_config(request: Request, response: Response) -> dict[str, object]:
     settings = request.app.state.settings
     response.headers["Cache-Control"] = "no-store"
     mailbox = (
-        "http://127.0.0.1:8025"
+        f"http://127.0.0.1:{settings.mailpit_ui_port}"
         if settings.app_env == "local"
         and settings.smtp_host in {"localhost", "127.0.0.1"}
         and settings.smtp_port == 1025

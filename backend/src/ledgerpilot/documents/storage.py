@@ -14,36 +14,47 @@ from ledgerpilot.shared.errors import DomainError
 
 
 def scan(content: bytes, settings: Settings) -> str:
-    """Clamd INSTREAM must positively confirm clean before content is parsed."""
+    """Obtain version and positive INSTREAM verdict in one clamd IDSESSION."""
+
+    def reply(conn: socket.socket, command_id: int) -> bytes:
+        value = bytearray()
+        # Only one command is in flight; do not consume a subsequent reply.
+        while len(value) < 4096:
+            part = conn.recv(1)
+            if part == b"\0":
+                prefix = f"{command_id}: ".encode()
+                if value.startswith(prefix):
+                    return bytes(value[len(prefix) :])
+                break
+            if not part:
+                break
+            value.extend(part)
+        raise DomainError("ERR_SCAN_UNAVAILABLE", "Scanner response could not be verified.", 503)
+
     try:
         with socket.create_connection(
             (settings.clamav_host, settings.clamav_port), timeout=10
         ) as conn:
+            conn.sendall(b"zIDSESSION\0zVERSION\0")
+            version = reply(conn, 1).decode("ascii", errors="replace")
+            if not version.startswith("ClamAV ") or len(version) > 160:
+                raise DomainError(
+                    "ERR_SCAN_UNAVAILABLE", "Scanner version could not be verified.", 503
+                )
             conn.sendall(b"zINSTREAM\0")
             for start in range(0, len(content), 65536):
                 chunk = content[start : start + 65536]
                 conn.sendall(struct.pack("!I", len(chunk)) + chunk)
             conn.sendall(struct.pack("!I", 0))
-            reply = b""
-            while b"\0" not in reply and len(reply) < 4096:
-                part = conn.recv(1024)
-                if not part:
-                    break
-                reply += part
-        if b"FOUND" in reply:
+            verdict = reply(conn, 2)
+            conn.sendall(b"zEND\0")
+        if verdict.startswith(b"stream: ") and verdict.endswith(b" FOUND"):
             raise DomainError("ERR_MALWARE", "The upload was rejected by malware scanning.", 422)
-        if reply.strip(b"\0\r\n ") != b"stream: OK":
+        if verdict != b"stream: OK":
             raise DomainError(
                 "ERR_SCAN_UNAVAILABLE", "Upload scanning did not confirm a clean result.", 503
             )
-        with socket.create_connection(
-            (settings.clamav_host, settings.clamav_port), timeout=5
-        ) as conn:
-            conn.sendall(b"zVERSION\0")
-            version = conn.recv(512).rstrip(b"\0\n").decode("ascii", errors="replace")
-        if not version.startswith("ClamAV"):
-            raise DomainError("ERR_SCAN_UNAVAILABLE", "Scanner version could not be verified.", 503)
-        return version[:160]
+        return version
     except OSError:
         raise DomainError(
             "ERR_SCAN_UNAVAILABLE", "The local malware scanner is unavailable.", 503

@@ -9,7 +9,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import Field
-from sqlalchemy import func, select, text
+from sqlalchemy import literal, select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Account
@@ -62,17 +62,16 @@ def begin(
         if old.request_hash != fingerprint(data, action):
             raise DomainError("ERR_IDEMPOTENCY_CONFLICT", "Operation key was already used.", 409)
         return business, old.result
-    count = (
-        db.scalar(
-            select(func.count())
-            .select_from(Operation)
-            .where(
-                Operation.business_id == bid,
-            )
+    exhausted = db.scalar(
+        select(literal(1))
+        .select_from(Operation)
+        .where(
+            Operation.business_id == bid,
         )
-        or 0
+        .offset(9999)
+        .limit(1)
     )
-    if count >= 10000:
+    if exhausted is not None:
         raise DomainError(
             "ERR_QUOTA",
             "The local pilot operation quota is exhausted; reads/exports remain available.",

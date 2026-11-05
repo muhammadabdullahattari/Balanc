@@ -2,14 +2,15 @@
 
 from datetime import date
 from decimal import Decimal
+from typing import cast
 from uuid import UUID
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.shared.errors import DomainError
-from ledgerpilot.trade.models import Allocation, Loan, LoanMovement, Party, Payment, TradeDocument
-from ledgerpilot.workspace.models import AdvanceApplication
+from ledgerpilot.shared.query_limits import REPORT_LIMIT
+from ledgerpilot.trade.models import Loan, LoanMovement, Party, TradeDocument
 
 
 def party(db: Session, bid: UUID, pid: UUID, role: str | None = None) -> Party:
@@ -56,57 +57,67 @@ def require_document(items: dict[UUID, TradeDocument], did: UUID) -> TradeDocume
 
 
 def due(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
-    allocated = dict(
-        db.execute(
-            select(Allocation.document_id, func.sum(Allocation.amount))
-            .where(
-                Allocation.business_id == bid,
-                Allocation.accounting_date <= as_of,
-            )
-            .group_by(Allocation.document_id)
-        ).all()
+    return due_snapshots(db, bid, [as_of])[as_of]
+
+
+def due_snapshots(
+    db: Session, bid: UUID, dates: list[date], document_ids: list[UUID] | None = None
+) -> dict[date, dict[UUID, Decimal]]:
+    """One exact, tenant-scoped SQL aggregate, including credited cash refunds.
+
+    Keep historical and current balances separate: later payments must not alter
+    the earlier snapshot used by reminders or backdated allocation validation.
+    """
+    dates = sorted(set(dates))
+    if not dates or len(dates) > 2:
+        raise ValueError("Outstanding snapshots require one or two dates")
+    values: dict[date, dict[UUID, Decimal]] = {day: {} for day in dates}
+    if document_ids == []:
+        return values
+    rows = db.execute(
+        text("""
+    WITH cutoffs AS (SELECT unnest(CAST(:dates AS date[])) AS day),
+    docs AS (SELECT id,total,accounting_date FROM app.trade_documents
+      WHERE business_id=:b AND kind IN ('invoice','bill') AND accounting_date<=:end
+        AND (:all_ids OR id=ANY(CAST(:ids AS uuid[])))),
+    allocations AS (SELECT c.day,a.document_id AS id,sum(a.amount) AS amount
+      FROM cutoffs c JOIN app.allocations a ON a.business_id=:b AND a.accounting_date<=c.day
+      JOIN docs d ON d.id=a.document_id GROUP BY c.day,a.document_id),
+    credits AS (SELECT c.day,t.original_id AS id,sum(t.total) AS amount
+      FROM cutoffs c JOIN app.trade_documents t ON t.business_id=:b AND t.accounting_date<=c.day
+      JOIN docs d ON d.id=t.original_id GROUP BY c.day,t.original_id),
+    advances AS (SELECT c.day,a.document_id AS id,sum(a.amount) AS amount
+      FROM cutoffs c JOIN app.advance_applications a
+        ON a.business_id=:b AND a.accounting_date<=c.day
+      JOIN docs d ON d.id=a.document_id GROUP BY c.day,a.document_id),
+    refunds AS (SELECT c.day,(a->>'document_id')::uuid AS id,sum((a->>'amount')::numeric) AS amount
+      FROM cutoffs c JOIN app.payments p ON p.business_id=:b AND p.accounting_date<=c.day
+        AND p.original_payment_id IS NOT NULL
+      CROSS JOIN LATERAL jsonb_array_elements(p.allocations) a
+      JOIN docs d ON d.id=(a->>'document_id')::uuid GROUP BY c.day,(a->>'document_id')::uuid)
+    SELECT c.day,d.id,d.total-coalesce(a.amount,0)-coalesce(t.amount,0)
+      -coalesce(v.amount,0)+coalesce(r.amount,0)
+    FROM cutoffs c JOIN docs d ON d.accounting_date<=c.day
+    LEFT JOIN allocations a ON a.day=c.day AND a.id=d.id
+    LEFT JOIN credits t ON t.day=c.day AND t.id=d.id
+    LEFT JOIN advances v ON v.day=c.day AND v.id=d.id
+    LEFT JOIN refunds r ON r.day=c.day AND r.id=d.id
+    ORDER BY c.day,d.id LIMIT :cap
+    """),
+        {
+            "b": bid,
+            "dates": dates,
+            "end": dates[-1],
+            "all_ids": document_ids is None,
+            "ids": document_ids or [],
+            "cap": REPORT_LIMIT * len(dates) + 1,
+        },
     )
-    credits = dict(
-        db.execute(
-            select(TradeDocument.original_id, func.sum(TradeDocument.total))
-            .where(
-                TradeDocument.business_id == bid,
-                TradeDocument.original_id.is_not(None),
-                TradeDocument.accounting_date <= as_of,
-            )
-            .group_by(TradeDocument.original_id)
-        ).all()
-    )
-    values = {
-        did: total - allocated.get(did, Decimal(0)) - credits.get(did, Decimal(0))
-        for did, total in db.execute(
-            select(TradeDocument.id, TradeDocument.total).where(
-                TradeDocument.business_id == bid,
-                TradeDocument.kind.in_(["invoice", "bill"]),
-                TradeDocument.accounting_date <= as_of,
-            )
-        )
-    }
-    applications = db.execute(
-        select(AdvanceApplication.document_id, func.sum(AdvanceApplication.amount))
-        .where(AdvanceApplication.business_id == bid, AdvanceApplication.accounting_date <= as_of)
-        .group_by(AdvanceApplication.document_id)
-    )
-    for did, amount in applications:
-        if did in values:
-            values[did] -= amount
-    payments = list(
-        db.scalars(
-            select(Payment).where(
-                Payment.business_id == bid,
-                Payment.accounting_date <= as_of,
-            )
-        )
-    )
-    for payment in payments:
-        if payment.original_payment_id is not None:
-            for row in payment.allocations:
-                values[UUID(row["document_id"])] += Decimal(row["amount"])
+    for row in rows:
+        day, did, amount = cast(date, row[0]), cast(UUID, row[1]), cast(Decimal, row[2])
+        values[day][did] = amount
+        if len(values[day]) > REPORT_LIMIT:
+            raise DomainError("ERR_QUOTA", "Narrow the pilot outstanding-balance scope.", 413)
     return values
 
 

@@ -26,6 +26,8 @@ jobs:
         run: uv run ruff check src tests
       - name: Type check
         run: uv run mypy
+      - name: Audit Python dependencies
+        run: uv run pip-audit --skip-editable --format json --output dependency-audit.json
       - name: Check reviewed OpenAPI contract
         run: |
           uv run python -m ledgerpilot.export_openapi --check
@@ -106,6 +108,7 @@ jobs:
           path: |
             backend/phase4-results.xml
             backend/phase4-coverage.json
+            backend/dependency-audit.json
           if-no-files-found: warn
           retention-days: 7
       - name: Stop local malware scanner
@@ -135,6 +138,10 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
+      - name: Audit web runtime and high-severity tooling dependencies
+        run: |
+          npm audit --omit=dev --audit-level=low
+          npm audit --audit-level=high --json > frontend-dependency-audit.json
       - name: Check generated API types and browser transport
         run: |
           npm run integration:check
@@ -158,6 +165,7 @@ jobs:
           path: |
             tmp/phase6/
             frontend/test-results/
+            frontend/frontend-dependency-audit.json
           if-no-files-found: warn
           retention-days: 7
       - name: Save production bundle

@@ -18,7 +18,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0.36,<3",
     "uvicorn[standard]>=0.34,<1",
     "pyjwt>=2.10,<3",
-    "cryptography>=44,<48",
+    "cryptography>=50.0.2,<51",
     "google-auth>=2.62.0",
     "requests>=2.34.2",
 ]
@@ -29,8 +29,9 @@ dev = [
     "httpx>=0.28,<1",
     "hypothesis>=6.120,<7",
     "mypy>=1.14,<2",
-    "pytest>=8.3,<9",
-    "pytest-asyncio>=0.25,<1",
+    "pytest>=9.0.3,<10",
+    "pytest-asyncio>=1.3,<2",
+    "pip-audit>=2.10,<3",
     "ruff>=0.9,<1",
 ]
 
@@ -60,6 +61,7 @@ plugins = ["pydantic.mypy"]
 # Avoid expanded argument dumps containing connection credentials on failures.
 addopts = "--tb=short"
 asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
 
 [tool.coverage.run]

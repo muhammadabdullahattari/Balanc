@@ -105,3 +105,23 @@ Follow docs/password-session-csrf-security.md. Never log credentials or serializ
 - Extend the real PostgreSQL query-budget and failure regressions in `backend/tests/test_database_audit.py` when changing these paths. Verify rollback, safe errors, tenant isolation, idempotency and exact accounting outputs. Never blindly retry financial commits with an uncertain outcome; use existing idempotency/reconciliation semantics.
 
 See `docs/database-query-audit.md` for audit scope, evidence and capacity limits.
+
+## QA regression amendment — 5 November 2026
+
+- Follow `docs/qa-findings-resolution.md`. Verify a report's technical claims before changing established security or accounting boundaries; record corrected assumptions and intentional protections.
+- Outstanding-balance consumers share one request-local aggregate and retain separate historical/current cutoffs. Bound report source reads and reject quota overflow; never return silently truncated financial totals. Dashboard balance checkpoints are capped at 14.
+- Optional verification-mail failure may continue only through its explicit savepoint policy. Preserve pending identity and browser binding, roll back unsent issuance/counters, and propagate all other failures. Do not claim `flush()` commits data or promise a durable email queue.
+- Operational events use the safe telemetry allowlist. Log UUID correlation, stage, codes, error class and bounded stack locations; never exception messages, SQL/parameters, credentials, source filenames or storage keys. Staged audit logs do not prove transaction commit. Unknown audit-detail keys generate only an omission count.
+- Keep invalid credentials generic. Reveal account/session recovery states only after the relevant proof, and do not refresh terminal session failures. Preserve nonblocking bounded password-hash admission.
+- Use configured admission timing throughout authentication, user and business limits. Obtain scanner version and positive verdict in one bounded verified session. Preserve import facade contracts, shared batch validation and canonical posting during workflow refactors.
+
+## Security checklist amendment — 3 November 2026
+
+- Preserve the controls and explicit exceptions in `docs/security-checklist-audit.md`. Do not mark absent webhooks, cloud buckets or an external/model-branded review as verified implementations.
+- Keep security headers and hosted HTTPS admission outside CORS, including preflight, early rejections and unexpected errors. Hosted docs/debug stay disabled. Development Swagger and HMR exceptions must not become production exceptions.
+- Preserve the production web CSP: exact API origin and approved GIS endpoints, no inline scripts/eval, object/base restrictions and response-level anti-framing. Review changes against real browser tests; do not widen destinations to `*` or arbitrary HTTPS merely to silence CSP errors.
+- Every new private API operation must pass the auth-inventory gate. Public auth/recovery/refresh exceptions require their own validated proof. Enforce tenant, object, role and MFA permissions in the API/database regardless of frontend visibility.
+- Preserve durable per-user admission outside workspace routes, existing auth/workspace limits, and one admission per upload request. Add edge/unauthenticated flood controls when deploying; do not claim the local limiter proves production capacity.
+- Keep patched dependencies locked. CI audits Python and web runtime dependencies and high/critical development findings. Record unresolved moderate development advisories, exposure, compatibility blockers and a review date; never silently ignore/downgrade a vulnerable runtime package or force incompatible transitive majors.
+- Product assistant/chat input must never become shell, SQL, migration or financial execution authority. OCR subprocesses use fixed argument arrays without a shell and retain private authentication, resource/privilege restrictions and bounded parsing.
+- Runtime environment files in the Linux deployment helper must be root-owned mode 600. Capability/no-new-privilege/PID protections apply to rollback containers as well as new containers. Actual ingress, storage permissions, egress and monitoring require deployed verification.

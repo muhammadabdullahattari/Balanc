@@ -65,6 +65,18 @@ export function createApiClient(baseUrl: string, timeoutMs = 30_000) {
         request.method === "GET" &&
         pathname !== "/api/v1/auth/csrf"
       ) {
+        const body = await response
+          .clone()
+          .json()
+          .catch(() => undefined);
+        // Terminal session failures cannot be repaired by rotating a refresh token.
+        if (
+          body?.error?.code &&
+          !["ERR_AUTH", "ERR_ACCESS_EXPIRED"].includes(body.error.code)
+        ) {
+          csrf = undefined;
+          return response;
+        }
         refreshRequest ??= client
           .POST("/api/v1/auth/refresh")
           .then((r) => r.response.ok)

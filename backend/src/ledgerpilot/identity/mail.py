@@ -6,14 +6,22 @@ from email.message import EmailMessage
 from ledgerpilot.config import Settings
 from ledgerpilot.shared.errors import DomainError
 
+SUBJECTS = {
+    "verify": "LedgerPilot — Verify your email",
+    "reset": "LedgerPilot — Reset your password",
+    "business invitation": "LedgerPilot — Your business invitation",
+}
+
 
 def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> None:
+    if purpose not in SUBJECTS:
+        raise ValueError("Unsupported identity email purpose")
     if not settings.auth_delivery_enabled:
         raise DomainError("ERR_MAIL_UNAVAILABLE", "Identity email delivery is not configured.", 503)
     message = EmailMessage()
     message["From"] = settings.smtp_from
     message["To"] = recipient
-    message["Subject"] = f"LedgerPilot {purpose}"
+    message["Subject"] = SUBJECTS[purpose]
     lifetime = (
         "15 minutes. Only the newest code works." if purpose in {"verify", "reset"} else "48 hours."
     )

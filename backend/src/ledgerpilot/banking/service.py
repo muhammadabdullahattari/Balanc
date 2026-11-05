@@ -11,9 +11,11 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import func, select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from ledgerpilot.accounting.models import Journal, JournalLine, Period
+from ledgerpilot.accounting.models import Account, Journal, JournalLine, Period
+from ledgerpilot.accounting.schemas import LineCreate
 from ledgerpilot.audit.service import record
 from ledgerpilot.banking.models import BankImport, BankMatch, BankRow, BankRule
 from ledgerpilot.banking.schemas import BankDisposition, CSVImport, CSVPreview
@@ -129,7 +131,7 @@ def import_csv(
     )
     db.add(item)
     db.flush()
-    created = 0
+    new_rows = []
     source_ids: set[str] = set()
     existing_rows = {
         row.external_id: row
@@ -148,7 +150,8 @@ def import_csv(
         if external_id:
             if external_id in source_ids:
                 raise DomainError(
-                    "ERR_SOURCE_DUPLICATE", "Duplicate source identifier within file."
+                    "ERR_SOURCE_DUPLICATE",
+                    f"Row {row['position']} repeats a source identifier within this file.",
                 )
             source_ids.add(external_id)
             existing = existing_rows.get(external_id)
@@ -159,11 +162,13 @@ def import_csv(
                     or existing.description != row["description"]
                 ):
                     raise DomainError(
-                        "ERR_SOURCE_CONFLICT", "Source ID has inconsistent content.", 409
+                        "ERR_SOURCE_CONFLICT",
+                        f"Row {row['position']} conflicts with an already imported source.",
+                        409,
                     )
                 continue
-        db.add(
-            BankRow(
+        new_rows.append(
+            dict(
                 business_id=bid,
                 import_id=item.id,
                 account_id=data.account_id,
@@ -175,9 +180,10 @@ def import_csv(
                 external_id=external_id,
             )
         )
-        created += 1
+    if new_rows:
+        db.execute(insert(BankRow).values(new_rows))
     record(db, who.user.id, "bank.imported", bid, item.id)
-    return {"id": str(item.id), "reimport": False, "created": created}
+    return {"id": str(item.id), "reimport": False, "created": len(new_rows)}
 
 
 def bank_row(db: Session, bid: UUID, rid: UUID) -> BankRow:
@@ -185,6 +191,181 @@ def bank_row(db: Session, bid: UUID, rid: UUID) -> BankRow:
     if not row:
         raise DomainError("ERR_NOT_FOUND", "Bank transaction not found.", 404)
     return row
+
+
+def _match_journals(db: Session, bid: UUID, row: BankRow, data: BankDisposition) -> list[UUID]:
+    if (
+        bool(data.journal_id) == bool(data.journal_ids)
+        or data.splits
+        or data.peer_id
+        or data.target_account_id
+    ):
+        raise DomainError("ERR_MATCH", "Select one journal or one explicit journal bundle.")
+    consumed = [data.journal_id] if data.journal_id else data.journal_ids
+    journals = list(
+        db.scalars(
+            select(Journal).where(
+                Journal.business_id == bid,
+                Journal.id.in_(consumed),
+                Journal.status == "posted",
+                Journal.accounting_date <= row.accounting_date,
+            )
+        )
+    )
+    movements = dict(
+        db.execute(
+            select(JournalLine.journal_id, func.sum(JournalLine.debit - JournalLine.credit))
+            .where(
+                JournalLine.business_id == bid,
+                JournalLine.journal_id.in_(consumed),
+                JournalLine.account_id == row.account_id,
+            )
+            .group_by(JournalLine.journal_id)
+        ).all()
+    )
+    if len(journals) != len(consumed) or any(not movements.get(j) for j in consumed):
+        raise DomainError(
+            "ERR_MATCH", "Every selected source must have a compatible posted bank movement."
+        )
+    if sum(movements.values(), Decimal(0)) != row.amount:
+        raise DomainError("ERR_MATCH", "The selected journal bundle must equal the bank movement.")
+    already = db.scalar(
+        select(BankRow.id).where(
+            BankRow.business_id == bid,
+            BankRow.account_id == row.account_id,
+            BankRow.journal_id.in_(consumed),
+        )
+    )
+    already = already or db.scalar(
+        select(BankMatch.id).where(
+            BankMatch.business_id == bid,
+            BankMatch.account_id == row.account_id,
+            BankMatch.journal_id.in_(consumed),
+        )
+    )
+    if already:
+        raise DomainError("ERR_MATCH", "A selected bank movement has already been consumed.", 409)
+    return consumed
+
+
+def _transfer_line(
+    db: Session,
+    bid: UUID,
+    row: BankRow,
+    data: BankDisposition,
+    source_account: Account,
+    amount: Decimal,
+    incoming: bool,
+) -> tuple[LineCreate, BankRow | None, bool]:
+    peer: BankRow | None = None
+    late_peer = False
+    if not data.target_account_id or data.target_account_id == row.account_id or data.splits:
+        raise DomainError("ERR_TRANSFER", "A separate target account is required.")
+    target = ops.account(
+        db,
+        bid,
+        data.target_account_id,
+        {"liability"}
+        if data.action == "card_payment" and source_account.kind == "asset"
+        else {"asset"},
+        control="clearing"
+        if data.action == "transfer" and (not data.peer_id or data.allow_clearing)
+        else None,
+        plain=not (data.action == "transfer" and (not data.peer_id or data.allow_clearing)),
+    )
+    if data.action == "card_payment" and incoming != (source_account.kind == "liability"):
+        raise DomainError(
+            "ERR_TRANSFER",
+            "A card settlement must debit the liability and credit the cash account.",
+        )
+    if data.action == "transfer" and source_account.kind != "asset":
+        raise DomainError(
+            "ERR_TRANSFER", "Use card-payment disposition for credit-card liabilities."
+        )
+    if data.peer_id:
+        peer = bank_row(db, bid, data.peer_id)
+        late_peer = data.action == "transfer" and data.allow_clearing
+        if late_peer:
+            original = db.scalar(
+                select(Operation).where(
+                    Operation.business_id == bid,
+                    Operation.action == f"bank.{peer.id}.disposed",
+                )
+            )
+            clearing = db.scalar(
+                select(func.sum(JournalLine.debit - JournalLine.credit)).where(
+                    JournalLine.business_id == bid,
+                    JournalLine.journal_id == peer.journal_id,
+                    JournalLine.account_id == target.id,
+                )
+            )
+            linked = db.scalar(
+                select(BankRow.id).where(BankRow.business_id == bid, BankRow.peer_id == peer.id)
+            )
+            if (
+                not original
+                or original.result.get("disposition") != "transfer"
+                or peer.state != "categorized"
+                or peer.peer_id is not None
+                or linked is not None
+                or peer.account_id == row.account_id
+                or peer.id == row.id
+                or peer.amount != -row.amount
+                or clearing != row.amount
+                or peer.accounting_date > row.accounting_date
+            ):
+                raise DomainError(
+                    "ERR_TRANSFER",
+                    "Select the unlinked earlier transfer into this clearing account.",
+                )
+        elif (
+            peer.account_id != target.id
+            or peer.amount != -row.amount
+            or peer.state != "for_review"
+            or peer.id == row.id
+            or peer.accounting_date != row.accounting_date
+        ):
+            raise DomainError(
+                "ERR_TRANSFER", "Peer must be the unconsumed opposite same-day bank side."
+            )
+    elif data.action == "transfer" and not data.allow_clearing:
+        raise DomainError("ERR_TRANSFER", "Select the counterpart or explicitly approve clearing.")
+    # Single-side transfers require an explicitly chosen clearing account;
+    # later disposition moves that clearing balance into the receiving bank.
+    return ops.line(target.id, amount, debit=not incoming), peer, late_peer
+
+
+def _category_lines(
+    db: Session,
+    bid: UUID,
+    row: BankRow,
+    data: BankDisposition,
+    business: Business,
+    amount: Decimal,
+    incoming: bool,
+) -> list[LineCreate]:
+    lines: list[LineCreate] = []
+    if data.peer_id or data.journal_id or data.target_account_id:
+        raise DomainError("ERR_DISPOSITION", "Categorization requires split lines only.")
+    if not data.splits or (data.action == "categorize" and len(data.splits) != 1):
+        raise DomainError("ERR_SPLIT", "Supply the explicit category allocations.")
+    total = Decimal(0)
+    accounts = ops.load_accounts(db, bid, [s.account_id for s in data.splits])
+    for split in data.splits:
+        if split.account_id == row.account_id:
+            raise DomainError("ERR_SPLIT", "Category cannot equal the bank account.")
+        # AR/AP/loans require the source modules to keep control tie-outs intact.
+        ops.validate_account(
+            accounts.get(split.account_id),
+            {"asset", "liability", "equity", "income", "expense"},
+            plain=True,
+        )
+        value = ops.money(split.amount, business)
+        total += value
+        lines.append(ops.line(split.account_id, value, debit=not incoming))
+    if total != amount:
+        raise DomainError("ERR_SPLIT", "Split total must equal the bank amount exactly.")
+    return lines
 
 
 def dispose(
@@ -217,6 +398,7 @@ def dispose(
     }
     journal_id = None
     late_peer = False
+    peer: BankRow | None = None
     consumed: list[UUID] = []
     if data.action == "exclude":
         if (
@@ -233,61 +415,7 @@ def dispose(
             return {**base_preview, "action": "exclude", "lines": []}
         row.state = "excluded"
     elif data.action == "match":
-        if (
-            bool(data.journal_id) == bool(data.journal_ids)
-            or data.splits
-            or data.peer_id
-            or data.target_account_id
-        ):
-            raise DomainError("ERR_MATCH", "Select one journal or one explicit journal bundle.")
-        consumed = [data.journal_id] if data.journal_id else data.journal_ids
-        journals = list(
-            db.scalars(
-                select(Journal).where(
-                    Journal.business_id == bid,
-                    Journal.id.in_(consumed),
-                    Journal.status == "posted",
-                    Journal.accounting_date <= row.accounting_date,
-                )
-            )
-        )
-        movements = dict(
-            db.execute(
-                select(JournalLine.journal_id, func.sum(JournalLine.debit - JournalLine.credit))
-                .where(
-                    JournalLine.business_id == bid,
-                    JournalLine.journal_id.in_(consumed),
-                    JournalLine.account_id == row.account_id,
-                )
-                .group_by(JournalLine.journal_id)
-            ).all()
-        )
-        if len(journals) != len(consumed) or any(not movements.get(j) for j in consumed):
-            raise DomainError(
-                "ERR_MATCH", "Every selected source must have a compatible posted bank movement."
-            )
-        if sum(movements.values(), Decimal(0)) != row.amount:
-            raise DomainError(
-                "ERR_MATCH", "The selected journal bundle must equal the bank movement."
-            )
-        already = db.scalar(
-            select(BankRow.id).where(
-                BankRow.business_id == bid,
-                BankRow.account_id == row.account_id,
-                BankRow.journal_id.in_(consumed),
-            )
-        )
-        already = already or db.scalar(
-            select(BankMatch.id).where(
-                BankMatch.business_id == bid,
-                BankMatch.account_id == row.account_id,
-                BankMatch.journal_id.in_(consumed),
-            )
-        )
-        if already:
-            raise DomainError(
-                "ERR_MATCH", "A selected bank movement has already been consumed.", 409
-            )
+        consumed = _match_journals(db, bid, row, data)
         if preview_only:
             return {
                 **base_preview,
@@ -303,109 +431,12 @@ def dispose(
             )
         lines = [ops.line(row.account_id, amount, debit=incoming)]
         if data.action in {"transfer", "card_payment"}:
-            if (
-                not data.target_account_id
-                or data.target_account_id == row.account_id
-                or data.splits
-            ):
-                raise DomainError("ERR_TRANSFER", "A separate target account is required.")
-            target = ops.account(
-                db,
-                bid,
-                data.target_account_id,
-                {"liability"}
-                if data.action == "card_payment" and source_account.kind == "asset"
-                else {"asset"},
-                control="clearing"
-                if data.action == "transfer" and (not data.peer_id or data.allow_clearing)
-                else None,
-                plain=not (data.action == "transfer" and (not data.peer_id or data.allow_clearing)),
+            target_line, peer, late_peer = _transfer_line(
+                db, bid, row, data, source_account, amount, incoming
             )
-            if data.action == "card_payment" and incoming != (source_account.kind == "liability"):
-                raise DomainError(
-                    "ERR_TRANSFER",
-                    "A card settlement must debit the liability and credit the cash account.",
-                )
-            if data.action == "transfer" and source_account.kind != "asset":
-                raise DomainError(
-                    "ERR_TRANSFER", "Use card-payment disposition for credit-card liabilities."
-                )
-            if data.peer_id:
-                peer = bank_row(db, bid, data.peer_id)
-                late_peer = data.action == "transfer" and data.allow_clearing
-                if late_peer:
-                    original = db.scalar(
-                        select(Operation).where(
-                            Operation.business_id == bid,
-                            Operation.action == f"bank.{peer.id}.disposed",
-                        )
-                    )
-                    clearing = db.scalar(
-                        select(func.sum(JournalLine.debit - JournalLine.credit)).where(
-                            JournalLine.business_id == bid,
-                            JournalLine.journal_id == peer.journal_id,
-                            JournalLine.account_id == target.id,
-                        )
-                    )
-                    linked = db.scalar(
-                        select(BankRow.id).where(
-                            BankRow.business_id == bid, BankRow.peer_id == peer.id
-                        )
-                    )
-                    if (
-                        not original
-                        or original.result.get("disposition") != "transfer"
-                        or peer.state != "categorized"
-                        or peer.peer_id is not None
-                        or linked is not None
-                        or peer.account_id == row.account_id
-                        or peer.id == row.id
-                        or peer.amount != -row.amount
-                        or clearing != row.amount
-                        or peer.accounting_date > row.accounting_date
-                    ):
-                        raise DomainError(
-                            "ERR_TRANSFER",
-                            "Select the unlinked earlier transfer into this clearing account.",
-                        )
-                elif (
-                    peer.account_id != target.id
-                    or peer.amount != -row.amount
-                    or peer.state != "for_review"
-                    or peer.id == row.id
-                    or peer.accounting_date != row.accounting_date
-                ):
-                    raise DomainError(
-                        "ERR_TRANSFER", "Peer must be the unconsumed opposite same-day bank side."
-                    )
-            elif data.action == "transfer" and not data.allow_clearing:
-                raise DomainError(
-                    "ERR_TRANSFER", "Select the counterpart or explicitly approve clearing."
-                )
-            # Single-side transfers require an explicitly chosen clearing account;
-            # later disposition moves that clearing balance into the receiving bank.
-            lines.append(ops.line(target.id, amount, debit=not incoming))
+            lines.append(target_line)
         else:
-            if data.peer_id or data.journal_id or data.target_account_id:
-                raise DomainError("ERR_DISPOSITION", "Categorization requires split lines only.")
-            if not data.splits or (data.action == "categorize" and len(data.splits) != 1):
-                raise DomainError("ERR_SPLIT", "Supply the explicit category allocations.")
-            total = Decimal(0)
-            accounts = ops.load_accounts(db, bid, [s.account_id for s in data.splits])
-            for split in data.splits:
-                if split.account_id == row.account_id:
-                    raise DomainError("ERR_SPLIT", "Category cannot equal the bank account.")
-                # AR/AP/loans require the source modules to keep control tie-outs intact.
-                ops.validate_account(
-                    accounts.get(split.account_id),
-                    {"asset", "liability", "equity", "income", "expense"},
-                    plain=True,
-                )
-                value = ops.money(split.amount, business)
-                total += value
-                lines.append(ops.line(split.account_id, value, debit=not incoming))
-            if total != amount:
-                raise DomainError("ERR_SPLIT", "Split total must equal the bank amount exactly.")
+            lines.extend(_category_lines(db, bid, row, data, business, amount, incoming))
         if preview_only:
             period = db.scalar(
                 select(Period.id).where(
@@ -425,6 +456,7 @@ def dispose(
         consumed = [journal_id]
         row.state = "categorized"
         if data.peer_id:
+            assert peer is not None
             row.peer_id = peer.id
             if not late_peer:
                 peer.peer_id = row.id

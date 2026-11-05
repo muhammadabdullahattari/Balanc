@@ -1,0 +1,261 @@
+{
+  "date": "2026-11-03",
+  "recorded_at": "2026-11-03T14:04:09.779162+00:00",
+  "status": "implemented-and-locally-verified-with-explicit-open-items",
+  "checklist": [
+    {
+      "number": 1,
+      "control": "Row-level security",
+      "status": "verified locally",
+      "evidence": "Actual tenant tables have RLS enabled and forced. The runtime role cannot bypass RLS or act as a superuser. Identity/membership checks bind transaction-local tenant scope. PostgreSQL and API cross-tenant regressions verify rejection."
+    },
+    {
+      "number": 2,
+      "control": "Auth on every API route",
+      "status": "verified with explicit exceptions",
+      "evidence": "An inventory test requires owned cookie authentication on every private OpenAPI operation. Public registration/login/recovery/verification/Google-proof initiation, CSRF/config and minimal health endpoints are deliberate exceptions. Refresh authenticates its stored refresh token rather than requiring a still-valid access token. Privileged business actions require server-side membership/permissions and MFA."
+    },
+    {
+      "number": 3,
+      "control": "Never trust the frontend",
+      "status": "verified locally",
+      "evidence": "Pydantic schemas reject undeclared fields; the API and PostgreSQL enforce permissions, currency precision, balances, dates, period locks, immutability and idempotency. Client-side visibility or totals cannot grant authority."
+    },
+    {
+      "number": 4,
+      "control": "Rate limiting",
+      "status": "repaired and tested",
+      "evidence": "Auth IP/email, global authenticated user and workspace/user limits use durable shared PostgreSQL counters. Production edge limits for unauthenticated floods and resource-intensive traffic still require proxy/network configuration and load verification. There are no public API keys in current P1."
+    },
+    {
+      "number": 5,
+      "control": "Sanitize input",
+      "status": "verified for implemented paths",
+      "evidence": "Use strict type/length/range validation plus context-specific output encoding, not destructive rewriting of financial evidence. React renders text, exports escape HTML and spreadsheet-formula cells, and user input is never treated as executable markup/SQL. The new browser test proves CSP blocks an injected inline script."
+    },
+    {
+      "number": 6,
+      "control": "Parameterized queries",
+      "status": "verified locally",
+      "evidence": "SQLAlchemy/bound SQL handle user values. Administrative identifiers are quoted by the database driver's identifier APIs. Transaction rollback and safe database-error envelopes are covered by the preceding database audit."
+    },
+    {
+      "number": 7,
+      "control": "Lock down CORS",
+      "status": "verified locally",
+      "evidence": "Origins must be explicit, with no wildcard or URL credentials/path. Methods and headers are bounded. Tests verify allowed and denied preflight; CSRF/Origin checks independently protect writes. CORS is not used as authentication."
+    },
+    {
+      "number": 8,
+      "control": "HTTPS everywhere",
+      "status": "implemented; deployment verification pending",
+      "evidence": "Hosted API HTTP requests are rejected before bodies/preflight; HTTPS gets HSTS. Auth cookies are Secure/HttpOnly with explicit SameSite. Hosted PostgreSQL requires verified TLS, and enabled hosted SMTP requires TLS. Private health probes and local same-origin loopback are documented exceptions. Actual certificates, trusted proxy peers, public ingress and Vercel/AWS behavior must be verified in Phase 9/10."
+    },
+    {
+      "number": 9,
+      "control": "Verify webhook signatures",
+      "status": "not applicable to current P1",
+      "evidence": "No inbound webhook route exists. This is not marked as a verified webhook implementation. Any future connector must validate raw-body signatures, timestamps/replay, event idempotency and mapped tenant authority before activation; it must not receive a blanket CSRF/auth bypass."
+    },
+    {
+      "number": 10,
+      "control": "No commands from chat text",
+      "status": "verified for the current product assistant",
+      "evidence": "It accepts an allowlisted report metric and returns an authorized report lookup with `actions_executed=false`. It has no arbitrary prompt-to-SQL, shell, migration, payment or posting executor. This refers to the product, not authorized developer tooling used to maintain the repository."
+    },
+    {
+      "number": 11,
+      "control": "Debug mode off in production",
+      "status": "verified configuration",
+      "evidence": "FastAPI debug is false, hosted Swagger/OpenAPI/Redoc routes are unavailable, and errors redact exception/SQL details. Local Swagger has a narrowly documented CSP exception for its existing development assets."
+    },
+    {
+      "number": 12,
+      "control": "Claude security review",
+      "status": "not a technical security control",
+      "evidence": "This audit and its tests were performed; no separate Claude service or independent external penetration test was run. A model/vendor label cannot replace the controls or prove absence of vulnerabilities."
+    },
+    {
+      "number": 13,
+      "control": "Private storage buckets",
+      "status": "local adapter verified; cloud gate pending",
+      "evidence": "Current originals are encrypted private files with generated keys, containment checks, restrictive Linux modes, quarantine and authorized attachment-only downloads. There is no cloud bucket to audit yet. Cloud public-access blocking, IAM, encryption/retention policy and deployed volume/host ACLs require actual infrastructure verification before cloud storage is enabled."
+    },
+    {
+      "number": 14,
+      "control": "Lock dangerous tools",
+      "status": "verified for current scope",
+      "evidence": "No generic execution/admin tool endpoint exists. OCR uses fixed argument arrays, timeouts, a private bearer token and an unprivileged, read-only, resource-limited container without financial credentials or Docker socket. Its ports are loopback-published. Production egress restrictions remain an infrastructure gate; the local Docker Desktop bridge is not claimed to be an outbound firewall."
+    },
+    {
+      "number": 15,
+      "control": "Hide admin pages properly",
+      "status": "server authorization verified",
+      "evidence": "URL secrecy is not a control. Workspace administration/settings are backed by owned identity, active membership, role/permission and MFA checks. Changing client-side routes or role fields cannot grant administrative access."
+    },
+    {
+      "number": 16,
+      "control": "Update vulnerable packages",
+      "status": "partially closed",
+      "evidence": "Python and web runtime audits now report zero known advisories. Three moderate dev-tool findings remain for one minimatch advisory in the OpenAPI generator chain; see below. Container OS/platform scans and live image promotion remain deployment checks."
+    },
+    {
+      "number": 17,
+      "control": "Security headers",
+      "status": "repaired and locally verified",
+      "evidence": "API success/rejection/error/CORS responses and production browser script enforcement are tested. The configured Vercel headers still require verification on the deployed hostname. CSP is defense in depth, not a substitute for server validation or safe rendering."
+    },
+    {
+      "number": 18,
+      "control": "Check file upload types",
+      "status": "verified for supported pilot paths",
+      "evidence": "Auth/role checks precede upload buffering; size/type/extension checks and generated storage keys apply. Originals remain quarantined until a positive ClamAV result. Only supported inputs reach bounded OCR; unsupported HEIC/XLSX inputs do not become executable content or unrestricted parsers. Downloads use attachment/octet-stream and nosniff, not inline user HTML."
+    },
+    {
+      "number": 19,
+      "control": "Stop IDOR bugs",
+      "status": "verified on tested routes",
+      "evidence": "Membership and tenant/object ownership are checked on the server and reinforced by RLS, including evidence, reports, exports and newly batched queries. Forbidden/unshared records do not become accessible by changing UUIDs. This is regression evidence, not a mathematical guarantee for every future endpoint."
+    },
+    {
+      "number": 20,
+      "control": "Log admin actions",
+      "status": "verified locally",
+      "evidence": "Security/business changes write scoped audit events in the business transaction. Runtime DELETE of audit history is denied. Logs/errors do not contain credentials, tokens or private request bodies. Production collection, alert delivery, retention and incident response still need operational verification."
+    }
+  ],
+  "backend": {
+    "full_run": {
+      "total": 155,
+      "passed": 154,
+      "failed": 1,
+      "skipped": 0
+    },
+    "focused_followup": {
+      "total": 25,
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0
+    },
+    "identity_recheck_before_test_refinement": {
+      "total": 20,
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0
+    },
+    "unique_cases_verified_passing": 155,
+    "all_full_run_cases_have_passing_evidence": true,
+    "single_full_run_all_passed": false,
+    "initial_failure_names": [
+      "test_parallel_registration_cannot_bypass_daily_limit_and_expiry_restores_requests"
+    ],
+    "resolution": "The concurrent-registration test assumed every parallel attempt must succeed. The 503 backpressure contract was retained; the test now validates committed issuance counts, controlled completion and the three-issuance/24-hour pause. The updated identity/checklist follow-up passed 25/25. No application admission/hash/lock/rate guards were relaxed. Production logic did not change between the full and focused runs; later main.py changes were formatting only."
+  },
+  "frontend": {
+    "component_and_accessibility_tests": 40,
+    "transport_tests": 8,
+    "chromium_ui_and_csp_tests": 11,
+    "production_build": "passed",
+    "types": "passed",
+    "generated_api_types": "passed",
+    "integration_inventory": "122 call sites / 94 operations",
+    "private_bundle_value_matches": 0,
+    "source_maps": 0
+  },
+  "dependencies": {
+    "python_before_unique_advisory_ids": [
+      "GHSA-537c-gmf6-5ccf",
+      "PYSEC-2026-1845",
+      "PYSEC-2026-3552",
+      "PYSEC-2026-3553",
+      "PYSEC-2026-3554"
+    ],
+    "python_after_audited_entries": 84,
+    "python_after_known_advisories": 0,
+    "cryptography": "50.0.2",
+    "pytest": "9.2.0",
+    "pytest_asyncio": "1.4.1.post1",
+    "fernet_previous_version_decryption": "passed; synthetic ciphertext from 47.0.0 decrypted after upgrade",
+    "web_runtime": {
+      "info": 0,
+      "low": 0,
+      "moderate": 0,
+      "high": 0,
+      "critical": 0,
+      "total": 0
+    },
+    "web_full_tree": {
+      "info": 0,
+      "low": 0,
+      "moderate": 3,
+      "high": 0,
+      "critical": 0,
+      "total": 3
+    },
+    "open_advisory": "GHSA-g3hv-75wg-m249",
+    "affected_development_packages": [
+      "minimatch",
+      "@redocly/openapi-core",
+      "openapi-typescript"
+    ],
+    "review_by": "2026-12-03"
+  },
+  "other_checks": {
+    "ruff": "passed",
+    "mypy": "passed; 92 source files",
+    "openapi": "passed; 126 paths unchanged",
+    "traceability": "passed; 104 references; not an acceptance verdict",
+    "uv_lock_offline": "passed; 85 resolved packages",
+    "workflow_yaml": "valid",
+    "deployment_helper": "Linux bash syntax valid; synthetic root-owned mode-644 environment file rejected before cloud commands",
+    "ocr_image": "rebuilt and healthy locally; includes patched dependencies and malformed bearer rejection",
+    "git_whitespace": "passed"
+  },
+  "deployment": {
+    "schema_revision": "0022",
+    "phase_order_changed": false,
+    "cloud_deployed": false,
+    "hosted_CI_run": false,
+    "commit_or_push": false,
+    "long_running_API_restart": "Existing manually launched API processes must reload/restart to use updated code/dependencies; verification used fresh application instances."
+  },
+  "remaining_gates": [
+    "One moderate development-tool advisory affecting three packages; compatible upstream update or separately tested generator migration required",
+    "Live TLS, trusted proxy, ingress/edge abuse settings and deployed headers/CSP",
+    "Cloud bucket/private-volume/host access and production egress verification",
+    "Container OS/platform vulnerability scanning and image promotion",
+    "Live Google consent and existing Phase 10 manual/browser sign-off",
+    "Independent penetration test or separate Claude service review was not performed"
+  ],
+  "evidence": [
+    "tmp/security-checklist/backend-final.xml",
+    "tmp/security-checklist/backend-final.log",
+    "tmp/security-checklist/targeted-final.xml",
+    "tmp/security-checklist/targeted-final.log",
+    "tmp/security-checklist/python-before.json",
+    "tmp/security-checklist/python-after.json",
+    "tmp/security-checklist/npm-final.json",
+    "tmp/security-checklist/npm-runtime.json",
+    "tmp/security-checklist/browser.log",
+    "tmp/phase6/browser-results.json"
+  ],
+  "source_sha256": {
+    ".github/workflows/checks.yml": "d6e0fb4d05f07da2cb83bc86bfde17b3e319a0c976694ad2f61b335cfa08e7c1",
+    "backend/pyproject.toml": "2829e9bb184f741d828dbf45cb9ed23a7c1f0daa72de01694a5f25eefc209e21",
+    "backend/src/ledgerpilot/documents/ocr_service.py": "092b96a90ed961b268cfbe3e7a85ec4c9d84f42684103be145bfac65935cf3ff",
+    "backend/src/ledgerpilot/identity/dependencies.py": "ab6cb3bfc2441a193b37b86039dfe96df87b8a31d07961568c058f9dbb4770d5",
+    "backend/src/ledgerpilot/main.py": "fa248d412a860c1edb7f7503b25a24e94b424e39b8cbd789bcd5bd5c2ff5533b",
+    "backend/src/ledgerpilot/shared/middleware.py": "2f4a36c4a445d3aa9e9cfb3c76049d5ce1812adab36f7f388e211c6a44e310bf",
+    "backend/src/ledgerpilot/shared/security_headers.py": "8c44cd7fe70152a7920496e717192b04fb7f42fdbfb928d5f1eb53a9a23918c4",
+    "backend/tests/test_identity_hardening.py": "01fbba42b5b0e19ecb4aeba4142e79d9652dc465bfaad1b45631a2eb72523913",
+    "backend/tests/test_security_checklist.py": "821c6b0d95486296bf9ab6d73500f13a91e682e514c3e34011df4ed050307a1a",
+    "backend/uv.lock": "eaeb6f40e667213d83d3f27ef0e1ebf43c44a2c41b99c5ac8d4877862be64bd5",
+    "deploy/aws/deploy-api.sh": "28414d876cf68f6814aa0ad8ae6cefb33dfad19643c59b656cd9bf01c9d46b21",
+    "frontend/package.json": "dfc3cae34c831293ec649ba5ea10c6b24626f102f1cd8f8288a0cb5a0d6322ce",
+    "frontend/security-policy.ts": "afffbf4802d6348eae53d9c9a3a2d6f978002368159dbfd943dee13e66b63300",
+    "frontend/tests/browser/security.spec.ts": "f5b7a01a4b5a6bfd82c3967320912590ef0cb865c7807739302f6ea651b2e1f2",
+    "frontend/tests/security-policy.test.tsx": "ba9eba20f973e95c22970979d3c3cd354d2ee0a10fafda922beb25150fcb16f8",
+    "frontend/vercel.json": "b6bad735e060835b764a18a0f9f6216bf2f51c1564a1b684be96bb13109d897b",
+    "frontend/vite.config.ts": "68edc16061016f9bbec60b5252b659a9978223fc7b9680524a3158ecb72f2c3f"
+  }
+}

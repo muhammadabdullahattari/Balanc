@@ -16,6 +16,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ledgerpilot.identity.dependencies import CSRF_COOKIE
 from ledgerpilot.identity.security import digest
+from ledgerpilot.shared.telemetry import emit
 
 logger = logging.getLogger("ledgerpilot.requests")
 
@@ -38,6 +39,13 @@ class FoundationMiddleware:
         started = time.monotonic()
 
         async def reject(code: str, message: str, status: int, retry_after: int = 0) -> None:
+            emit(
+                "request.rejected",
+                level=logging.WARNING,
+                code=code,
+                status=status,
+                request_id=request_id,
+            )
             response = JSONResponse(
                 {"error": {"code": code, "message": message}, "request_id": request_id},
                 status_code=status,
@@ -48,17 +56,6 @@ class FoundationMiddleware:
                 },
             )
             await response(scope, receive, send)
-
-        hosted = settings.app_env not in {"local", "test"}
-        health_probe = request.method in {"GET", "HEAD"} and scope["path"] in {
-            "/health/live",
-            "/health/ready",
-        }
-        # The ASGI scheme may only be set from forwarding headers by a trusted proxy.
-        # Do not trust X-Forwarded-Proto directly here or redirect credential POST bodies.
-        if hosted and scope.get("scheme") != "https" and not health_probe:
-            await reject("ERR_HTTPS_REQUIRED", "Use the secure HTTPS address to continue.", 403)
-            return
 
         if request.method not in {"GET", "HEAD", "OPTIONS"}:
             cookie = request.cookies.get(CSRF_COOKIE, "")
@@ -130,10 +127,24 @@ class FoundationMiddleware:
             limited = 0
             try:
                 limited = await run_in_threadpool(
-                    rate_limited, scope["app"].state.rate_sessions, keys
+                    rate_limited,
+                    scope["app"].state.rate_sessions,
+                    keys,
+                    window_seconds=settings.rate_window_seconds,
+                    cooldown_max_seconds=settings.rate_cooldown_max_seconds,
                 )
-            except Exception:
-                await reject("ERR_DEPENDENCY", "Authentication is temporarily unavailable.", 503)
+            except Exception as error:
+                emit(
+                    "rate_limiter.unavailable",
+                    level=logging.ERROR,
+                    error=error,
+                    request_id=request_id,
+                )
+                await reject(
+                    "ERR_DEPENDENCY",
+                    "Request admission is temporarily unavailable. Try again shortly.",
+                    503,
+                )
                 return
             if limited:
                 await reject(
@@ -159,14 +170,14 @@ class FoundationMiddleware:
                         (b"x-content-type-options", b"nosniff"),
                     ]
                 )
-                if hosted and scope.get("scheme") == "https":
-                    headers.append((b"strict-transport-security", b"max-age=31536000"))
                 message["headers"] = headers
                 logger.info(
                     json.dumps(
                         {
                             "event": "request",
                             "request_id": request_id,
+                            "user_id": scope["state"].get("user_id"),
+                            "business_id": scope["state"].get("business_id"),
                             "method": request.method,
                             "status": message["status"],
                             "duration_ms": round((time.monotonic() - started) * 1000, 2),
@@ -178,7 +189,15 @@ class FoundationMiddleware:
         await self.app(scope, replay, correlated)
 
 
-def rate_limited(factory: sessionmaker[Session], keys: list[tuple[str, int]]) -> int:
+def rate_limited(
+    factory: sessionmaker[Session],
+    keys: list[tuple[str, int]],
+    *,
+    window_seconds: int = 60,
+    cooldown_max_seconds: int = 60,
+) -> int:
+    if not 1 <= window_seconds <= 3600 or not 1 <= cooldown_max_seconds <= 3600:
+        raise ValueError("Rate timing must be within the configured bounds")
     delay = 0
     with factory.begin() as db:
         for key, limit in sorted(keys):
@@ -187,27 +206,44 @@ def rate_limited(factory: sessionmaker[Session], keys: list[tuple[str, int]]) ->
                     text("""
                 INSERT INTO app.auth_rate_buckets(key,started_at,attempts,blocked_until)
                 VALUES(:key,now(),1,NULL) ON CONFLICT(key) DO UPDATE SET
-                attempts=CASE WHEN app.auth_rate_buckets.started_at < now()-interval '1 minute'
+                attempts=CASE WHEN app.auth_rate_buckets.started_at <
+                  now()-make_interval(secs=>:window)
                   THEN 1 ELSE least(app.auth_rate_buckets.attempts+1,1000) END,
-                started_at=CASE WHEN app.auth_rate_buckets.started_at < now()-interval '1 minute'
+                started_at=CASE WHEN app.auth_rate_buckets.started_at <
+                  now()-make_interval(secs=>:window)
                   THEN now() ELSE app.auth_rate_buckets.started_at END,
                 blocked_until=CASE
-                  WHEN app.auth_rate_buckets.started_at < now()-interval '1 minute' THEN NULL
+                  WHEN app.auth_rate_buckets.started_at < now()-make_interval(secs=>:window)
+                    THEN CASE WHEN app.auth_rate_buckets.blocked_until>now()
+                      THEN app.auth_rate_buckets.blocked_until ELSE NULL END
                   WHEN app.auth_rate_buckets.attempts>=:budget THEN greatest(
                     coalesce(app.auth_rate_buckets.blocked_until,now()),now()+
-                    least(power(2,least(app.auth_rate_buckets.attempts-:budget,6)),60)::int
+                    least(power(2,least(app.auth_rate_buckets.attempts-:budget,12)),:cooldown)::int
                     * interval '1 second')
                   ELSE app.auth_rate_buckets.blocked_until END
-                RETURNING attempts, ceil(extract(epoch FROM
-                    greatest(blocked_until,started_at+interval '1 minute')-now())) AS wait
+                RETURNING attempts, blocked_until>now() AS blocked, ceil(extract(epoch FROM
+                    greatest(blocked_until,started_at+make_interval(secs=>:window))-now())) AS wait
             """),
-                    {"key": key, "budget": limit},
+                    {
+                        "key": key,
+                        "budget": limit,
+                        "window": window_seconds,
+                        "cooldown": cooldown_max_seconds,
+                    },
                 )
                 .mappings()
                 .one()
             )
-            if row["attempts"] > limit:
+            if row["attempts"] > limit or row["blocked"]:
                 delay = max(delay, max(1, int(row["wait"])))
+    if delay:
+        emit(
+            "rate_limiter.exceeded",
+            level=logging.WARNING,
+            code="ERR_RATE_LIMIT",
+            count=len(keys),
+            window_seconds=window_seconds,
+        )
     return delay
 
 

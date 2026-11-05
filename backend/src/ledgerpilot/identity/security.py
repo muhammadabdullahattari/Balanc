@@ -1,6 +1,7 @@
 """Password, token and one-time MFA primitives; no custom JWT implementation."""
 
 import hashlib
+import logging
 import secrets
 import unicodedata
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from email_validator import EmailNotValidError, validate_email
 
 from ledgerpilot.config import Settings
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import emit
 
 PASSWORDS = PasswordHasher(
     time_cost=3, memory_cost=65536, parallelism=1, hash_len=32, salt_len=16, type=Type.ID
@@ -85,6 +87,7 @@ def normalized_password(value: str, email: str = "") -> str:
 
 def verify_password(encoded: str | None, value: str) -> bool:
     if not PASSWORD_SLOTS.acquire(blocking=False):
+        emit("identity.password_capacity_exhausted", level=logging.WARNING, code="ERR_AUTH_BUSY")
         raise DomainError("ERR_AUTH_BUSY", "Authentication is temporarily busy.", 503)
     try:
         valid = PASSWORDS.verify(encoded or DUMMY_HASH, unicodedata.normalize("NFC", value))
@@ -97,6 +100,7 @@ def verify_password(encoded: str | None, value: str) -> bool:
 
 def hash_password(value: str) -> str:
     if not PASSWORD_SLOTS.acquire(blocking=False):
+        emit("identity.password_capacity_exhausted", level=logging.WARNING, code="ERR_AUTH_BUSY")
         raise DomainError("ERR_AUTH_BUSY", "Authentication is temporarily busy.", 503)
     try:
         return PASSWORDS.hash(value)
@@ -149,6 +153,8 @@ def decode_access(settings: Settings, token: str) -> tuple[UUID, UUID]:
         if claims["exp"] - claims["iat"] > 600:
             raise ValueError
         return UUID(claims["sub"]), UUID(claims["sid"])
+    except jwt.ExpiredSignatureError:
+        raise DomainError("ERR_ACCESS_EXPIRED", "Your access session expired.", 401) from None
     except (jwt.PyJWTError, ValueError, TypeError, KeyError):
         raise DomainError("ERR_AUTH", "Authentication required.", 401) from None
 

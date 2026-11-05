@@ -51,7 +51,7 @@ export function Auth() {
     onSuccess: () => {
       setToken("");
       setNotice(
-        "If eligible, a new code has been sent. Use only the newest email; older codes no longer work.",
+        "Your request was received. Check for the newest email, or try resending shortly. Use only the newest code.",
       );
       setResendWait(60);
     },
@@ -95,12 +95,23 @@ export function Auth() {
         }),
       );
     },
+    onError: (error) => {
+      if (error instanceof ApiError && error.code === "ERR_EMAIL_UNVERIFIED") {
+        setVerificationEmail(getValues("email"));
+        setNotice(
+          "Verify your email using the browser where you signed up. You can request a new code below.",
+        );
+        setMode("verify");
+      }
+    },
     onSuccess: (_data, values) => {
       if (mode === "login")
         void queryClient.invalidateQueries({ queryKey: keys.session });
       else {
         setVerificationEmail(values.email);
-        setNotice("Check your email for your verification code.");
+        setNotice(
+          "Your account is pending verification. Check your email, or try resending shortly.",
+        );
         setMode("verify");
       }
     },

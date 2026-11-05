@@ -1,5 +1,6 @@
 import argparse
 import json
+import logging
 from typing import Any
 from uuid import UUID
 
@@ -11,6 +12,7 @@ from ledgerpilot.config import Settings
 from ledgerpilot.database import build_engine, set_context
 from ledgerpilot.documents import extraction, storage
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.workspace.models import Evidence
 
 
@@ -37,6 +39,7 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
                 raise DomainError("ERR_NOT_FOUND", "Evidence job resource is unavailable.", 404)
             key, digest, media_type = item.object_key, item.content_hash, item.media_type
             job_id, token = claim["id"], claim["lease_token"]
+        emit("evidence.job_claimed", user_id=actor_id, business_id=business_id, job_id=job_id)
         status, scanner, error = "retry", None, None
         result: dict[str, Any] = {}
         try:
@@ -46,7 +49,15 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
                 parsed = extraction.extract(content, media_type, settings)
                 result = parsed.model_dump(mode="json")
                 status = parsed.status
-            except DomainError:
+            except DomainError as exc:
+                emit(
+                    "evidence.extraction_unavailable",
+                    level=logging.WARNING,
+                    error=exc,
+                    code=exc.code,
+                    job_id=job_id,
+                    business_id=business_id,
+                )
                 status, error = "unsupported", "ERR_OCR_UNAVAILABLE"
                 result = {
                     "status": status,
@@ -57,6 +68,14 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
                     "requires_review": True,
                 }
         except DomainError as exc:
+            emit(
+                "evidence.processing_failed",
+                level=logging.WARNING,
+                error=exc,
+                code=exc.code,
+                job_id=job_id,
+                business_id=business_id,
+            )
             if exc.code == "ERR_MALWARE":
                 status = "rejected"
                 result = {
@@ -69,7 +88,15 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
                 }
             else:
                 error = exc.code
-        except Exception:
+        except Exception as exc:
+            emit(
+                "evidence.worker_failed",
+                level=logging.ERROR,
+                error=exc,
+                code="ERR_WORKER",
+                job_id=job_id,
+                business_id=business_id,
+            )
             error = "ERR_WORKER"
         with sessions.begin() as db:
             set_context(db, actor_id, business_id)
@@ -87,6 +114,13 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
                     "result": json.dumps(result),
                 },
             )
+        emit(
+            "evidence.job_completed" if finished else "evidence.lease_rejected",
+            level=logging.INFO if finished else logging.WARNING,
+            job_id=job_id,
+            business_id=business_id,
+            stage=status,
+        )
         return {
             "processed": True,
             "job_id": str(job_id),
@@ -94,7 +128,14 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
             "outcome": status,
             "error_code": error,
         }
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
+        emit(
+            "evidence.database_failed",
+            level=logging.ERROR,
+            error=exc,
+            code="ERR_DEPENDENCY",
+            business_id=business_id,
+        )
         # The transaction contexts have rolled back. Leave an existing lease to
         # expire normally; never report completion or blindly replay a commit.
         raise DomainError(
@@ -111,8 +152,10 @@ def main() -> None:
     parser.add_argument("--actor", required=True, type=UUID)
     parser.add_argument("--business", required=True, type=UUID)
     args = parser.parse_args()
+    settings = Settings()
+    logging.basicConfig(level=settings.log_level, format="%(message)s")
     try:
-        print(json.dumps(run_once(Settings(), args.actor, args.business)))
+        print(json.dumps(run_once(settings, args.actor, args.business)))
     except DomainError as error:
         print(json.dumps({"error": {"code": error.code, "message": error.message}}))
         raise SystemExit(1) from None

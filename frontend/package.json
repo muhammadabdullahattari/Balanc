@@ -15,7 +15,7 @@
     "test:live": "node tests/run-live.mjs",
     "test:browser": "playwright test",
     "test:phase6": "npm run api:check && npm run test:api && npm run test:ui && npm run build && npm run test:browser:types && npm run test:browser && npm run format:check",
-    "test:browser:types": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM tests/browser/phase6.spec.ts playwright.config.ts tests/browser-live/phase8.spec.ts playwright.integration.config.ts",
+    "test:browser:types": "tsc --noEmit --skipLibCheck --target ES2022 --module ESNext --moduleResolution bundler --lib ES2022,DOM security-policy.ts tests/browser/security.spec.ts tests/browser/phase6.spec.ts playwright.config.ts tests/browser-live/phase8.spec.ts playwright.integration.config.ts",
     "integration:check": "node scripts/check-integration.mjs",
     "test:phase7": "npm run integration:check && npm run api:check && npm run test:api && npm run test:ui && npm run build && npm run test:browser:types && npm run test:browser && npm run test:live && npm run format:check",
     "test:browser:live": "node tests/run-browser-live.mjs",

@@ -282,7 +282,9 @@ def health() -> dict[str, str]:
 async def extract(request: Request) -> JSONResponse:
     token = os.environ.get("OCR_SERVICE_TOKEN", "")
     provided = request.headers.get("authorization", "")
-    if len(token) < 32 or not secrets.compare_digest(provided, "Bearer " + token):
+    if len(token) < 32 or not secrets.compare_digest(
+        provided.encode(), ("Bearer " + token).encode()
+    ):
         return JSONResponse({"error": "unauthorized"}, status_code=401)
     if not SLOTS.acquire(blocking=False):
         return JSONResponse({"error": "busy"}, status_code=503)

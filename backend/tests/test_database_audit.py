@@ -57,7 +57,7 @@ def select_count(engine: Engine) -> Iterator[list[str]]:
     statements: list[str] = []
 
     def observe(conn, cursor, statement, parameters, context, executemany):
-        if statement.lstrip().upper().startswith("SELECT"):
+        if statement.lstrip().upper().startswith(("SELECT", "WITH")):
             statements.append(statement)
 
     event.listen(engine, "before_cursor_execute", observe)

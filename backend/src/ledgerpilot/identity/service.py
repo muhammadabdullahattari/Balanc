@@ -1,5 +1,6 @@
 """Verified identity lifecycle and durable session revocation."""
 
+import logging
 import secrets
 from datetime import timedelta
 from uuid import UUID, uuid4
@@ -36,6 +37,7 @@ from ledgerpilot.identity.security import (
     verify_password,
 )
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.tenancy.models import Membership
 
 
@@ -57,7 +59,17 @@ def register(db: Session, settings: Settings, data: Registration, csrf: str) -> 
         if existing and not existing.verified and not existing.suspended:
             existing.password_hash = new_hash
             existing.verification_csrf_hash = digest(csrf)
-            send_action(db, settings, existing.id, email, "verify")
+            # A restarted signup must retire old codes even if SMTP is offline.
+            db.execute(
+                update(ActionToken)
+                .where(
+                    ActionToken.user_id == existing.id,
+                    ActionToken.purpose == "verify",
+                    ActionToken.used_at.is_(None),
+                )
+                .values(used_at=now())
+            )
+            verification_delivery(db, settings, existing.id, email)
         return
     user_id = uuid4()
     set_context(db, user_id)
@@ -76,8 +88,26 @@ def register(db: Session, settings: Settings, data: Registration, csrf: str) -> 
     ).scalar_one_or_none()
     if inserted is None:
         return
-    send_action(db, settings, user_id, email, "verify")
+    verification_delivery(db, settings, user_id, email)
     record(db, user_id, "identity.registered")
+
+
+def verification_delivery(db: Session, settings: Settings, user_id: UUID, email: str) -> None:
+    """Keep the pending identity while rolling back only unsent token issuance.
+
+    begin_nested flushes pending identity/binding changes first. Delivery failure
+    restores token/attempt state; the existing browser-bound resend flow retries.
+    This is not a durable mail queue and never stores or logs a raw action token.
+    """
+    try:
+        with db.begin_nested():
+            send_action(db, settings, user_id, email, "verify")
+    except DomainError as error:
+        if error.code != "ERR_MAIL_UNAVAILABLE":
+            raise
+        emit(
+            "identity.delivery_unavailable", level=logging.WARNING, user_id=user_id, code=error.code
+        )
 
 
 def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purpose: str) -> None:
@@ -149,7 +179,10 @@ def request_action(db: Session, settings: Settings, email: str, purpose: str, cs
             or not secrets.compare_digest(user.verification_csrf_hash, digest(csrf))
         ):
             return
-        send_action(db, settings, user.id, user.email, purpose)
+        if purpose == "verify":
+            verification_delivery(db, settings, user.id, user.email)
+        else:
+            send_action(db, settings, user.id, user.email, purpose)
 
 
 def consume_action(db: Session, raw: str, purpose: str, csrf: str = "") -> User:
@@ -250,8 +283,20 @@ def issue_session(db: Session, settings: Settings, user: User, mfa: bool) -> tup
 def login(db: Session, settings: Settings, data: Credentials) -> tuple[str, str, str]:
     user = repository.by_email(db, canonical_email(data.email))
     valid = verify_password(user.password_hash if user else None, data.password.get_secret_value())
-    if not valid or not user or not user.verified or user.suspended:
+    if not valid or not user:
         raise DomainError("ERR_AUTH", "Authentication failed.", 401)
+    # Only reveal account state after the password was proved correct.
+    if user.suspended:
+        raise DomainError(
+            "ERR_ACCOUNT_UNAVAILABLE", "This account is unavailable. Contact support.", 403
+        )
+    if not user.verified:
+        raise DomainError(
+            "ERR_EMAIL_UNVERIFIED",
+            "Verify your email before signing in. "
+            "Use the browser where you signed up to resend the code.",
+            403,
+        )
     set_context(db, user.id)
     mfa = consume_mfa(
         db,
@@ -265,16 +310,20 @@ def login(db: Session, settings: Settings, data: Credentials) -> tuple[str, str,
 
 def valid_family(db: Session, family: AuthSession | None) -> User:
     user = db.get(User, family.user_id) if family else None
-    if (
-        not family
-        or family.revoked_at
-        or family.expires_at <= now()
-        or not user
-        or user.suspended
-        or not user.verified
-        or family.password_version != user.password_version
-    ):
+    if not family or not user:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
+    if family.revoked_at:
+        raise DomainError("ERR_SESSION_REVOKED", "Your session was ended. Sign in again.", 401)
+    if family.expires_at <= now():
+        raise DomainError("ERR_SESSION_EXPIRED", "Your session expired. Sign in again.", 401)
+    if user.suspended or not user.verified:
+        raise DomainError(
+            "ERR_SESSION_UNAVAILABLE",
+            "Your account cannot use this session. Sign in again or contact support.",
+            401,
+        )
+    if family.password_version != user.password_version:
+        raise DomainError("ERR_SESSION_CHANGED", "Your password changed. Sign in again.", 401)
     privileged = db.scalar(
         select(Membership.user_id)
         .where(
@@ -285,7 +334,9 @@ def valid_family(db: Session, family: AuthSession | None) -> User:
         .limit(1)
     )
     if privileged and family.last_seen_at < now() - timedelta(minutes=15):
-        raise DomainError("ERR_AUTH", "Session expired through inactivity.", 401)
+        raise DomainError(
+            "ERR_SESSION_IDLE", "Your session expired through inactivity. Sign in again.", 401
+        )
     family.last_seen_at = now()
     return user
 
@@ -300,7 +351,7 @@ def refresh(db: Session, settings: Settings, raw: str, csrf: str) -> tuple[str, 
         family.revoked_at = now()
         record(db, family.user_id, "session.refresh_replay", resource_id=family.id)
         db.commit()  # Revocation must survive the rejected request's rollback.
-        raise DomainError("ERR_AUTH", "Authentication required.", 401)
+        raise DomainError("ERR_SESSION_REVOKED", "Your session was ended. Sign in again.", 401)
     user = valid_family(db, family)
     if not token:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
@@ -312,9 +363,20 @@ def refresh(db: Session, settings: Settings, raw: str, csrf: str) -> tuple[str, 
 
 
 def enroll_mfa(db: Session, settings: Settings, user_id: UUID) -> dict[str, str]:
-    user = db.get(User, user_id)
-    db.scalar(select(User).where(User.id == user_id).with_for_update())
-    factor = db.scalar(select(MFAFactor).where(MFAFactor.user_id == user_id).with_for_update())
+    user = db.scalar(
+        select(User)
+        .where(User.id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
+    if user is None:
+        raise DomainError("ERR_AUTH", "Please sign in again.", 401)
+    factor = db.scalar(
+        select(MFAFactor)
+        .where(MFAFactor.user_id == user_id)
+        .with_for_update()
+        .execution_options(populate_existing=True)
+    )
     if factor and factor.verified:
         raise DomainError("ERR_MFA_ENROLLED", "MFA is already enrolled.", 409)
     secret = pyotp.random_base32()
@@ -328,7 +390,7 @@ def enroll_mfa(db: Session, settings: Settings, user_id: UUID) -> dict[str, str]
     return {
         "secret": secret,
         "provisioning_uri": pyotp.TOTP(secret).provisioning_uri(
-            name=user.email if user else str(user_id), issuer_name="LedgerPilot"
+            name=user.email, issuer_name="LedgerPilot"
         ),
     }
 
