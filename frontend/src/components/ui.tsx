@@ -44,6 +44,7 @@ export function Button({
       title={forbidden ? "Your role does not allow this action." : props.title}
       className={`button ${variant} ${props.className || ""}`}
       disabled={busy || props.disabled || forbidden}
+      aria-busy={busy || undefined}
     >
       {busy && <LoaderCircle className="spin" size={16} />} {children}
     </button>
@@ -184,7 +185,7 @@ export function Empty({
         <Inbox size={25} />
       </span>
       <h3>{title}</h3>
-      <p>{children}</p>
+      {children && <p>{children}</p>}
       {action}
     </div>
   );
@@ -192,7 +193,12 @@ export function Empty({
 export function Loading() {
   return (
     <div role="status" className="loading">
-      <LoaderCircle className="spin" size={20} /> Loading your workspaceâ€¦
+      <div className="loading-lines" aria-hidden="true">
+        <i />
+        <i />
+        <i />
+      </div>
+      <span className="sr-only">Loading your workspace…</span>
     </div>
   );
 }
@@ -214,7 +220,7 @@ export function PageHeading({
         <h1>{title}</h1>
         <p className="muted">{description}</p>
       </div>
-      <div className="actions">{actions}</div>
+      {actions && <div className="actions">{actions}</div>}
     </header>
   );
 }
@@ -264,6 +270,64 @@ export function Badge({
   tone?: "neutral" | "good" | "warning";
 }) {
   return <span className={`badge ${tone}`}>{children}</span>;
+}
+export function SectionTabs({
+  id,
+  label,
+  items,
+  value,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  items: ReadonlyArray<readonly [string, string]>;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div className="tabs" role="tablist" aria-label={label}>
+      {items.map(([key, text], index) => (
+        <button
+          type="button"
+          key={key}
+          id={`${id}-${key}`}
+          role="tab"
+          aria-selected={value === key}
+          aria-controls={value === key ? `${id}-panel` : undefined}
+          tabIndex={value === key ? 0 : -1}
+          onClick={() => onChange(key)}
+          onKeyDown={(event) => {
+            const last = items.length - 1;
+            const next =
+              event.key === "ArrowRight"
+                ? index === last
+                  ? 0
+                  : index + 1
+                : event.key === "ArrowLeft"
+                  ? index === 0
+                    ? last
+                    : index - 1
+                  : event.key === "Home"
+                    ? 0
+                    : event.key === "End"
+                      ? last
+                      : undefined;
+            if (next === undefined) return;
+            event.preventDefault();
+            const nextTab =
+              event.currentTarget.parentElement?.querySelectorAll<HTMLButtonElement>(
+                "button",
+              )[next];
+            nextTab?.focus();
+            nextTab?.scrollIntoView({ block: "nearest", inline: "nearest" });
+            onChange(items[next][0]);
+          }}
+        >
+          {text}
+        </button>
+      ))}
+    </div>
+  );
 }
 export function Table<T>({
   rows,

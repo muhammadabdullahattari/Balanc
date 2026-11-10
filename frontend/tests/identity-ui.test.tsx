@@ -4,7 +4,6 @@ import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Auth } from "../src/features/auth";
 import { MFASetup } from "../src/features/onboarding";
-import { GoogleSignIn } from "../src/features/google-signin";
 import { Field, PasswordInput, ErrorNotice } from "../src/components/ui";
 import { api, result, queryClient } from "../src/api/runtime";
 const clients: QueryClient[] = [];
@@ -164,7 +163,8 @@ it("renders authenticator QR locally and keeps manual setup available", async ()
   ).not.toBeNull();
   expect(view.container.querySelector('img[src^="http"]')).toBeNull();
 });
-it("Google button exchanges only credential/nonce/MFA and uses the owned API", async () => {
+it("asks for MFA after Google, then retries a rejected code without choosing an account again", async () => {
+  vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(360);
   vi.spyOn(api, "GET").mockResolvedValue(
     response({
       enabled: true,
@@ -180,7 +180,8 @@ it("Google button exchanges only credential/nonce/MFA and uses the owned API", a
           callback = options.callback;
           expect(options.nonce).toBe("synthetic-nonce");
         },
-        renderButton: (node) => {
+        renderButton: (node, options) => {
+          expect(options.width).toBe("360");
           const b = document.createElement("button");
           b.textContent = "Google test button";
           b.onclick = () =>
@@ -191,33 +192,137 @@ it("Google button exchanges only credential/nonce/MFA and uses the owned API", a
       },
     },
   };
-  const post = vi.spyOn(api, "POST").mockImplementation(
-    (path: string) =>
-      Promise.resolve(
-        response(
-          path.endsWith("/challenge")
-            ? { nonce: "synthetic-nonce" }
-            : {
-                status: "authenticated",
-              },
-        ),
-      ) as any,
-  );
+  const post = vi
+    .spyOn(api, "POST")
+    .mockImplementation(
+      (
+        path: string,
+        options?: { body?: { mfa_code?: string; recovery_code?: string } },
+      ) => {
+        if (path.endsWith("/challenge"))
+          return Promise.resolve(response({ nonce: "synthetic-nonce" })) as any;
+        if (options?.body?.recovery_code)
+          return Promise.resolve(response({ status: "authenticated" })) as any;
+        return Promise.resolve({
+          response: new Response(null, { status: 401 }),
+          error: {
+            error: {
+              code: options?.body?.mfa_code
+                ? "ERR_MFA_CODE"
+                : "ERR_MFA_REQUIRED",
+            },
+          },
+        }) as any;
+      },
+    );
   const next = vi
     .spyOn(queryClient, "invalidateQueries")
     .mockResolvedValue(undefined);
-  show(<GoogleSignIn factors={() => ({ mfa_code: "123456" })} />);
+  show(<Auth />);
   await userEvent.click(
     await screen.findByRole("button", { name: "Google test button" }),
   );
-  await waitFor(() =>
-    expect(next).toHaveBeenCalledWith({ queryKey: ["session"] }),
+  expect(post).toHaveBeenCalledWith("/api/v1/auth/google/login", {
+    body: { credential: "synthetic-provider-proof", nonce: "synthetic-nonce" },
+  });
+  expect(
+    await screen.findByRole("heading", { name: "Verify your sign-in" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Sign in", exact: true }),
+  ).not.toBeInTheDocument();
+  expect(next).not.toHaveBeenCalled();
+  const input = screen.getByLabelText("Authenticator code", { exact: true });
+  expect(input).toHaveFocus();
+  await userEvent.type(input, "123456");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Verify and sign in" }),
   );
+  expect(await screen.findByRole("alert")).toHaveTextContent("incorrect");
   expect(post).toHaveBeenCalledWith("/api/v1/auth/google/login", {
     body: {
       credential: "synthetic-provider-proof",
       nonce: "synthetic-nonce",
       mfa_code: "123456",
     },
+  });
+  await userEvent.click(
+    screen.getByRole("button", { name: "Use a recovery code" }),
+  );
+  await userEvent.type(
+    screen.getByLabelText("Recovery code", { exact: true }),
+    "recovery-test",
+  );
+  await userEvent.click(
+    screen.getByRole("button", { name: "Verify and sign in" }),
+  );
+  await waitFor(() =>
+    expect(next).toHaveBeenCalledWith({ queryKey: ["session"] }),
+  );
+  expect(post).toHaveBeenLastCalledWith("/api/v1/auth/google/login", {
+    body: {
+      credential: "synthetic-provider-proof",
+      nonce: "synthetic-nonce",
+      recovery_code: "recovery-test",
+    },
+  });
+  expect(
+    post.mock.calls.filter(([path]) => path.endsWith("/challenge")),
+  ).toHaveLength(1);
+});
+
+it("checks email and password before showing two-step verification", async () => {
+  configuration();
+  const rejected = (code: string) => ({
+    response: new Response(null, { status: 401 }),
+    error: { error: { code } },
+  });
+  const post = vi
+    .spyOn(api, "POST")
+    .mockResolvedValueOnce(rejected("ERR_AUTH") as any)
+    .mockResolvedValueOnce(rejected("ERR_MFA_REQUIRED") as any)
+    .mockResolvedValueOnce(response({ status: "authenticated" }) as any);
+  const next = vi
+    .spyOn(queryClient, "invalidateQueries")
+    .mockResolvedValue(undefined);
+  show(<Auth />);
+  await userEvent.type(
+    screen.getByLabelText("Email address"),
+    "person@example.com",
+  );
+  const password = screen.getByLabelText("Password", { exact: true });
+  await userEvent.type(password, "example-wrong");
+  const signIn = screen.getByRole("button", { name: "Sign in", exact: true });
+  await userEvent.click(signIn);
+  expect(await screen.findByRole("alert")).toHaveTextContent("couldn't verify");
+  expect(
+    screen.queryByRole("heading", { name: "Verify your sign-in" }),
+  ).not.toBeInTheDocument();
+  await userEvent.clear(password);
+  await userEvent.type(password, "example-correct");
+  await userEvent.click(signIn);
+  const input = await screen.findByLabelText("Authenticator code", {
+    exact: true,
+  });
+  expect(input).toHaveFocus();
+  expect(password).not.toBeVisible();
+  expect(password).toHaveValue("");
+  const credentials = {
+    email: "person@example.com",
+    password: "example-correct",
+  };
+  expect(post).toHaveBeenLastCalledWith("/api/v1/auth/login", {
+    body: credentials,
+  });
+  expect(next).not.toHaveBeenCalled();
+  await userEvent.type(input, "123456");
+  await userEvent.click(
+    screen.getByRole("button", { name: "Verify and sign in" }),
+  );
+  await waitFor(() =>
+    expect(next).toHaveBeenCalledWith({ queryKey: ["session"] }),
+  );
+  expect(post).toHaveBeenLastCalledWith("/api/v1/auth/login", {
+    body: { ...credentials, mfa_code: "123456" },
   });
 });

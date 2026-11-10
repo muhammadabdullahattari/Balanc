@@ -1,6 +1,7 @@
 import argparse
 import json
 import logging
+from time import monotonic
 from typing import Any
 from uuid import UUID
 
@@ -19,6 +20,7 @@ from ledgerpilot.workspace.models import Evidence
 def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str, Any]:
     engine = build_engine(settings)
     sessions = sessionmaker(engine, expire_on_commit=False)
+    job_id: UUID | None = None
     try:
         with sessions.begin() as db:
             set_context(db, actor_id, business_id)
@@ -40,6 +42,7 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
             key, digest, media_type = item.object_key, item.content_hash, item.media_type
             job_id, token = claim["id"], claim["lease_token"]
         emit("evidence.job_claimed", user_id=actor_id, business_id=business_id, job_id=job_id)
+        started_at = monotonic()
         status, scanner, error = "retry", None, None
         result: dict[str, Any] = {}
         try:
@@ -120,6 +123,8 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
             job_id=job_id,
             business_id=business_id,
             stage=status,
+            code=error,
+            duration_ms=int((monotonic() - started_at) * 1000),
         )
         return {
             "processed": True,
@@ -135,6 +140,7 @@ def run_once(settings: Settings, actor_id: UUID, business_id: UUID) -> dict[str,
             error=exc,
             code="ERR_DEPENDENCY",
             business_id=business_id,
+            job_id=job_id,
         )
         # The transaction contexts have rolled back. Leave an existing lease to
         # expire normally; never report completion or blindly replay a commit.

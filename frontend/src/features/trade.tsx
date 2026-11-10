@@ -269,11 +269,7 @@ export function Trade({ kind }: { kind: "invoice" | "bill" }) {
         eyebrow={
           kind === "invoice" ? "SALES & RECEIVABLES" : "PURCHASES & PAYABLES"
         }
-        title={
-          kind === "invoice"
-            ? "Every invoice. A clear next step."
-            : "Stay ahead of what’s due."
-        }
+        title={kind === "invoice" ? "Sales invoices" : "Supplier bills"}
         description={
           kind === "invoice"
             ? "Create invoices, record receipts and keep track of what customers owe."

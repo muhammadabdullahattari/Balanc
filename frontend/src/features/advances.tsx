@@ -116,7 +116,7 @@ export function Advances() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="ADVANCES & DEPOSITS"
-        title="Track money paid ahead."
+        title="Advances"
         description="Record customer deposits and supplier advances, then allocate them to issued documents."
       />
       <ErrorNotice

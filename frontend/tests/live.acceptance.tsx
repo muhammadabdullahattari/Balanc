@@ -182,17 +182,18 @@ describe("frontend with real HTTP, cookie sessions and PostgreSQL", () => {
       screen.getByLabelText("Password", { exact: true }),
       f.password,
     );
-    await user.type(
-      screen.getByLabelText("Recovery code (if authenticator unavailable)"),
-      f.recovery[0],
-    );
     await user.click(
       screen.getByRole("button", { name: "Sign in", exact: true }),
     );
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Sign in", exact: true }),
-      ).toBeEnabled(),
+    await user.click(
+      await screen.findByRole("button", { name: "Use a recovery code" }),
+    );
+    await user.type(
+      screen.getByLabelText("Recovery code", { exact: true }),
+      f.recovery[0],
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Verify and sign in" }),
     );
     await waitFor(async () =>
       expect((await r.api.GET("/api/v1/auth/me")).data?.email).toBe(f.email),

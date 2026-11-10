@@ -122,7 +122,7 @@ export function Loans() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="LOANS & FINANCING"
-        title="Keep the principal in perspective."
+        title="Loans"
         description="Track borrowing and lending, with principal and interest recorded separately."
         actions={
           <Button onClick={() => setOpen(true)}>

@@ -72,7 +72,7 @@ export function Activity() {
     <>
       <PageHeading
         eyebrow="ACTIVITY & PREFERENCES"
-        title="Keep the important things in view."
+        title="Activity and notifications"
         description="Your business notifications and delivery preferences, together."
       />
       <ErrorNotice
@@ -208,7 +208,7 @@ export function Search() {
     <>
       <PageHeading
         eyebrow="SEARCH YOUR BOOKS"
-        title="Find the record you need."
+        title="Search records"
         description="Search document numbers within your selected business."
       />
       <form

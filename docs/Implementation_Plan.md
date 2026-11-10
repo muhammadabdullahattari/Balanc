@@ -9,6 +9,14 @@
 
 ## 1. Review and sequencing decision
 
+**Password sign-in verification.** Email and password are submitted first. Accounts requiring MFA use the same verification screen as Google sign-in. The existing login endpoint revalidates the password and verifies the selected authenticator or recovery code before issuing a session.
+
+**Google sign-in verification.** Google account selection now comes first. When LedgerPilot requires MFA, a separate screen accepts an authenticator or recovery code and reuses the browser-bound Google challenge. The Google proof stays in memory while verification is pending. Cancelling or returning after expiry starts a fresh Google challenge.
+
+**Sign-in design follow-up.** Applied a navy, parchment, and copper palette to both workspace themes. Reworked sign-in around a dedicated responsive Google row and a labeled authenticator/recovery disclosure. Added a local SVG ledger illustration and entry motion that respects the browser’s reduced-motion preference.
+
+**Frontend redesign (10 November 2026).** Refreshed the shared light and dark design tokens, workspace and sign-in layouts, and all 20 workspace page headings. Added Contacts to primary navigation, a search shortcut, mobile drawer focus restoration, keyboard navigation for report and settings tabs, and dashboard shortcuts before cash account selection. The production build, 41 UI tests, nine API transport tests, and 13 local Chrome checks passed. The browser suite covers all workspace routes at four viewport widths using synthetic API responses. The Phase 10 deployed and manual acceptance checks still govern release sign-off.
+
 **Deployment audit remediation (5 November 2026): A1-A7 implemented and locally verified.** Added persistent private evidence mounts, readiness-gated candidate/proxy handoff and rollback checks; bounded scanner wall-clock IO and export metadata/serialization; consistent report/export snapshots with short authentication transactions and export-specific admission; automatic refresh of selected evidence details. Added regression checks and container CI gates. Final checks passed: **169 backend tests, 41 component tests, nine transport tests, 11 Chromium checks and 18 real-API frontend workflows**, plus types/lint/build/contracts, container persistence/readiness and rollback tests. Fresh npm/Python audits reported zero known vulnerabilities. See [remediation/setup](deployment-audit-fixes.md), [ADR-016](architecture/ADR-016-report-snapshots-and-pilot-deployment.md) and [results](contracts/deployment-audit-results.json). No schema change (0022), new provider or phase-order change. Phase 9 hosted configuration/deployment remains next; Phase 10 live/manual sign-off remains open. No commit, push or cloud deployment.
 
 **Senior QA findings amendment (5 November 2026): Completed for the approved local pilot; explicit production gates remain open.** Reviewed all 37 numbered report items against current sources. Repaired MFA stale-state handling, configurable admission timing/cooldown rollover, SMTP registration/savepoint recovery, batched outstanding balances/dashboard reuse, bounded report inputs, invalid-invitation responses, safe operational logging, explicit bank inserts and actionable auth states. Split import responsibilities and bank disposition validation while preserving canonical posting, public facade imports, RLS and transaction boundaries. Documented existing controls and incorrect audit assumptions rather than duplicating them. See [the resolution record](qa-findings-resolution.md). Final verification passed **163 backend tests (zero failures/errors/skips)**, including eight new QA regressions, plus **40 component, nine transport and 11 Chromium checks**, lint/type/contract/build checks. Dashboard calculation reads dropped from 27/32 to 13/18 for accrual/cash; 500 bank rows use one insert and reimport creates zero new rows. See [results and verified source fingerprints](contracts/qa-findings-results.json). SMTP retry remains manual, with no durable mail queue; deployment/scale/signing-boundary gates are explicit. No new migration/provider or phase-order change; schema **0022**, **Phase 9 remains next**. No commit/push/deployment.
@@ -251,6 +259,8 @@ Run browser + API + PostgreSQL tests with isolated tenants and synthetic data. V
 
 ## 13. Phase 9 — First deployment: free quota-limited demo
 
+**Deployment deferred by user decision.** Continue with the [local P2 preparation sequence and P2–P4 feature assignments](Next_Phases_Implementation_Plan.md). Phase 9 and Phase 10 remain the hosted pilot gates. Local preparation may proceed before those gates, with synthetic data and feature flags.
+
 **Floci setup guidance recorded:** See [the deployment and SQS guide](floci-deployment-guide.md) for the exact screenshot registry path, candidate push steps, service verification, queue settings and required outbox/worker changes. No Floci deployment or SQS adapter has been performed by this guidance update.
 
 **Deployment target amendment (user decision):** Use the in-house Floci platform instead of AWS for Phase 9 infrastructure. The user states Floci is fully free. Vercel remains the frontend target. See [ADR-017](architecture/ADR-017-floci-pilot-target.md). This changes the pilot hosting target; it does not establish Floci compatibility with AWS execution, durability or identity services.
@@ -289,10 +299,35 @@ This is the later SRS P2/P3 platform, distinct from internal P1 APIs. Confirm de
 
 ## 16. Phase 12 — Commercial production, scale and ongoing operations
 
+See the [consolidated next phases plan](Next_Phases_Implementation_Plan.md) for local sequencing, hosted gates and the full P2–P4 feature map. See the [P2 implementation plan](P2_Implementation_Plan.md) for commercial release package details.
+
 This is a funded continuation, not a free demo. Select jurisdiction, data residency, retention, support/on-call and incident policy. Move to private managed PostgreSQL and the SRS AWS production design with encrypted storage, secrets/KMS, backups/PITR, queue/observability as measured. Enable partner feeds/email/billing only after contract, sandbox, consent and security gates. Measure active users, writes, documents, report load, peak RPS, storage and cost separately. Add cells, replicas, partitioning/sharding/cache only after benchmarks show a need. Test failover, restore, replay, provider outage and tenant isolation under production-like load. Publish SLOs only with evidence and staffed operations. Review access, dependencies, retention, restore, import quality, AI proposals, errors, cost and feedback regularly. Architecture/accounting/auth changes require ADR and SRS update.
 
 **Exit gate:** Funded operation, recovery, security and support exist; measured capacity/cost meets the approved workload. Ten million users is not equivalent to ten million requests/minute (~166,667 requests/second peak); publish only measured claims.
 
+## 16.1 Newly approved roadmap additions
+
+The user approved adding all previously listed SRS gaps to the implementation roadmap. These are planned capabilities, distinct from completed P1 work. They are assigned to P2/P3/P4 below and in the linked plans. Requirements expressed as “universal,” “guaranteed,” or zero-loss are implemented as measurable, evidence-gated targets with explicit support boundaries, not unconditional claims that cannot be validated across every input, jurisdiction, or failure mode.
+
+| Capability | Planned release | Scope and exit evidence |
+|---|---|---|
+| Supplier portal invoice retrieval | P3 | Per-vendor authorized connectors, scoped credentials, rate limits, audit trail, consent/terms review, and safe manual fallback. |
+| WhatsApp and Slack document chasing, email fallback | P3 | Consent-based channel adapters and an explicit, configurable sequence; idempotent delivery, opt-out, quiet hours, bounce/error handling, and no repeated contact after payment/evidence arrives. |
+| Voice-note review | P3 | Upload/transcription on a declared language/audio matrix; transcript and extracted accounting intent are drafts requiring human review; no direct posting. |
+| Human-approved supplier payment execution | P3 | Payment-provider adapter, beneficiary verification, dual control for configured risk thresholds, MFA/step-up, idempotency, limits, audit, confirmation/reconciliation, and emergency disable. No AI may authorize or execute without authorized human approval. |
+| Expanded document support | P2 defines a tested support matrix; P3 expands it | Publish supported language, format, size, scan-quality and field-accuracy results; abstain/review unsupported or low-confidence inputs. “Every language/format/quality” is not an unconditional promise. |
+| Conversational accounting assistant | P2 cited reporting/variance scenarios; P3 expands | Natural-language questions answered from authorized, reproducible report/query tools with source citations, tenant authorization and abstention. No arbitrary SQL execution or uncited financial claims. |
+| Accountant portfolio exception dashboard | P3 | Cross-business exception queues and triage with strict tenant-scoped authorization, pagination, audit and load-tested portfolio sizes; validate an agreed “hundreds of businesses” cohort. |
+| Reconciliation within one day | P2 pilot measurement; P3 service target | Define start/end conditions, eligible data completeness and exception exclusions; measure cohort performance. Set an SLO only from observed data and publish its scope. |
+| Published AI quality benchmarks | P2 internal evaluation; P3 publication | Versioned representative datasets, methodology, confidence intervals, subgroup/error analysis and reproducible gates for OCR, matching, forecast and anomaly detection. Publish only reviewed results. |
+| Millions of pages/day and 500,000-page backlog isolation | P4 | Isolated ingestion/worker cells, queue admission and prioritization, backpressure, live-traffic protection, capacity/cost tests and a written benchmark report under funded production conditions. |
+| Zero-downtime large-ledger migrations | P4 | Expand/contract and online backfill procedures, compatibility windows, rehearsal on production-shaped data, rollback/forward-fix and measured availability impact. Acceptance is a measured migration test, not an unqualified guarantee. |
+| Regional disaster recovery / zero-data-loss objective | P4 | Select regions and define RTO/RPO with business/legal owners; implement replication/failover and run regional-loss exercises. Accept a zero-RPO objective only if architecture and tests demonstrate it; otherwise report measured RPO. |
+| Verifiable per-business deletion via key destruction | P3 design and implementation | Tenant envelope encryption, key lifecycle/destruction evidence, legal-hold handling, backup expiration semantics, and independent deletion verification; do not claim key destruction erases copies outside the key boundary. |
+| Ten-year records retention | P2 jurisdiction policy; P3 automation | Define record-class schedules by launch jurisdiction, legal holds and deletion exceptions; automate lifecycle and produce audit evidence. Do not apply one schedule indiscriminately across jurisdictions. |
+| Reduce AI cost per page by 50% | P2 baseline; P3 target evaluation | Establish a quality-adjusted baseline and cost allocation in P2; target a 50% reduction by six months after the measured baseline only if quality/safety guardrails hold, otherwise document the trade-off and revised target. |
+
+**Change control:** The detailed package plans are [P2](P2_Implementation_Plan.md), [P3](P3_Implementation_Plan.md), and [P4](P4_Implementation_Plan.md). Scope, legal/provider eligibility, supported jurisdictions, budget and acceptance fixtures must be confirmed at each package entry gate. These additions do not alter P1 or imply that P1 is production-certified. Do not market a target as a guarantee before its stated evidence gate passes.
 ## 17. SRS requirement traceability
 
 | Requirement groups | Main phases |
@@ -336,6 +371,7 @@ Kanban: Backlog → Ready → In Progress → Review → Verification → Done. 
 - [ ] AWS demo ECR, EC2/SSM, OIDC role, protected demo environment, TLS hostname and runtime configuration are provisioned before enabling deployment.
 
 | Version | Date | Change |
+| 2.29 | 10 Nov 2026 | Assigned the newly approved capabilities to P2/P3/P4; added human-approved payment scope and measurable safeguards/acceptance gates. |
 |---|---|---|
 | 2.21 | 3 Nov 2026 | Identity UX/Google/verification hardening and prioritized password-cookie-CSRF security acceptance recorded |
 | 2.20 | 2 Nov 2026 | Phase 8 integrated acceptance passed; shared form labels repaired; tested source candidate recorded |

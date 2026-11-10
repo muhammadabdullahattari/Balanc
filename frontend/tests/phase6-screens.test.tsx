@@ -78,9 +78,7 @@ describe("Phase 6 screen journeys with isolated API doubles", () => {
     mount(<Accounts />);
     expect(screen.getByRole("status")).toBeVisible();
     finish(reply({ items: [], next_cursor: null }));
-    expect(
-      await screen.findByText("Set the foundation for your books."),
-    ).toBeVisible();
+    expect(await screen.findByText("No accounts yet")).toBeVisible();
   });
   it("shows populated accounts and opens the actual classification form", async () => {
     vi.spyOn(api, "GET").mockResolvedValue(

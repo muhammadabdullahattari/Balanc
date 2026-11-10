@@ -39,7 +39,7 @@ export function Dashboard() {
   });
   const dashboard = useQuery({
     queryKey: [...keys.business(b.id), "dashboard", start, end, bank],
-    enabled: !!bank && start <= end,
+    enabled: !!bank && !!start && !!end && start <= end,
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/businesses/{business_id}/dashboard", {
@@ -72,8 +72,8 @@ export function Dashboard() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="THE BIG PICTURE"
-        title="A little clarity goes a long way."
-        description={`Here's how ${b.name} is doing.`}
+        title="Financial overview"
+        description={`Review cash, open balances and financial activity for ${b.name}.`}
         actions={
           <Link className="button primary" to="/sales">
             Create an invoice <ArrowUpRight size={16} />
@@ -115,23 +115,32 @@ export function Dashboard() {
       <ErrorNotice
         error={accounts.error || dashboard.error}
         retry={() => {
-          void dashboard.refetch();
+          if (accounts.error) void accounts.refetch();
+          if (dashboard.error && bank && start && end && start <= end)
+            void dashboard.refetch();
         }}
       />
       {!bank ? (
-        <div className="panel">
-          <Empty
-            title="Your overview starts with a cash account."
-            action={
-              <Link to="/accounts" className="button secondary">
-                Manage accounts <ArrowRight size={16} />
-              </Link>
-            }
-          >
-            Choose an account above. Your balances will come directly from your
-            books.
-          </Empty>
+        <div className="dashboard-grid">
+          <div className="panel account-empty">
+            <Empty
+              title="Your overview starts with a cash account."
+              action={
+                <Link to="/accounts" className="button secondary">
+                  Manage accounts <ArrowRight size={16} />
+                </Link>
+              }
+            >
+              Choose an account above. Your balances will come directly from
+              your books.
+            </Empty>
+          </div>
+          <WorkspaceShortcuts />
         </div>
+      ) : !start || !end || start > end ? (
+        <p className="notice error" role="alert">
+          Choose a valid reporting date range.
+        </p>
       ) : dashboard.isPending ? (
         <Loading />
       ) : (
@@ -181,7 +190,7 @@ export function Dashboard() {
               <section className="panel">
                 <div className="panel-heading">
                   <div>
-                    <h2>Money in. Money out.</h2>
+                    <h2>Income and expenses</h2>
                     <p className="muted">
                       Income and expenses across your reporting period.
                     </p>
@@ -193,6 +202,7 @@ export function Dashboard() {
                     <div
                       className="chart"
                       role="img"
+                      tabIndex={0}
                       aria-label="Monthly income and expense comparison. Exact figures are in the table below."
                     >
                       {d.trend.map((t) => (
@@ -231,24 +241,31 @@ export function Dashboard() {
                     </div>
                     <details className="chart-data">
                       <summary>View exact figures</summary>
-                      <table>
-                        <thead>
-                          <tr>
-                            <th>Month</th>
-                            <th>Income</th>
-                            <th>Expenses</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {d.trend.map((t) => (
-                            <tr key={t.start_date}>
-                              <td>{t.start_date}</td>
-                              <td>{money(t.income, d.currency)}</td>
-                              <td>{money(t.expense, d.currency)}</td>
+                      <div
+                        className="table-scroll"
+                        role="region"
+                        aria-label="Monthly income and expenses"
+                        tabIndex={0}
+                      >
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Month</th>
+                              <th>Income</th>
+                              <th>Expenses</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {d.trend.map((t) => (
+                              <tr key={t.start_date}>
+                                <td>{t.start_date}</td>
+                                <td>{money(t.income, d.currency)}</td>
+                                <td>{money(t.expense, d.currency)}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </details>
                   </>
                 ) : (
@@ -257,42 +274,7 @@ export function Dashboard() {
                   </Empty>
                 )}
               </section>
-              <section className="panel focus-panel">
-                <span className="eyebrow">A MOMENT FOR YOUR BOOKS</span>
-                <h2>Everything has its place.</h2>
-                <p className="muted">
-                  Review bank activity, collect supporting documents, and keep
-                  your close moving.
-                </p>
-                <Link to="/banking" className="task-link">
-                  <span>
-                    Review bank transactions
-                    <small>Match or categorize with confidence</small>
-                  </span>
-                  <ArrowUpRight />
-                </Link>
-                <Link to="/evidence" className="task-link">
-                  <span>
-                    Organize your evidence
-                    <small>Receipts and invoices, together</small>
-                  </span>
-                  <ArrowUpRight />
-                </Link>
-                <Link to="/close" className="task-link">
-                  <span>
-                    Prepare your month-end
-                    <small>Work through your close checklist</small>
-                  </span>
-                  <ArrowUpRight />
-                </Link>
-                <div className="assurance">
-                  <CircleHelp size={17} />
-                  <span>
-                    Suggestions stay in review until an authorized person
-                    approves.
-                  </span>
-                </div>
-              </section>
+              <WorkspaceShortcuts />
             </div>
             <p className="report-footnote">
               Loaded{" "}
@@ -306,5 +288,45 @@ export function Dashboard() {
         )
       )}
     </>
+  );
+}
+
+function WorkspaceShortcuts() {
+  return (
+    <section className="panel focus-panel">
+      <span className="eyebrow">WORKSPACE SHORTCUTS</span>
+      <h2>Keep your books moving</h2>
+      <p className="muted">
+        Review bank activity, collect supporting documents, and keep your close
+        moving.
+      </p>
+      <Link to="/banking" className="task-link">
+        <span>
+          Review bank transactions
+          <small>Match or categorize with confidence</small>
+        </span>
+        <ArrowUpRight />
+      </Link>
+      <Link to="/evidence" className="task-link">
+        <span>
+          Organize your evidence
+          <small>Receipts and invoices, together</small>
+        </span>
+        <ArrowUpRight />
+      </Link>
+      <Link to="/close" className="task-link">
+        <span>
+          Prepare your month-end
+          <small>Work through your close checklist</small>
+        </span>
+        <ArrowUpRight />
+      </Link>
+      <div className="assurance">
+        <CircleHelp size={17} />
+        <span>
+          Suggestions stay in review until an authorized person approves.
+        </span>
+      </div>
+    </section>
   );
 }

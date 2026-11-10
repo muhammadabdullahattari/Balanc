@@ -33,13 +33,13 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
   await page.goto("/");
   await page.getByLabel("Email address").fill(f.email);
   await page.getByLabel("Password", { exact: true }).fill(f.password);
-  await page
-    .getByLabel("Recovery code (if authenticator unavailable)")
-    .fill(f.recovery[0]);
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Use a recovery code" }).click();
+  await page.getByLabel("Recovery code", { exact: true }).fill(f.recovery[0]);
   const choices = page.waitForResponse(
     (r) => new URL(r.url()).pathname === "/api/v1/businesses" && r.ok(),
   );
-  await page.getByRole("button", { name: "Sign in", exact: true }).click();
+  await page.getByRole("button", { name: "Verify and sign in" }).click();
   const listed = await (await choices).json();
   const index = listed.items.findIndex(
     (b: { id: string }) => b.id === f.business.id,
@@ -50,7 +50,7 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
     .nth(index)
     .click();
   await expect(
-    page.getByRole("heading", { name: "A little clarity goes a long way." }),
+    page.getByRole("heading", { name: "Financial overview" }),
   ).toBeVisible();
   const cookies = await page.context().cookies();
   expect(

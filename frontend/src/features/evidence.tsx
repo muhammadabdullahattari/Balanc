@@ -189,7 +189,7 @@ export function Evidence() {
     <>
       <PageHeading
         eyebrow="DOCUMENTS & EVIDENCE"
-        title="Every number has a story."
+        title="Supporting documents"
         description="Keep receipts, invoices and supporting documents close to the books they explain."
         actions={
           <Button
@@ -257,7 +257,7 @@ export function Evidence() {
             />
           </>
         ) : (
-          <Empty title="A home for your paperwork.">
+          <Empty title="No documents yet">
             Upload a document to scan it and keep its source evidence securely
             linked to your business.
           </Empty>

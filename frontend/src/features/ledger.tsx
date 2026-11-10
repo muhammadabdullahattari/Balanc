@@ -130,7 +130,7 @@ export function Ledger() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="GENERAL LEDGER"
-        title="Every number has a story."
+        title="General ledger"
         description="Follow posted entries back to their journal, approval and source."
         actions={
           <>

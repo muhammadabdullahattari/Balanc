@@ -1,0 +1,28 @@
+# LedgerPilot P3 implementation plan
+
+The [consolidated P3 plan](Next_Phases_Implementation_Plan.md#p3-broader-automation-and-integrations) also lists the SRS accounting, integration and regional access packages P3-I through P3-K.
+
+P3 extends the supported P2 product with approved integrations, richer human-reviewed workflows, controlled payment execution and evidence-backed AI. P3 begins only after P2 production controls, provider eligibility, jurisdiction rules, accounting/security owners and funded operating capacity are established. This is a proposed delivery sequence; estimate and revalidate scope at P3 entry.
+
+## Entry gate
+
+P2 production foundation and recovery are accepted; target jurisdictions and record schedules are approved; provider contracts/sandboxes and privacy/security reviews are complete; P2 document, quality, reconciliation-time and AI-cost baselines are recorded. Human payment execution requires a separately approved payment provider and operating policy.
+
+## Implementation sequence
+
+| Package | Build | Acceptance gate |
+|---|---|---|
+| **P3-A · Authorized supplier portal connectors** | Build a connector framework and prioritized vendor adapters that fetch invoice/evidence only with authorized accounts. Isolate credentials, support MFA where provider allows, record provenance, handle changing portals, rate limits and manual upload fallback. | Per-vendor terms/security approval, isolated credential tests, auditability, duplicate/replay safety, revocation, and no unauthorized access. Human review remains required before accounting use. |
+| **P3-B · Multichannel evidence chasing** | Add consent-based WhatsApp and Slack adapters, with configurable email fallback. Define recipient preferences, sequence, attempt caps, quiet hours, locale/templates, opt-out, delivery status and payment/evidence-state recheck before each send. | Provider sandbox and consent evidence; no message after payment, dispute, opt-out or evidence receipt; retries idempotent; delivery/bounce/complaint behavior and audit verified. |
+| **P3-C · Voice-note review** | Accept audio within a declared format/language/duration matrix; transcribe and extract proposed accounting instructions into a review draft linked to the source audio and transcript. | Versioned speech evaluation and confidence/abstention tests; tenant privacy/retention controls; human correction/approval required; no journal posting directly from audio or transcription. |
+| **P3-D · Human-approved supplier payment execution** | Integrate one approved payment provider at a time. Verify beneficiary changes out-of-band; require explicit authorized human confirmation, MFA/step-up, limits and dual approval for configured risk; use idempotency, immutable audit, state reconciliation and emergency kill switch. | Provider sandbox and controlled live pilot; duplicate/replay/failure/refund/reversal tests; beneficiary-change and account-takeover scenarios; accounting tie-out; legal/compliance/security approval. AI may propose payment preparation but may never approve or execute it. |
+| **P3-E · Accountant portfolio exception workspace** | Build cross-business exception triage, aging, risk/status filters, assignment and drill-through for accountant portfolios; preserve strict per-business permissions and audit. | Tenant isolation tests for every portfolio action; pagination and query budgets; load test at an agreed hundreds-of-businesses cohort; accountant usability acceptance and delegated-access expiry. |
+| **P3-F · Expanded AI and evidence-backed benchmarks** | Expand the tested document support matrix; extend cited assistant scenarios through safe report/query tools; publish reviewed OCR, matching, forecast and anomaly benchmarks. Establish quality-adjusted AI cost optimization with a 50% reduction target within six months of the P2 baseline. | Reproducible versioned datasets, subgroup/error and confidence analysis, citation correctness, authorization, abstention and human review. Public benchmark methodology reviewed. Cost target passes only while agreed quality/safety metrics remain within thresholds; otherwise document variance and revise target with approval. |
+| **P3-G · Privacy lifecycle and retention automation** | Automate jurisdiction-approved retention, legal holds, export/deletion workflows and tenant envelope-key lifecycle, including provable key destruction where technically supported. Respect backup expiry and legal exceptions. | Independent tenant deletion/key destruction verification; retention and legal-hold tests by record class; restore/backup behavior documented; no representation of deletion beyond the verified cryptographic boundary. |
+| **P3-H · One-day reconciliation service target** | Turn the P2 measurement into a scoped operational target for eligible customers, data-complete books and defined exception classes; provide readiness tracking and exception escalation. | Cohort evidence establishes the target and exclusions. Measure completion distribution and failures over an agreed observation period before publication; do not guarantee outcomes for incomplete or exception-heavy books. |
+
+P3 does not introduce autonomous accounting or AI-authorized payments. Human approval is mandatory for payment execution and financial posting. Expand support only within declared provider, language, file and jurisdiction matrices.
+
+## Release gate
+
+Accounting, security, privacy/legal, operations and product owners approve each provider and workflow. The release candidate passes deployed integration, recovery, tenant isolation, payment safety, audit, accessibility and measured capacity checks; support/on-call and rollback procedures are staffed.

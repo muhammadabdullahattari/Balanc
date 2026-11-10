@@ -2,14 +2,17 @@
 
 import hashlib
 import os
+import shutil
 import subprocess
 from decimal import Decimal
+from pathlib import Path
 from uuid import uuid4
 
 import httpx
 import pytest
 from alembic import command as migrations
 from alembic.config import Config
+from cryptography.fernet import Fernet
 from psycopg import sql
 from pydantic import SecretStr
 from sqlalchemy.engine import URL, make_url
@@ -20,6 +23,7 @@ from test_phase2_integration import (
 )
 from test_phase3_integration import command, invoice, setup
 
+from ledgerpilot.documents import storage
 from ledgerpilot.local_setup import ROOT, FileSettings, connect, credential_url, read_values
 from ledgerpilot.main import create_app
 
@@ -158,6 +162,7 @@ def test_previous_supported_schema_upgrades_without_losing_identity(
 async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
     client: httpx.AsyncClient,
     database_settings: FileSettings,
+    tmp_path: Path,
 ) -> None:
     async with accountant_context(client, database_settings) as (bid, api):
         base, accounts, party = await setup(api, bid)
@@ -177,6 +182,35 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
             },
         )
         assert payment.status_code == 201, payment.text
+        original = b"date,amount\n2026-11-01,40\n"
+        source_settings = database_settings.model_copy(
+            update={
+                "evidence_storage_root": tmp_path / "source-evidence",
+                "evidence_encryption_key": SecretStr(Fernet.generate_key().decode()),
+            }
+        )
+        source_app = create_app(source_settings)
+        async with (
+            source_app.router.lifespan_context(source_app),
+            httpx.AsyncClient(
+                transport=httpx.ASGITransport(app=source_app),
+                base_url="https://api.ledgerpilot.test",
+                cookies=api.cookies,
+                headers=dict(api.headers),
+            ) as source_client,
+        ):
+            upload = await source_client.post(
+                base + "/evidence/upload",
+                params={"filename": "synthetic-statement.csv"},
+                content=original,
+                headers={"Content-Type": "application/octet-stream"},
+            )
+        assert upload.status_code == 201, upload.text
+        evidence_id = upload.json()["id"]
+        job_id = upload.json()["job_id"]
+        # The synthetic source has no concurrent writers during the database and file copy.
+        evidence_backup = tmp_path / "backup-evidence"
+        shutil.copytree(source_settings.evidence_storage_root, evidence_backup)
         values = read_values(ROOT / ".env")
         source = make_url(database_settings.database_url.get_secret_value()).database
         assert source and source.startswith("ledgerpilot_test_")
@@ -250,9 +284,29 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                 assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == (
                     "0022",
                 )
-            settings = database_settings.model_copy(
-                update={"database_url": SecretStr(runtime.render_as_string(hide_password=False))}
+            restored_root = tmp_path / "restored-evidence"
+            shutil.copytree(evidence_backup, restored_root)
+            settings = source_settings.model_copy(
+                update={
+                    "database_url": SecretStr(runtime.render_as_string(hide_password=False)),
+                    "evidence_storage_root": restored_root,
+                }
             )
+            with connect(admin_url.set(database=restored)) as db:
+                evidence_row = db.execute(
+                    "SELECT object_key,content_hash FROM app.evidence "
+                    "WHERE business_id=%s AND id=%s",
+                    (bid, evidence_id),
+                ).fetchone()
+                assert evidence_row is not None
+                object_key, content_hash = evidence_row
+                assert content_hash == hashlib.sha256(original).hexdigest()
+                assert storage.get(settings, object_key, content_hash) == original
+                assert db.execute(
+                    "SELECT state,evidence_id::text FROM app.evidence_jobs "
+                    "WHERE business_id=%s AND id=%s",
+                    (bid, job_id),
+                ).fetchone() == ("queued", evidence_id)
             app = create_app(settings)
             async with (
                 app.router.lifespan_context(app),
@@ -280,6 +334,14 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                 assert balances[accounts["ar"]] == 60
                 assert balances[accounts["income"]] == -100
                 assert sum(balances.values()) == 0
+                evidence = await recovered.get(base + "/evidence")
+                assert evidence.status_code == 200, evidence.text
+                assert any(
+                    item["id"] == evidence_id and item["content_hash"] == content_hash
+                    for item in evidence.json()["items"]
+                )
+                blocked = await recovered.get(base + f"/evidence/{evidence_id}/download")
+                assert blocked.status_code == 409
                 denied = await recovered.get(f"/api/v1/businesses/{uuid4()}")
                 assert denied.status_code == 404
         finally:

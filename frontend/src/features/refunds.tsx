@@ -81,7 +81,7 @@ export function Refunds() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="PAYMENTS & REFUNDS"
-        title="Keep every settlement traceable."
+        title="Payments and refunds"
         description="Refunds link back to an original settlement, issued credit note and document."
       />
       <ErrorNotice error={payments.error} />

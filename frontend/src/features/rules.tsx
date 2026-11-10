@@ -102,7 +102,7 @@ export function Rules() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="REVIEW RULES"
-        title="Consistent suggestions. Human control."
+        title="Bank rules"
         description="Create description-based category rules and review affected rows before activation."
       />
       <ErrorNotice error={rules.error || accounts.error || create.error} />

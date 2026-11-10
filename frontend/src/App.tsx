@@ -37,7 +37,7 @@ import {
   X,
   LogOut,
   ChevronDown,
-  PanelLeftClose,
+  Search as SearchIcon,
 } from "lucide-react";
 import {
   api,
@@ -117,7 +117,7 @@ const navigation = [
   { to: "/rules", label: "Bank rules", icon: CheckSquare },
   { to: "/openings", label: "Opening balances", icon: BookOpen },
   { to: "/activity", label: "Activity", icon: CheckSquare },
-  { to: "/search", label: "Search", icon: FileText },
+  { to: "/search", label: "Search", icon: SearchIcon },
   { to: "/reconciliation", label: "Reconciliation", icon: CheckSquare },
   { to: "/ledger", label: "General ledger", icon: BookOpen },
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -142,7 +142,7 @@ class ErrorBoundary extends Component<
   render() {
     return this.state.failed ? (
       <main className="fatal">
-        <h1>We couldnâ€™t open this view.</h1>
+        <h1>We couldn’t open this view.</h1>
         <p>Your saved records are safe. Reload the workspace to try again.</p>
         <Button onClick={() => window.location.reload()}>
           Reload workspace
@@ -193,7 +193,18 @@ function Workspace() {
   });
   const sidebarRef = useRef<HTMLElement>(null);
   const menuRef = useRef<HTMLButtonElement>(null);
+  const closeNavigation = () => {
+    setMobile(false);
+    requestAnimationFrame(() => menuRef.current?.focus());
+  };
   const location = useLocation();
+  const finishNavigation = () => {
+    if (!mobile) return;
+    setMobile(false);
+    requestAnimationFrame(() =>
+      document.getElementById("main-content")?.focus(),
+    );
+  };
   useEffect(() => {
     if (!mobile) return;
     const previousOverflow = document.body.style.overflow;
@@ -207,7 +218,7 @@ function Workspace() {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setMobile(false);
-        menuRef.current?.focus();
+        requestAnimationFrame(() => menuRef.current?.focus());
       }
       if (e.key === "Tab") {
         const entries = links(),
@@ -310,8 +321,8 @@ function Workspace() {
   if (session.error)
     return (
       <main className="fatal">
-        <h1>Letâ€™s reconnect.</h1>
-        <p>We couldnâ€™t reach your finance workspace.</p>
+        <h1>Let’s reconnect.</h1>
+        <p>We couldn’t reach your finance workspace.</p>
         <ErrorNotice
           error={session.error}
           retry={() => {
@@ -351,8 +362,9 @@ function Workspace() {
           {mobile && (
             <button
               className="mobile-shade"
-              aria-label="Close navigation"
-              onClick={() => setMobile(false)}
+              aria-hidden="true"
+              tabIndex={-1}
+              onClick={closeNavigation}
             />
           )}
           <aside
@@ -360,16 +372,17 @@ function Workspace() {
             inert={narrow && !mobile}
             aria-hidden={(narrow && !mobile) || undefined}
             className={`sidebar ${mobile ? "is-open" : ""}`}
+            id="workspace-navigation"
             aria-label="Primary navigation"
           >
             <div className="sidebar-brand">
-              <NavLink className="brand" to="/">
+              <NavLink className="brand" to="/" onClick={finishNavigation}>
                 <span className="brand-mark">L</span>LedgerPilot
               </NavLink>
               <button
                 className="icon-button mobile-only"
                 aria-label="Close navigation"
-                onClick={() => setMobile(false)}
+                onClick={closeNavigation}
               >
                 <X size={20} />
               </button>
@@ -405,6 +418,7 @@ function Workspace() {
                     "/banking",
                     "/sales",
                     "/purchases",
+                    "/people",
                     "/evidence",
                     "/reports",
                   ],
@@ -432,7 +446,12 @@ function Workspace() {
                     group.paths.map((path) => {
                       const n = navigation.find((n) => n.to === path)!;
                       return (
-                        <NavLink end={path === "/"} to={path} key={path}>
+                        <NavLink
+                          end={path === "/"}
+                          to={path}
+                          key={path}
+                          onClick={finishNavigation}
+                        >
                           <n.icon size={18} />
                           {n.label}
                         </NavLink>
@@ -447,7 +466,11 @@ function Workspace() {
                       {group.paths.map((path) => {
                         const n = navigation.find((n) => n.to === path)!;
                         return (
-                          <NavLink to={path} key={path}>
+                          <NavLink
+                            to={path}
+                            key={path}
+                            onClick={finishNavigation}
+                          >
                             <n.icon size={18} />
                             {n.label}
                           </NavLink>
@@ -459,14 +482,10 @@ function Workspace() {
               ))}
             </nav>
             <div className="sidebar-bottom">
-              <NavLink to="/settings">
+              <NavLink to="/settings" onClick={finishNavigation}>
                 <SettingsIcon size={18} />
                 Settings
               </NavLink>
-              <div className="sidebar-note">
-                <span className="live-dot" />
-                <span>Clear books. Confident decisions.</span>
-              </div>
             </div>
           </aside>
           <div className="workspace" inert={mobile}>
@@ -477,11 +496,11 @@ function Workspace() {
                   ref={menuRef}
                   aria-label="Open navigation"
                   aria-expanded={mobile}
+                  aria-controls="workspace-navigation"
                   onClick={() => setMobile(true)}
                 >
                   <Menu size={21} />
                 </button>
-                <PanelLeftClose className="desktop-only" size={18} />
                 <span>Workspace</span>
                 <span className="divider">/</span>
                 <strong>
@@ -490,6 +509,13 @@ function Workspace() {
                 </strong>
               </div>
               <div className="header-actions">
+                <NavLink
+                  to="/search"
+                  className="icon-button"
+                  aria-label="Search workspace"
+                >
+                  <SearchIcon size={18} />
+                </NavLink>
                 <button
                   className="icon-button"
                   aria-label={
@@ -548,7 +574,7 @@ function Workspace() {
                     path="*"
                     element={
                       <section className="empty">
-                        <h1>This page isnâ€™t here.</h1>
+                        <h1>This page isn’t here.</h1>
                         <NavLink to="/">Back to overview</NavLink>
                       </section>
                     }
@@ -556,9 +582,9 @@ function Workspace() {
                 </Routes>
               </Suspense>
               <footer className="workspace-footer">
-                <span>LedgerPilot Â· Your finance office</span>
+                <span>LedgerPilot · Your finance office</span>
                 <span>
-                  {business.data.currency} Â· {business.data.timezone}
+                  {business.data.currency} · {business.data.timezone}
                 </span>
               </footer>
             </main>

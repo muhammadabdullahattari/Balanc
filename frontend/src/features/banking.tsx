@@ -174,7 +174,7 @@ export function Banking() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="BANKING & REVIEW"
-        title="Give every transaction a home."
+        title="Bank transactions"
         description="Import your statement, review the details, and keep your bank activity connected to your books."
         actions={
           <Button
@@ -265,7 +265,7 @@ export function Banking() {
             />
           </>
         ) : (
-          <Empty title="Bring your bank activity into focus.">
+          <Empty title="No bank transactions yet">
             Import a CSV statement to start reviewing transactions.
           </Empty>
         )}

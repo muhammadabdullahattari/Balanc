@@ -78,7 +78,7 @@ export function Reconciliation() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="BANK RECONCILIATION"
-        title="Make the statement and books agree."
+        title="Bank reconciliation"
         description="Tie your closing statement to the ledger, with evidence for every outstanding item."
       />
       <ErrorNotice error={accounts.error || evidence.error || prepare.error} />

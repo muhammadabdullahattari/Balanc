@@ -11,6 +11,7 @@ import {
   Loading,
   money,
   PageHeading,
+  SectionTabs,
   Table,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
@@ -127,11 +128,15 @@ export function Reports() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="REPORTS & INSIGHTS"
-        title="The story behind the numbers."
-        description="Reliable totals, a clear reporting basis, and a trail back to your books."
+        title="Financial reports"
+        description="Review balances, cash forecasts and the entries behind each figure."
       />
-      <div className="tabs" role="tablist" aria-label="Financial reports">
-        {[
+      <SectionTabs
+        id="reports"
+        label="Financial reports"
+        value={tab}
+        onChange={setTab}
+        items={[
           ["profit", "Profit & loss"],
           ["balance", "Balance sheet"],
           ["trial", "Trial balance"],
@@ -139,17 +144,8 @@ export function Reports() {
           ["payables", "Payables"],
           ["forecast", "Cash forecast"],
           ["tax", "Tax support"],
-        ].map(([key, label]) => (
-          <button
-            role="tab"
-            aria-selected={tab === key}
-            key={key}
-            onClick={() => setTab(key)}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
+        ]}
+      />
       <div className="filterbar">
         {["profit", "tax"].includes(tab) && (
           <Field label="From">
@@ -191,7 +187,13 @@ export function Reports() {
           void report.refetch();
         }}
       />
-      <section className="panel report-panel">
+      <section
+        className="panel report-panel"
+        id="reports-panel"
+        role="tabpanel"
+        aria-labelledby={`reports-${tab}`}
+        tabIndex={0}
+      >
         {tab === "forecast" && !bank ? (
           <Empty title="Choose the cash account to forecast.">
             Your forecast follows the due dates in your books and discloses its

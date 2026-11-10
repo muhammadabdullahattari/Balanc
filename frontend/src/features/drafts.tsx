@@ -90,7 +90,7 @@ export function Drafts() {
     <>
       <PageHeading
         eyebrow="PREPARE & REVIEW"
-        title="Give entries a second look."
+        title="Draft review"
         description="Review prepared source documents before issuing or voiding them."
       />
       <ErrorNotice error={rows.error} />

@@ -58,7 +58,7 @@ export function Accounts() {
   return (
     <>
       <PageHeading
-        title="A place for every transaction."
+        title="Chart of accounts"
         eyebrow="CHART OF ACCOUNTS"
         description="Give your books a structure that makes sense for your business."
         actions={
@@ -108,7 +108,7 @@ export function Accounts() {
             />
           </>
         ) : (
-          <Empty title="Set the foundation for your books.">
+          <Empty title="No accounts yet">
             Add your bank, income, expense and control accounts.
           </Empty>
         )}
@@ -242,7 +242,7 @@ export function People() {
     <>
       <PageHeading
         eyebrow="PEOPLE & BUSINESSES"
-        title="Good relationships. Clear records."
+        title="Contacts"
         description="Keep your customers, suppliers, lenders and borrowers in one place."
         actions={
           <Button onClick={() => setOpen(true)}>
@@ -310,7 +310,7 @@ export function People() {
             />
           </>
         ) : (
-          <Empty title="Your relationships start here.">
+          <Empty title="No contacts yet">
             Add a customer or supplier before creating an invoice or bill.
           </Empty>
         )}

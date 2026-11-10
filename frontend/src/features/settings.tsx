@@ -8,6 +8,7 @@ import {
   ErrorNotice,
   Field,
   PageHeading,
+  SectionTabs,
   Table,
 } from "../components/ui";
 import { useBusiness } from "./context";
@@ -85,22 +86,28 @@ export function Settings() {
     <>
       <PageHeading
         eyebrow="WORKSPACE SETTINGS"
-        title="Make it work for your business."
+        title="Workspace settings"
         description="Manage your accounting context, team access and privacy requests."
       />
-      <div className="tabs" role="tablist" aria-label="Settings sections">
-        {["business", "team", "security", "privacy"].map((s) => (
-          <button
-            key={s}
-            role="tab"
-            aria-selected={section === s}
-            onClick={() => setSection(s)}
-          >
-            {s}
-          </button>
-        ))}
-      </div>
-      <section className="panel settings-section">
+      <SectionTabs
+        id="settings"
+        label="Settings sections"
+        value={section}
+        onChange={setSection}
+        items={[
+          ["business", "Business"],
+          ["team", "Team"],
+          ["security", "Security"],
+          ["privacy", "Privacy"],
+        ]}
+      />
+      <section
+        className="panel settings-section"
+        id="settings-panel"
+        role="tabpanel"
+        aria-labelledby={`settings-${section}`}
+        tabIndex={0}
+      >
         {section === "business" && (
           <>
             <h2>{b.name}</h2>

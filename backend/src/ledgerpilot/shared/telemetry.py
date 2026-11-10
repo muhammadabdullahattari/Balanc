@@ -45,7 +45,7 @@ def emit(
         value = fields.get(key)
         if isinstance(value, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,160}", value):
             payload[key] = value
-    for key in ("status", "dropped_key_count", "count", "window_seconds"):
+    for key in ("status", "dropped_key_count", "count", "window_seconds", "duration_ms"):
         if isinstance(fields.get(key), int):
             payload[key] = fields[key]
     if error is not None:

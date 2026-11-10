@@ -98,7 +98,7 @@ export function Openings() {
       <LookupMore resource="parties" />
       <PageHeading
         eyebrow="MIGRATE YOUR BOOKS"
-        title="Start with reviewed opening balances."
+        title="Opening balances"
         description="Bring customer, supplier and loan balances forward without replaying historic cash."
       />
       <ErrorNotice

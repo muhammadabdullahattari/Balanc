@@ -81,11 +81,13 @@ async function setup(page: Page, role = "accountant") {
   await page.goto("/");
   await page.getByRole("button", { name: /Phase Six Synthetic Books/ }).click();
   await expect(
-    page.getByRole("heading", { name: "A little clarity goes a long way." }),
+    page.getByRole("heading", { name: "Financial overview" }),
   ).toBeVisible();
   return failures;
 }
 async function navigate(page: Page, label: string, group?: string) {
+  const menu = page.getByRole("button", { name: "Open navigation" });
+  if (await menu.isVisible()) await menu.click();
   if (group) {
     const details = page
       .locator("nav details")
@@ -95,6 +97,69 @@ async function navigate(page: Page, label: string, group?: string) {
   }
   await page.getByRole("link", { name: label, exact: true }).click();
 }
+
+test("every workspace route fits desktop, tablet and phone viewports", async ({
+  page,
+}) => {
+  test.setTimeout(120000);
+  const failures = await setup(page);
+  const routes = [
+    ["Overview", "Financial overview"],
+    ["Banking", "Bank transactions"],
+    ["Sales", "Sales invoices"],
+    ["Purchases", "Supplier bills"],
+    ["Contacts", "Contacts"],
+    ["Documents", "Supporting documents"],
+    ["Reports", "Financial reports"],
+    ["General ledger", "General ledger", "Accounting"],
+    ["Accounts", "Chart of accounts", "Accounting"],
+    ["Draft review", "Draft review", "Accounting"],
+    ["Payments & refunds", "Payments and refunds", "Accounting"],
+    ["Advances", "Advances", "Accounting"],
+    ["Loans", "Loans", "Accounting"],
+    ["Reconciliation", "Bank reconciliation", "Accounting"],
+    ["Month-end close", "Month-end close", "Accounting"],
+    ["Bank rules", "Bank rules", "Manage"],
+    ["Opening balances", "Opening balances", "Manage"],
+    ["Activity", "Activity and notifications", "Manage"],
+    ["Search", "Search records", "Manage"],
+    ["Settings", "Workspace settings"],
+  ];
+  for (const width of [1600, 1280, 820, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const [label, heading, group] of routes) {
+      await navigate(page, label, group);
+      await expect(
+        page.getByRole("heading", { name: heading, level: 1, exact: true }),
+      ).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBeLessThanOrEqual(width);
+    }
+  }
+  expect(failures).toEqual([]);
+});
+
+test("mobile navigation restores focus and report tabs support keyboard selection", async ({
+  page,
+}) => {
+  await setup(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const menu = page.getByRole("button", { name: "Open navigation" });
+  await menu.click();
+  await page.keyboard.press("Escape");
+  await expect(menu).toBeFocused();
+  await navigate(page, "Reports");
+  const profit = page.getByRole("tab", { name: "Profit & loss" });
+  const balance = page.getByRole("tab", { name: "Balance sheet" });
+  await profit.focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(balance).toBeFocused();
+  await expect(balance).toHaveAttribute("aria-selected", "true");
+  await expect(
+    page.getByRole("tabpanel", { name: "Balance sheet" }),
+  ).toBeVisible();
+});
 test("account form uses native validation, classifies and submits only after complete input", async ({
   page,
 }) => {
@@ -284,7 +349,7 @@ test("pending read shows loading until the response and never fabricates rows", 
   ).toHaveCount(0);
   release();
   await expect(
-    page.getByText("Set the foundation for your books."),
+    page.getByText("No accounts yet"),
   ).toBeVisible();
 });
 test("read timeout is bounded and presents recovery without replay", async ({

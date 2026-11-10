@@ -146,7 +146,7 @@ export function Close() {
     <>
       <PageHeading
         eyebrow="MONTH-END CLOSE"
-        title="Close the month with confidence."
+        title="Month-end close"
         description="Prepare, review and lock your books with a clear record of who approved what."
         actions={
           <Button disabled={!period} onClick={() => setOpen(true)}>
