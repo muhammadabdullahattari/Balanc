@@ -156,7 +156,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def database_error(request: Request, error: SQLAlchemyError) -> JSONResponse:
         state = getattr(getattr(error, "orig", None), "sqlstate", "") or ""
         code = "ERR_CONFLICT" if state.startswith(("23", "40")) else "ERR_DEPENDENCY"
-        status = 409 if code == "ERR_CONFLICT" else 503
+        message = "Operation could not complete."
+        if getattr(
+            getattr(getattr(error, "orig", None), "diag", None), "message_primary", None
+        ) == ("ERR_PREPAID_PENDING"):
+            code = "ERR_PREPAID_PENDING"
+            message = "Approve due prepaid installments before locking this period."
+        status = 503 if code == "ERR_DEPENDENCY" else 409
         logging.getLogger("ledgerpilot.errors").warning(
             json.dumps(
                 {
@@ -169,7 +175,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return JSONResponse(
             {
-                "error": {"code": code, "message": "Operation could not complete."},
+                "error": {"code": code, "message": message},
                 "request_id": getattr(request.state, "request_id", None),
             },
             status_code=status,
@@ -221,7 +227,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one()
-                if not safe or version != "0022":
+                if not safe or version != "0026":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):

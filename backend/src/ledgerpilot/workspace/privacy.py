@@ -82,7 +82,7 @@ def review(
         "deleted": False,
         "retained_categories": data.retained_categories,
         "policy_reference": data.policy_reference,
-        "export_path": f"/api/v1/businesses/{bid}/privacy-export"
+        "export_path": f"/api/v1/businesses/{bid}/privacy-export?request_id={rid}"
         if data.outcome == "export_ready"
         else None,
         "next_action": "Requester downloads with their own MFA session."

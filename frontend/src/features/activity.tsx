@@ -12,7 +12,8 @@ import {
   NextPage,
   Badge,
 } from "../components/ui";
-import { useBusiness } from "./context";
+import { today, useBusiness } from "./context";
+import { EmailOperations } from "./email-operations";
 export function Activity() {
   const b = useBusiness();
   const path = { business_id: b.id };
@@ -37,6 +38,23 @@ export function Activity() {
         }),
       ),
   });
+  const emailHistory = useQuery({
+    queryKey: [...keys.business(b.id), "notification-email-history"],
+    enabled: preferences.data?.email_delivery_available === true,
+    queryFn: ({ signal }) =>
+      result(
+        api.GET("/api/v1/businesses/{business_id}/notification-email-history", {
+          signal,
+          params: { path },
+        }),
+      ),
+    refetchInterval: (query) =>
+      query.state.data?.items.some((job) =>
+        ["queued", "sending"].includes(job.state),
+      )
+        ? 5000
+        : false,
+  });
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: keys.business(b.id) });
   };
@@ -59,6 +77,9 @@ export function Activity() {
           body: {
             expected_version: preferences.data!.version,
             reminders: v.get("reminders") === "on",
+            ...(v.has("email_reminders_present")
+              ? { email_reminders: v.get("email_reminders") === "on" }
+              : {}),
             marketing: v.get("marketing") === "on",
             quiet_start: Number(v.get("start")),
             quiet_end: Number(v.get("end")),
@@ -66,6 +87,16 @@ export function Activity() {
         }),
       );
     },
+    onSuccess: refresh,
+  });
+  const reviewEmail = useMutation({
+    mutationFn: () =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/reminders/review", {
+          params: { path },
+          body: { as_of: today(b.timezone) },
+        }),
+      ),
     onSuccess: refresh,
   });
   return (
@@ -76,7 +107,13 @@ export function Activity() {
         description="Your business notifications and delivery preferences, together."
       />
       <ErrorNotice
-        error={list.error || preferences.error || read.error || save.error}
+        error={
+          list.error ||
+          preferences.error ||
+          read.error ||
+          save.error ||
+          reviewEmail.error
+        }
       />
       <section className="panel">
         {list.isPending ? (
@@ -148,6 +185,24 @@ export function Activity() {
               />
               Invoice reminders
             </label>
+            {(preferences.data.email_delivery_available ||
+              preferences.data.email_reminders) && (
+              <div>
+                <input type="hidden" name="email_reminders_present" value="1" />
+                <label className="check">
+                  <input
+                    name="email_reminders"
+                    type="checkbox"
+                    defaultChecked={preferences.data.email_reminders}
+                  />
+                  Send workspace reminders to my verified email
+                </label>
+                <p className="muted">
+                  Includes overdue invoice reminders and a summary of missing
+                  supporting evidence. Quiet hours use the business timezone.
+                </p>
+              </div>
+            )}
             <label className="check">
               <input
                 name="marketing"
@@ -181,7 +236,79 @@ export function Activity() {
             <Button busy={save.isPending}>Save preferences</Button>
             {save.isSuccess && <p role="status">Preferences saved.</p>}
           </form>
+          {preferences.data.email_delivery_available &&
+            preferences.data.email_reminders &&
+            preferences.data.reminders && (
+              <div className="actions">
+                <Button
+                  variant="secondary"
+                  busy={reviewEmail.isPending}
+                  onClick={() => reviewEmail.mutate()}
+                >
+                  Review and queue today's emails
+                </Button>
+                {reviewEmail.data && (
+                  <p role="status">
+                    {reviewEmail.data.email_queued
+                      ? `${reviewEmail.data.email_queued} email jobs queued.`
+                      : "No new email jobs were needed today."}
+                  </p>
+                )}
+              </div>
+            )}
+          {preferences.data.email_delivery_available && (
+            <div>
+              <h3>Email delivery history</h3>
+              {preferences.data.email_suppressed && (
+                <p role="status">
+                  Workspace email is paused after confirmed delivery feedback.
+                </p>
+              )}
+              <ErrorNotice error={emailHistory.error} />
+              {emailHistory.isPending ? (
+                <Loading />
+              ) : emailHistory.data?.items.length ? (
+                <Table
+                  caption="Workspace email deliveries"
+                  rows={emailHistory.data.items}
+                  rowKey={(job) => job.job_id}
+                  columns={[
+                    {
+                      label: "Email",
+                      render: (job) => job.kind.replaceAll("_", " "),
+                    },
+                    {
+                      label: "Status",
+                      render: (job) => (
+                        <Badge
+                          tone={
+                            job.state === "sent"
+                              ? "good"
+                              : ["failed", "uncertain"].includes(job.state)
+                                ? "warning"
+                                : "neutral"
+                          }
+                        >
+                          {job.state === "uncertain"
+                            ? "Delivery needs review"
+                            : job.state === "sent"
+                              ? "Accepted by SMTP"
+                              : job.state}
+                        </Badge>
+                      ),
+                    },
+                    { label: "Attempts", render: (job) => job.attempts },
+                  ]}
+                />
+              ) : emailHistory.data ? (
+                <p className="muted">No workspace emails have been queued.</p>
+              ) : null}
+            </div>
+          )}
         </section>
+      )}
+      {preferences.data?.email_operations_available && (
+        <EmailOperations key={b.id} />
       )}
     </>
   );

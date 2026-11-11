@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
+from ledgerpilot.config import Settings
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.operations import fingerprint
@@ -16,6 +17,7 @@ from ledgerpilot.tenancy.service import authorize, get_business
 from ledgerpilot.trade.models import SourceDraft
 from ledgerpilot.trade.schemas import DocumentCreate
 from ledgerpilot.trade.service import create_document, document_impact
+from ledgerpilot.workspace import projects
 
 
 class DraftEdit(Schema):
@@ -82,6 +84,10 @@ def update(db: Session, who: Principal, bid: UUID, did: UUID, data: DraftEdit) -
         raise DomainError("ERR_VERSION", "Draft changed or is no longer editable.", 409)
     if data.payload.idempotency_key != item.key:
         raise DomainError("ERR_DRAFT_KEY", "The source operation key cannot change.")
+    if projects.allocation(db, bid, did) is not None:
+        raise DomainError(
+            "ERR_BILLABLE_DRAFT", "Void and recreate the billable draft to change it.", 409
+        )
     document_impact(db, business, data.payload)
     item.payload, item.version = data.payload.model_dump(mode="json"), item.version + 1
     record(db, who.user.id, "source.draft_updated", bid, did)
@@ -94,6 +100,7 @@ def publish(
     bid: UUID,
     did: UUID,
     data: DraftAction,
+    settings: Settings,
 ) -> dict[str, Any]:
     authorize(db, who, bid, posting=True)
     get_business(db, bid, lock=True)
@@ -102,12 +109,20 @@ def publish(
         return {"id": str(item.document_id), "draft_id": str(item.id), "status": "issued"}
     if item.status != "draft" or item.version != data.expected_version:
         raise DomainError("ERR_VERSION", "Draft changed or was voided.", 409)
+    reserved = projects.allocation(db, bid, did)
+    source = None
+    if reserved is not None:
+        projects.gate(settings, bid)
+        source = projects.check_reserved_source(db, bid, reserved)
     payload = DocumentCreate.model_validate(
         {**item.payload, "expected_version": data.expected_business_version}
     )
     posted = create_document(db, who, bid, payload)
     item.status, item.document_id = "issued", UUID(str(posted["id"]))
     item.version += 1
+    if source is not None:
+        db.flush()
+        projects.complete(db, bid, did, UUID(str(posted["journal_id"])), source)
     record(db, who.user.id, "source.draft_issued", bid, did)
     return {"id": str(item.document_id), "draft_id": str(item.id), "status": "issued"}
 
@@ -119,5 +134,8 @@ def void(db: Session, who: Principal, bid: UUID, did: UUID, data: DraftAction) -
     if item.status != "draft" or item.version != data.expected_version:
         raise DomainError("ERR_VERSION", "Only a current draft may be voided.", 409)
     item.status, item.version = "void", item.version + 1
+    if projects.allocation(db, bid, did) is not None:
+        db.flush()
+        projects.release(db, bid, did)
     record(db, who.user.id, "source.draft_voided", bid, did)
     return read(item)

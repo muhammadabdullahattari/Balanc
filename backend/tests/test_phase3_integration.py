@@ -568,8 +568,18 @@ async def test_close_requires_independent_reviewer_and_membership_changes_are_sc
             base + f"/close-tasks/{tid}", json={"expected_version": 1, "state": "approved"}
         )
         assert self_approve.status_code == 403
+        altered = await client.patch(
+            base + f"/close-tasks/{tid}",
+            json={"expected_version": 1, "state": "approved", "comment": "Rewritten evidence"},
+        )
+        assert altered.status_code == 409 and "ERR_CLOSE_EVIDENCE" in altered.text
         approved = await client.patch(
-            base + f"/close-tasks/{tid}", json={"expected_version": 1, "state": "approved"}
+            base + f"/close-tasks/{tid}",
+            json={
+                "expected_version": 1,
+                "state": "approved",
+                "review_comment": "Independently reviewed",
+            },
         )
         assert approved.status_code == 200, approved.text
         final_owner = await client.patch(
@@ -784,12 +794,14 @@ async def test_real_scanner_statement_and_signed_offline_export(
     import hashlib
     import io
     import json
+    from decimal import Decimal
     from pathlib import Path
     from zipfile import ZipFile
 
     from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
 
     from ledgerpilot.documents.worker import run_once
+    from ledgerpilot.main import create_app
 
     async with accountant_context(client, database_settings) as (bid, api):
         base, a, party = await setup(api, bid)
@@ -811,6 +823,36 @@ async def test_real_scanner_statement_and_signed_offline_export(
             assert outcome["outcome"] == "unsupported" and outcome["completion_accepted"], outcome
             downloaded = await api.get(base + f"/evidence/{eid}/download")
             assert downloaded.status_code == 200 and downloaded.content == original
+            statement = {
+                "account_id": a["bank"],
+                "as_of": "2026-10-31",
+                "closing_balance": "1",
+                "evidence_id": eid,
+            }
+            assert (await api.post(base + "/statements/preview", json=statement)).status_code == 404
+            app = create_app(
+                database_settings.model_copy(
+                    update={"p2_reconciliation_business_ids": frozenset({UUID(bid)})}
+                )
+            )
+            async with (
+                app.router.lifespan_context(app),
+                httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=app),
+                    base_url="https://api.ledgerpilot.test",
+                    cookies=api.cookies,
+                    headers=dict(api.headers),
+                ) as enabled,
+            ):
+                preview = await enabled.post(base + "/statements/preview", json=statement)
+                assert preview.status_code == 200, preview.text
+                assert not preview.json()["ready"]
+                assert Decimal(preview.json()["unexplained_difference"]) == -1
+                balanced = await enabled.post(
+                    base + "/statements/preview", json={**statement, "closing_balance": "0"}
+                )
+                assert balanced.status_code == 200 and balanced.json()["ready"]
+                assert balanced.json()["pending_bank_rows"] == 0
             bad = await api.post(
                 base + "/statements/sign-off",
                 json={
@@ -1039,6 +1081,8 @@ async def test_csv_import_is_reviewed_atomic_idempotent_and_compares_with_baseli
     client: httpx.AsyncClient,
     database_settings: FileSettings,
 ) -> None:
+    from decimal import Decimal
+
     async with accountant_context(client, database_settings) as (bid, api):
         base, _, party = await setup(api, bid)
         text = (
@@ -1068,6 +1112,30 @@ async def test_csv_import_is_reviewed_atomic_idempotent_and_compares_with_baseli
         comparison = await api.get(base + f"/imports/{applied.json()['id']}/comparison")
         assert comparison.status_code == 200 and comparison.json()["balanced"], comparison.text
         assert comparison.json()["controls"]["balanced"]
+        parallel_path = base + f"/imports/{applied.json()['id']}/parallel-comparison"
+        parallel = {
+            "as_of": "2026-11-30",
+            "expected_trial": {"bank": "40", "ar": "60", "income": "-100"},
+        }
+        compared = await api.post(parallel_path, json=parallel)
+        assert compared.status_code == 200, compared.text
+        assert compared.json()["as_of"] == parallel["as_of"]
+        assert compared.json()["balanced"] and compared.json()["controls"]["balanced"]
+        mismatched = await api.post(
+            parallel_path,
+            json={**parallel, "expected_trial": {"bank": "41", "ar": "59", "income": "-100"}},
+        )
+        assert mismatched.status_code == 200 and not mismatched.json()["balanced"], mismatched.text
+        differences = {
+            row["code"]: Decimal(row["difference"]) for row in mismatched.json()["items"]
+        }
+        assert differences["bank"] == -1 and differences["ar"] == 1
+        bad_totals = await api.post(
+            parallel_path, json={**parallel, "expected_trial": {"bank": "1"}}
+        )
+        assert bad_totals.status_code == 400 and "ERR_UNBALANCED" in bad_totals.text
+        early = await api.post(parallel_path, json={**parallel, "as_of": "2026-01-01"})
+        assert early.status_code == 400 and "ERR_DATE_RANGE" in early.text
         duplicate = await api.post(
             base + "/imports/apply", json={**payload, **await command(api, base)}
         )

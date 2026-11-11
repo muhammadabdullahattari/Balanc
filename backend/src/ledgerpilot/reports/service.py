@@ -3,7 +3,7 @@
 from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 from uuid import UUID, uuid4
 
@@ -18,7 +18,7 @@ from ledgerpilot.tenancy.models import Business
 from ledgerpilot.tenancy.service import get_business
 from ledgerpilot.trade import repository as repo
 from ledgerpilot.trade.models import Allocation, Loan, LoanMovement, Payment, TradeDocument
-from ledgerpilot.workspace.models import AdvanceApplication
+from ledgerpilot.workspace.models import AdvanceApplication, ReportRun
 from ledgerpilot.workspace.opening_cash import OpeningSources
 
 
@@ -37,7 +37,10 @@ def context(
     }
 
 
-def balances(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
+def balances(
+    db: Session, bid: UUID, as_of: date, account_ids: list[UUID] | None = None
+) -> dict[UUID, Decimal]:
+    account_filter = () if account_ids is None else (JournalLine.account_id.in_(account_ids),)
     return {
         aid: amount
         for aid, amount in bounded_rows(
@@ -52,6 +55,7 @@ def balances(db: Session, bid: UUID, as_of: date) -> dict[UUID, Decimal]:
                 Journal.business_id == bid,
                 Journal.status == "posted",
                 Journal.accounting_date <= as_of,
+                *account_filter,
             )
             .group_by(JournalLine.account_id),
         )
@@ -457,7 +461,66 @@ def controls(
     }
 
 
-def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[str, Any]:
+def profit_variance(db: Session, bid: UUID, current_id: UUID, previous_id: UUID) -> dict[str, Any]:
+    reports = {
+        report.id: report.result
+        for report in db.scalars(
+            select(ReportRun).where(
+                ReportRun.business_id == bid,
+                ReportRun.id.in_([current_id, previous_id]),
+                ReportRun.kind == "profit-loss",
+            )
+        )
+    }
+    if current_id not in reports or previous_id not in reports:
+        raise DomainError("ERR_NOT_FOUND", "Profit and loss report not found.", 404)
+    current, previous = reports[current_id], reports[previous_id]
+    current_start, current_end = (date.fromisoformat(current[k]) for k in ("start_date", "as_of"))
+    previous_start, previous_end = (
+        date.fromisoformat(previous[k]) for k in ("start_date", "as_of")
+    )
+    if (
+        previous_end >= current_start
+        or current_end - current_start != previous_end - previous_start
+        or any(current[k] != previous[k] for k in ("basis", "currency", "book", "policy"))
+    ):
+        raise DomainError(
+            "ERR_REPORT_COMPARISON",
+            "Choose non-overlapping periods of equal length with matching report settings.",
+            422,
+        )
+    contributions: dict[str, Decimal] = defaultdict(Decimal)
+    names = {}
+    for report, direction in ((previous, -1), (current, 1)):
+        for row in report["items"]:
+            aid = row["account_id"]
+            names[aid] = row["name"]
+            sign = 1 if row["kind"] == "income" else -1
+            contributions[aid] += Decimal(row["amount"]) * sign * direction
+    ranked = sorted(contributions, key=lambda aid: (-abs(contributions[aid]), aid))
+    return {
+        "current_report_id": current_id,
+        "previous_report_id": previous_id,
+        "currency": current["currency"],
+        "basis": current["basis"],
+        "net_profit_change": str(Decimal(current["net_profit"]) - Decimal(previous["net_profit"])),
+        "income_change": str(Decimal(current["income"]) - Decimal(previous["income"])),
+        "expense_change": str(Decimal(current["expense"]) - Decimal(previous["expense"])),
+        "drivers": [
+            {"account_id": aid, "name": names[aid], "contribution": str(contributions[aid])}
+            for aid in ranked[:5]
+            if contributions[aid]
+        ],
+    }
+
+
+def forecast(
+    db: Session,
+    bid: UUID,
+    as_of: date,
+    bank_ids: list[UUID],
+    scenario: tuple[int, int] | None = None,
+) -> dict[str, Any]:
     from ledgerpilot.shared.operations import load_accounts, validate_account
 
     if as_of > date.max - timedelta(days=91):
@@ -467,35 +530,47 @@ def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[
     accounts = load_accounts(db, bid, bank_ids)
     for aid in bank_ids:
         validate_account(accounts.get(aid), {"asset"}, plain=True)
-    current = balances(db, bid, as_of)
+    current = balances(db, bid, as_of, bank_ids)
     cash = sum((current.get(aid, Decimal(0)) for aid in bank_ids), Decimal(0))
     docs = bounded_scalars(
         db,
-        select(TradeDocument).where(
+        select(TradeDocument)
+        .where(
             TradeDocument.business_id == bid,
             TradeDocument.kind.in_(["invoice", "bill"]),
             TradeDocument.accounting_date <= as_of,
             TradeDocument.due_date.between(as_of + timedelta(days=1), as_of + timedelta(days=91)),
             TradeDocument.disputed.is_(False),
-        ),
+        )
+        .order_by(TradeDocument.due_date, TradeDocument.id),
     )
     due = repo.due_snapshots(db, bid, [as_of], [d.id for d in docs])[as_of]
+    business = get_business(db, bid)
+    quantum = Decimal(1).scaleb(-business.currency_precision)
+    weekly: dict[int, list[TradeDocument]] = defaultdict(list)
+    for document in docs:
+        if due[document.id] > 0:
+            weekly[((document.due_date - as_of).days - 1) // 7].append(document)
     rows = []
+    first_shortfall = None
     for index in range(13):
         start = as_of + timedelta(days=1 + index * 7)
         end = start + timedelta(days=6)
         receipts, payments = Decimal(0), Decimal(0)
         sources = []
-        for d in docs:
-            if d.disputed or not start <= d.due_date <= end or due[d.id] <= 0:
-                continue
+        for d in weekly[index]:
             value = due[d.id]
             if d.kind == "invoice":
                 receipts += value
             else:
                 payments += value
             sources.append(str(d.id))
+        if scenario is not None:
+            receipts = (receipts * scenario[0] / 100).quantize(quantum, rounding=ROUND_HALF_EVEN)
+            payments = (payments * scenario[1] / 100).quantize(quantum, rounding=ROUND_HALF_EVEN)
         cash += receipts - payments
+        if cash < 0 and first_shortfall is None:
+            first_shortfall = end
         rows.append(
             {
                 "week": index + 1,
@@ -508,8 +583,8 @@ def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[
                 "document_ids": sources,
             }
         )
-    return {
-        **context(db, bid, as_of, "deterministic_cash_plan"),
+    result = {
+        **context(db, bid, as_of, "deterministic_cash_plan", business),
         "weeks": rows,
         "confidence": "low",
         "bands": None,
@@ -521,6 +596,14 @@ def forecast(db: Session, bid: UUID, as_of: date, bank_ids: list[UUID]) -> dict[
             "No calibrated uncertainty bands are available; this is not a statistical prediction.",
         ],
     }
+    if scenario is not None:
+        result["scenario"] = {"receipt_percent": scenario[0], "payment_percent": scenario[1]}
+        result["first_shortfall"] = first_shortfall
+        result["assumptions"].append(
+            "Scenario percentages scale weekly receipts and payments; each total is rounded to "
+            "the currency precision. Opening cash and due dates are unchanged."
+        )
+    return result
 
 
 def tax_support(db: Session, bid: UUID, start: date, end: date) -> dict[str, Any]:

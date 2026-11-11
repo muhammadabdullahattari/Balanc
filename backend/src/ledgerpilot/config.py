@@ -1,9 +1,11 @@
 """Typed application settings loaded from the environment."""
 
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
+from uuid import UUID
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -65,6 +67,53 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_starttls: bool = False
     auth_delivery_enabled: bool = False
+    p2_email_delivery_enabled: bool = False
+    p2_email_delivery_business_ids: frozenset[UUID] = frozenset()
+    p2_project_business_ids: frozenset[UUID] = frozenset()
+    p2_insight_business_ids: frozenset[UUID] = frozenset()
+    p2_reconciliation_business_ids: frozenset[UUID] = frozenset()
+    p2_prepaid_business_ids: frozenset[UUID] = frozenset()
+    p2_micro_close_business_ids: frozenset[UUID] = frozenset()
+
+    @field_validator(
+        "p2_email_delivery_business_ids",
+        "p2_project_business_ids",
+        "p2_prepaid_business_ids",
+        "p2_insight_business_ids",
+        "p2_reconciliation_business_ids",
+        "p2_micro_close_business_ids",
+        mode="before",
+    )
+    @classmethod
+    def parse_rollout_business_ids(cls, value: object) -> object:
+        # FileSettings passes raw strings to the initializer. Normal environment
+        # loading already decodes the JSON list before this validator runs.
+        return json.loads(value) if isinstance(value, str) else value
+
+    def allows_p2_email_delivery(self, business_id: UUID) -> bool:
+        """Evaluate rollout for a business whose scope was already verified."""
+        return (
+            self.app_env != "demo"
+            and self.p2_email_delivery_enabled
+            and business_id in self.p2_email_delivery_business_ids
+        )
+
+    def allows_p2_projects(self, business_id: UUID) -> bool:
+        return self.app_env in {"local", "test"} and business_id in self.p2_project_business_ids
+
+    def allows_p2_insights(self, business_id: UUID) -> bool:
+        return self.app_env in {"local", "test"} and business_id in self.p2_insight_business_ids
+
+    def allows_p2_reconciliation(self, business_id: UUID) -> bool:
+        return (
+            self.app_env in {"local", "test"} and business_id in self.p2_reconciliation_business_ids
+        )
+
+    def allows_p2_prepaids(self, business_id: UUID) -> bool:
+        return self.app_env in {"local", "test"} and business_id in self.p2_prepaid_business_ids
+
+    def allows_p2_micro_close(self, business_id: UUID) -> bool:
+        return self.app_env in {"local", "test"} and business_id in self.p2_micro_close_business_ids
 
     @field_validator("session_signing_key")
     @classmethod

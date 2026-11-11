@@ -12,11 +12,12 @@ import {
   NextPage,
   money,
 } from "../components/ui";
-import { today, useBusiness } from "./context";
+import { today, useAccess, useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
 export function Openings() {
   const b = useBusiness(),
     path = { business_id: b.id };
+  const access = useAccess();
   const [baseline, setBaseline] = useState([
     { code: "", amount: "" },
     { code: "", amount: "" },
@@ -275,6 +276,9 @@ export function Openings() {
         )}
         {apply.isSuccess && <p role="status">Opening balances imported.</p>}
       </section>
+      {(access?.role === "owner" || access?.role === "accountant") && (
+        <ParallelComparison key={b.id} />
+      )}
       <section className="panel">
         {rows.data?.items.length ? (
           <>
@@ -303,5 +307,159 @@ export function Openings() {
         )}
       </section>
     </>
+  );
+}
+
+function ParallelComparison() {
+  const business = useBusiness();
+  const path = { business_id: business.id };
+  const [cursor, setCursor] = useState<string>();
+  const [batchId, setBatchId] = useState("");
+  const batches = useQuery({
+    queryKey: [...keys.business(business.id), "import-batches", cursor],
+    queryFn: ({ signal }) =>
+      result(
+        api.GET("/api/v1/businesses/{business_id}/imports", {
+          signal,
+          params: { path, query: { limit: 50, cursor } },
+        }),
+      ),
+  });
+  const compare = useMutation({
+    mutationFn: async (form: HTMLFormElement) => {
+      const fields = new FormData(form);
+      const rows = String(fields.get("trial"))
+        .trim()
+        .split(/\r?\n/)
+        .map((line) => line.split("\t").map((value) => value.trim()));
+      if (rows[0]?.join("\t") === "code\tbalance") rows.shift();
+      if (rows.some((row) => row.length !== 2 || !row[0] || !row[1])) {
+        throw new Error(
+          "Paste one account code and signed balance per row, separated by a tab.",
+        );
+      }
+      const codes = new Set(rows.map(([code]) => code));
+      if (!rows.length || codes.size !== rows.length || rows.length > 1000) {
+        throw new Error("Supply between 1 and 1,000 unique account codes.");
+      }
+      return result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/imports/{batch_id}/parallel-comparison",
+          {
+            params: { path: { ...path, batch_id: batchId } },
+            body: {
+              as_of: String(fields.get("as_of")),
+              expected_trial: Object.fromEntries(rows),
+            },
+          },
+        ),
+      );
+    },
+  });
+  const selected = batches.data?.items.find((batch) => batch.id === batchId);
+  const report = compare.data;
+  return (
+    <section className="panel settings-section">
+      <h2>Parallel-run trial balance</h2>
+      <p className="muted">
+        Compare the source books and LedgerPilot on the same date. Use debit
+        minus credit for each account balance. Omitted accounts are treated as
+        zero.
+      </p>
+      <ErrorNotice error={batches.error || compare.error} />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          compare.mutate(event.currentTarget);
+        }}
+      >
+        <Field label="Financial import batch">
+          <select
+            required
+            value={batchId}
+            disabled={compare.isPending}
+            onChange={(event) => {
+              setBatchId(event.target.value);
+              compare.reset();
+            }}
+          >
+            <option value="">Choose a financial import</option>
+            {batches.data?.items
+              .filter((batch) => batch.mode !== "chart")
+              .map((batch) => (
+                <option key={batch.id} value={batch.id}>
+                  {batch.cutover_date} · {batch.mode} · {batch.id.slice(0, 8)}
+                </option>
+              ))}
+          </select>
+        </Field>
+        <NextPage
+          cursor={batches.data?.next_cursor}
+          onNext={() => {
+            setBatchId("");
+            compare.reset();
+            setCursor(batches.data?.next_cursor || undefined);
+          }}
+          onReset={() => {
+            setBatchId("");
+            compare.reset();
+            setCursor(undefined);
+          }}
+        />
+        <Field label="Comparison date">
+          <input
+            name="as_of"
+            type="date"
+            required
+            min={selected?.cutover_date}
+          />
+        </Field>
+        <Field label="Legacy account codes and signed balances">
+          <textarea
+            name="trial"
+            required
+            rows={5}
+            maxLength={100000}
+            placeholder="Paste two tab-separated spreadsheet columns"
+          />
+        </Field>
+        <Button busy={compare.isPending} disabled={!selected}>
+          Compare trial balances
+        </Button>
+      </form>
+      {report?.items && (
+        <>
+          <p role="status">
+            {report.balanced
+              ? "Account balances match."
+              : "Account differences need review."}{" "}
+            {report.controls?.balanced
+              ? "Ledger control accounts reconcile."
+              : "Ledger control accounts need review."}{" "}
+            Compared as of {report.as_of}.
+          </p>
+          <Table
+            caption="Parallel-run account balances"
+            rows={report.items}
+            rowKey={(row) => row.account_id}
+            columns={[
+              { label: "Account code", render: (row) => row.code },
+              {
+                label: "Legacy",
+                render: (row) => money(row.expected, business.currency),
+              },
+              {
+                label: "LedgerPilot",
+                render: (row) => money(row.actual, business.currency),
+              },
+              {
+                label: "Difference",
+                render: (row) => money(row.difference, business.currency),
+              },
+            ]}
+          />
+        </>
+      )}
+    </section>
   );
 }

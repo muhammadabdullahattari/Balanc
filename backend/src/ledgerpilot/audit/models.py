@@ -14,6 +14,8 @@ from ledgerpilot.database import Base
 class AuditEvent(Base):
     __tablename__ = "audit_events"
     __table_args__ = {"schema": "app"}
+    # Some roles may append their own events without reading the workspace audit log.
+    __mapper_args__ = {"eager_defaults": False}
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("app.users.id"), index=True)
     business_id: Mapped[UUID | None] = mapped_column(ForeignKey("app.businesses.id"), index=True)

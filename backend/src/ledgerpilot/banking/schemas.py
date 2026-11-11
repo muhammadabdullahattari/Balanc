@@ -85,9 +85,13 @@ class OutstandingItem(Schema):
     position: int = Field(ge=1, le=200)
 
 
-class StatementCreate(Command):
+class StatementInput(Schema):
     account_id: UUID
     as_of: date
     closing_balance: str = Field(pattern=r"^-?[0-9]{1,18}(?:\.[0-9]{1,6})?$")
     outstanding: list[OutstandingItem] = Field(default_factory=list, max_length=500)
     evidence_id: UUID
+
+
+class StatementCreate(StatementInput, Command):
+    pass

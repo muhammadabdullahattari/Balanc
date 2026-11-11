@@ -60,7 +60,7 @@ def businesses(
 
 
 @router.get("/businesses/{business_id}", response_model=BusinessRead)
-def business(business_id: UUID, identity: Identity, db: DB) -> dict[str, object]:
+def business(business_id: UUID, request: Request, identity: Identity, db: DB) -> dict[str, object]:
     service.authorize(db, identity, business_id)
     b = service.get_business(db, business_id)
     policy = service.effective_policy(db, b)
@@ -75,6 +75,11 @@ def business(business_id: UUID, identity: Identity, db: DB) -> dict[str, object]
         "policy_version": policy.version if policy else 1,
         "fiscal_month": b.fiscal_month,
         "jurisdiction": policy.jurisdiction if policy else b.jurisdiction,
+        "p2_projects_available": request.app.state.settings.allows_p2_projects(b.id),
+        "p2_insights_available": request.app.state.settings.allows_p2_insights(b.id),
+        "p2_reconciliation_available": request.app.state.settings.allows_p2_reconciliation(b.id),
+        "p2_micro_close_available": request.app.state.settings.allows_p2_micro_close(b.id),
+        "p2_prepaids_available": request.app.state.settings.allows_p2_prepaids(b.id),
     }
 
 

@@ -50,6 +50,53 @@ def snapshot(url: URL) -> dict[str, tuple[int, str]]:
     return result
 
 
+def assert_restored_worker_can_reclaim(
+    runtime: URL, admin: URL, actor: str, business: str, job_id: str, evidence_id: str
+) -> None:
+    scope = "SELECT set_config('app.user_id', %s, true), set_config('app.business_id', %s, true)"
+
+    def claim() -> tuple[object, ...] | None:
+        # A fresh connection represents an independent worker process.
+        with connect(runtime) as db, db.transaction():
+            db.execute(scope, (actor, business))
+            return db.execute(
+                "SELECT id::text,evidence_id::text,lease_token FROM app.claim_evidence_job(%s)",
+                (business,),
+            ).fetchone()
+
+    first = claim()
+    assert first is not None and first[:2] == (job_id, evidence_id)
+    assert first[2] is not None
+    assert claim() is None
+
+    # Move only the isolated drill job past the database clock's lease boundary.
+    with connect(admin) as db:
+        assert (
+            db.execute(
+                "UPDATE app.evidence_jobs SET lease_until=now()-interval '1 second' "
+                "WHERE id=%s AND business_id=%s AND state='running'",
+                (job_id, business),
+            ).rowcount
+            == 1
+        )
+
+    reclaimed = claim()
+    assert reclaimed is not None and reclaimed[:2] == first[:2]
+    assert reclaimed[2] is not None and reclaimed[2] != first[2]
+    with connect(runtime) as db, db.transaction():
+        db.execute(scope, (actor, business))
+        complete = (
+            "SELECT app.complete_evidence_job(%s,%s,NULL,NULL,'retry','ERR_SCAN_UNAVAILABLE')"
+        )
+        assert db.execute(complete, (job_id, first[2])).fetchone() == (False,)
+        assert db.execute(complete, (job_id, reclaimed[2])).fetchone() == (True,)
+        assert db.execute(complete, (job_id, reclaimed[2])).fetchone() == (False,)
+        assert db.execute(
+            "SELECT state,attempts,lease_token,error_code FROM app.evidence_jobs WHERE id=%s",
+            (job_id,),
+        ).fetchone() == ("queued", 2, None, "ERR_SCAN_UNAVAILABLE")
+
+
 async def test_loan_principal_never_becomes_profit_and_interest_stays_separate(
     client: httpx.AsyncClient,
     database_settings: FileSettings,
@@ -152,7 +199,7 @@ def test_previous_supported_schema_upgrades_without_losing_identity(
             assert db.execute(
                 "SELECT password_version FROM app.users WHERE id=%s", (user_id,)
             ).fetchone() == (1,)
-            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0022",)
+            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0026",)
     finally:
         assert name.startswith("ledgerpilot_upgrade_")
         with connect(admin_url) as db:
@@ -182,6 +229,9 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
             },
         )
         assert payment.status_code == 201, payment.text
+        identity = await api.get("/api/v1/auth/me")
+        assert identity.status_code == 200, identity.text
+        actor = identity.json()["id"]
         original = b"date,amount\n2026-11-01,40\n"
         source_settings = database_settings.model_copy(
             update={
@@ -282,7 +332,7 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                     "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user"
                 ).fetchone() == (False,)
                 assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == (
-                    "0022",
+                    "0026",
                 )
             restored_root = tmp_path / "restored-evidence"
             shutil.copytree(evidence_backup, restored_root)
@@ -344,6 +394,9 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                 assert blocked.status_code == 409
                 denied = await recovered.get(f"/api/v1/businesses/{uuid4()}")
                 assert denied.status_code == 404
+            assert_restored_worker_can_reclaim(
+                runtime, admin_url.set(database=restored), actor, bid, job_id, evidence_id
+            )
         finally:
             assert restored.startswith("ledgerpilot_restore_") and restored != source
             with connect(admin_url) as db:

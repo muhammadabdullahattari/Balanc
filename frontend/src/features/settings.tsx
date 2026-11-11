@@ -74,6 +74,22 @@ export function Settings() {
         }),
       ),
   });
+  const downloadPrivacy = useMutation({
+    mutationFn: async (requestId?: string) => {
+      const blob = await result(
+        api.GET("/api/v1/businesses/{business_id}/privacy-export", {
+          params: { path, query: { request_id: requestId } },
+          parseAs: "blob",
+        }),
+      );
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "ledgerpilot-personal-data.json";
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    },
+  });
   const logoutAll = useMutation({
     mutationFn: () => result(api.POST("/api/v1/auth/logout-all")),
     onSuccess: () => {
@@ -230,7 +246,16 @@ export function Settings() {
               legal holds may apply; submitting a request does not erase
               financial records.
             </p>
-            <ErrorNotice error={privacy.error || requests.error} />
+            <ErrorNotice
+              error={privacy.error || requests.error || downloadPrivacy.error}
+            />
+            <Button
+              variant="secondary"
+              busy={downloadPrivacy.isPending}
+              onClick={() => downloadPrivacy.mutate(undefined)}
+            >
+              Download my account data
+            </Button>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -260,6 +285,21 @@ export function Settings() {
                   { label: "Request", render: (r) => r.kind },
                   { label: "Status", render: (r) => <Badge>{r.status}</Badge> },
                   { label: "Reason", render: (r) => r.reason },
+                  {
+                    label: "Export",
+                    render: (r) =>
+                      r.kind === "export" && r.status === "export_ready" ? (
+                        <Button
+                          variant="secondary"
+                          disabled={downloadPrivacy.isPending}
+                          onClick={() => downloadPrivacy.mutate(r.id)}
+                        >
+                          Download approved export
+                        </Button>
+                      ) : (
+                        "—"
+                      ),
+                  },
                 ]}
               />
             )}

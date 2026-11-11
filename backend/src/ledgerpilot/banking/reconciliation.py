@@ -9,23 +9,17 @@ from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Journal, JournalLine
 from ledgerpilot.banking.models import BankMatch, BankRow, Statement
-from ledgerpilot.banking.schemas import StatementCreate
+from ledgerpilot.banking.schemas import StatementCreate, StatementInput
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.reports.service import balances
 from ledgerpilot.shared import operations as ops
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.tenancy.models import Business
 from ledgerpilot.workspace.service import evidence
 
 
-def sign_off(
-    db: Session,
-    who: Principal,
-    bid: UUID,
-    data: StatementCreate,
-) -> dict[str, Any]:
-    business, old = ops.begin(db, who, bid, data, "statement.signed")
-    if old is not None:
-        return old
+def preview(db: Session, business: Business, data: StatementInput) -> dict[str, Any]:
+    bid = business.id
     ops.account(db, bid, data.account_id, {"asset", "liability"}, plain=True)
     evidence(db, bid, data.evidence_id)
     closing = Decimal(data.closing_balance)
@@ -109,9 +103,24 @@ def sign_off(
         )
         or 0
     )
-    ledger = balances(db, bid, data.as_of).get(data.account_id, Decimal(0))
+    ledger = balances(db, bid, data.as_of, [data.account_id]).get(data.account_id, Decimal(0))
     difference = ledger - closing - outstanding
-    if difference or pending:
+    return {
+        "ledger_balance": str(ledger),
+        "statement_balance": str(closing),
+        "outstanding": str(outstanding),
+        "unexplained_difference": str(difference),
+        "pending_bank_rows": pending,
+        "ready": difference == 0 and pending == 0,
+    }
+
+
+def sign_off(db: Session, who: Principal, bid: UUID, data: StatementCreate) -> dict[str, Any]:
+    business, old = ops.begin(db, who, bid, data, "statement.signed")
+    if old is not None:
+        return old
+    check = preview(db, business, data)
+    if not check["ready"]:
         raise DomainError(
             "ERR_RECONCILIATION",
             "Resolve unexplained differences and bank-review items first.",
@@ -121,9 +130,9 @@ def sign_off(
         business_id=bid,
         account_id=data.account_id,
         as_of=data.as_of,
-        closing_balance=closing,
+        closing_balance=Decimal(check["statement_balance"]),
         outstanding=[r.model_dump(mode="json") for r in data.outstanding],
-        ledger_balance=ledger,
+        ledger_balance=Decimal(check["ledger_balance"]),
         evidence_id=data.evidence_id,
         reviewer_id=who.user.id,
     )
@@ -137,9 +146,9 @@ def sign_off(
         "statement.signed",
         {
             "id": str(statement.id),
-            "ledger_balance": str(ledger),
-            "statement_balance": str(closing),
-            "outstanding": str(outstanding),
+            "ledger_balance": check["ledger_balance"],
+            "statement_balance": check["statement_balance"],
+            "outstanding": check["outstanding"],
             "unexplained_difference": "0",
         },
     )

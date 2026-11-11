@@ -23,6 +23,8 @@ export function Reports() {
   const [start, setStart] = useState(day.slice(0, 4) + "-01-01");
   const [end, setEnd] = useState(day);
   const [bank, setBank] = useState("");
+  const [scenario, setScenario] = useState("baseline");
+  const stress = b.p2_insights_available && scenario === "stress";
   const path = { business_id: b.id };
   const basis = b.basis === "cash" ? ("cash" as const) : ("accrual" as const);
   const financial = useQuery({
@@ -82,13 +84,20 @@ export function Reports() {
       ),
   });
   const forecast = useQuery({
-    queryKey: [...keys.business(b.id), "forecast", end, bank],
+    queryKey: [...keys.business(b.id), "forecast", end, bank, stress],
     enabled: tab === "forecast" && !!bank,
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/businesses/{business_id}/reports/forecast", {
           signal,
-          params: { path, query: { as_of: end, bank_ids: [bank] } },
+          params: {
+            path,
+            query: {
+              as_of: end,
+              bank_ids: [bank],
+              ...(stress && { receipt_percent: 75, payment_percent: 125 }),
+            },
+          },
         }),
       ),
   });
@@ -177,6 +186,19 @@ export function Reports() {
             </select>
           </Field>
         )}
+        {tab === "forecast" && b.p2_insights_available && (
+          <Field label="Cash scenario">
+            <select
+              value={scenario}
+              onChange={(e) => setScenario(e.target.value)}
+            >
+              <option value="baseline">Due-date baseline</option>
+              <option value="stress">
+                Stress case · 75% receipts, 125% payments
+              </option>
+            </select>
+          </Field>
+        )}
         <Badge>
           {b.currency} · {b.basis} basis
         </Badge>
@@ -260,6 +282,15 @@ export function Reports() {
                         </div>
                       )}
                   </div>
+                )}
+                {tab === "profit" && b.p2_insights_available && (
+                  <ProfitComparison
+                    key={financial.data.report_id}
+                    reportId={financial.data.report_id}
+                    start={financial.data.start_date}
+                    end={financial.data.as_of}
+                    basis={basis}
+                  />
                 )}
                 <p className="report-footnote">
                   {financial.data.timezone} · Report {financial.data.report_id}
@@ -364,9 +395,21 @@ export function Reports() {
                   <Badge tone="warning">{forecast.data.confidence}</Badge>
                 </div>
                 <div className="notice">
-                  This is a due-date forecast, not a guaranteed outcome. No
-                  calibrated confidence bands are available.
+                  The forecast assumes payments follow their due dates.
+                  Statistical confidence bands are unavailable.
                 </div>
+                {b.p2_insights_available && (
+                  <p role="status" className="notice">
+                    {(() => {
+                      const first = forecast.data.weeks.find(
+                        (week) => week.shortfall,
+                      );
+                      return first
+                        ? `First projected shortfall in the week ending ${first.end_date}.`
+                        : "No closing cash shortfall in the 13-week projection.";
+                    })()}
+                  </p>
+                )}
                 <Table
                   caption="13-week cash forecast"
                   rows={forecast.data.weeks}
@@ -404,6 +447,12 @@ export function Reports() {
                     ))}
                   </ul>
                 </details>
+                {b.p2_insights_available && (
+                  <ForecastAnswers
+                    key={forecast.data.report_id}
+                    reportId={forecast.data.report_id}
+                  />
+                )}
                 <p className="report-footnote">
                   Report {forecast.data.report_id}
                 </p>
@@ -413,6 +462,158 @@ export function Reports() {
         )}
       </section>
     </>
+  );
+}
+
+function ForecastAnswers({ reportId }: { reportId: string }) {
+  const business = useBusiness();
+  const answer = useMutation({
+    mutationFn: (
+      metric: "forecast_first_shortfall" | "forecast_closing_cash",
+    ) =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/assistant/report-answer", {
+          params: { path: { business_id: business.id } },
+          body: { report_id: reportId, metric },
+        }),
+      ),
+  });
+  const data = answer.data;
+  return (
+    <div className="settings-section">
+      <h3>Ask about this forecast</h3>
+      <div className="actions">
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={answer.isPending}
+          onClick={() => answer.mutate("forecast_first_shortfall")}
+        >
+          When is the first projected shortfall?
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          disabled={answer.isPending}
+          onClick={() => answer.mutate("forecast_closing_cash")}
+        >
+          What is the projected closing cash?
+        </Button>
+      </div>
+      <ErrorNotice error={answer.error} />
+      {data && (
+        <p role="status">
+          {data.metric === "forecast_first_shortfall"
+            ? data.value
+              ? `The first projected shortfall is in the week ending ${data.value}.`
+              : "This forecast shows no projected shortfall."
+            : `Projected cash at the end of week 13 is ${money(String(data.value), business.currency)}.`}{" "}
+          Source report {data.report_id}.
+        </p>
+      )}
+    </div>
+  );
+}
+
+function ProfitComparison({
+  reportId,
+  start,
+  end,
+  basis,
+}: {
+  reportId: string;
+  start: string;
+  end: string;
+  basis: "cash" | "accrual";
+}) {
+  const b = useBusiness();
+  const [requested, setRequested] = useState(false);
+  const first = Date.parse(start);
+  const last = Date.parse(end);
+  const day = 86_400_000;
+  const priorStart = first - (last - first + day);
+  const dateOnly = (value: number) =>
+    new Date(value).toISOString().slice(0, 10);
+  const comparable =
+    Number.isFinite(priorStart) && priorStart >= Date.parse("0001-01-02");
+  const comparison = useQuery({
+    queryKey: [...keys.business(b.id), "profit-variance", reportId],
+    enabled: requested && comparable,
+    queryFn: async ({ signal }) => {
+      const path = { business_id: b.id };
+      const previous = await result(
+        api.GET("/api/v1/businesses/{business_id}/reports/profit-loss", {
+          signal,
+          params: {
+            path,
+            query: {
+              start: dateOnly(priorStart),
+              end: dateOnly(first - day),
+              basis,
+            },
+          },
+        }),
+      );
+      return result(
+        api.GET("/api/v1/businesses/{business_id}/reports/profit-variance", {
+          signal,
+          params: {
+            path,
+            query: {
+              current_report_id: reportId,
+              previous_report_id: previous.report_id,
+            },
+          },
+        }),
+      );
+    },
+  });
+  if (!comparable) return null;
+  const change = comparison.data;
+  return (
+    <div className="settings-section">
+      <Button
+        variant="secondary"
+        busy={comparison.isFetching}
+        onClick={() => setRequested(true)}
+      >
+        Compare with the previous period
+      </Button>
+      <ErrorNotice
+        error={comparison.error}
+        retry={() => void comparison.refetch()}
+      />
+      {change && (
+        <div className="notice" role="status">
+          <strong>
+            Net profit change {money(change.net_profit_change, change.currency)}
+          </strong>
+          <p>
+            Income changed by {money(change.income_change, change.currency)} and
+            expenses changed by {money(change.expense_change, change.currency)}{" "}
+            compared with {dateOnly(priorStart)}
+            {" through "}
+            {dateOnly(first - day)}.
+          </p>
+          {change.drivers.length > 0 && (
+            <>
+              <p>Largest account contributions to the change</p>
+              <ul>
+                {change.drivers.map((row) => (
+                  <li key={row.account_id}>
+                    {row.name} · {money(row.contribution, change.currency)}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          <p>
+            Source reports {change.current_report_id} and{" "}
+            {change.previous_report_id}.
+          </p>
+        </div>
+      )}
+    </div>
   );
 }
 

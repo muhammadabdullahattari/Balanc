@@ -7,7 +7,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi.encoders import jsonable_encoder
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -15,7 +15,7 @@ from ledgerpilot.accounting.models import Journal, JournalLine, Period
 from ledgerpilot.audit.service import record
 from ledgerpilot.banking.models import BankRow
 from ledgerpilot.identity.dependencies import Principal
-from ledgerpilot.reports.service import controls
+from ledgerpilot.reports.service import context, controls
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.models import Membership
 from ledgerpilot.tenancy.service import get_business
@@ -26,13 +26,17 @@ from ledgerpilot.workspace.schemas import TaskUpdate
 
 
 def save_report(db: Session, who: Principal, bid: UUID, result: dict[str, Any]) -> dict[str, Any]:
+    return store_report(db, who.user.id, bid, result)
+
+
+def store_report(db: Session, actor: UUID, bid: UUID, result: dict[str, Any]) -> dict[str, Any]:
     saved = db.info.setdefault("saved_report_ids", set())
     if result["report_id"] in saved:
         return result
     saved.add(result["report_id"])
     for value in result.values():
         if isinstance(value, dict) and "report_id" in value:
-            save_report(db, who, bid, value)
+            store_report(db, actor, bid, value)
     encoded = jsonable_encoder(result)
     db.add(
         ReportRun(
@@ -40,7 +44,7 @@ def save_report(db: Session, who: Principal, bid: UUID, result: dict[str, Any]) 
             business_id=bid,
             kind=result.get("kind", result.get("basis", "report")),
             result=encoded,
-            created_by=who.user.id,
+            created_by=actor,
         )
     )
     return result
@@ -131,6 +135,13 @@ def update_task(
                 "ERR_SEGREGATION", "An independent reviewer must approve prepared work.", 403
             )
         task.reviewed_by = who.user.id
+        if ("evidence_id" in data.model_fields_set and data.evidence_id != task.evidence_id) or (
+            "comment" in data.model_fields_set and data.comment != task.comment
+        ):
+            raise DomainError("ERR_CLOSE_EVIDENCE", "Reopen the task to change prepared work.", 409)
+        if task.evidence_id:
+            evidence(db, bid, task.evidence_id)
+        task.review_comment = data.review_comment or ""
     elif data.state == "prepared":
         if task.assigned_to != who.user.id:
             raise DomainError("ERR_FORBIDDEN", "Only the assigned preparer may submit work.", 403)
@@ -139,9 +150,12 @@ def update_task(
         if member is None or member.role not in {"owner", "accountant"}:
             raise DomainError("ERR_FORBIDDEN", "Only an administrator may reopen work.", 403)
         task.prepared_by, task.reviewed_by = None, None
-    if data.evidence_id:
-        evidence(db, bid, data.evidence_id)
-    task.state, task.evidence_id, task.comment = data.state, data.evidence_id, data.comment
+    if data.state != "approved":
+        if data.evidence_id:
+            evidence(db, bid, data.evidence_id)
+        task.evidence_id, task.comment = data.evidence_id, data.comment or ""
+        task.review_comment = ""
+    task.state = data.state
     task.version += 1
     record(db, who.user.id, "close.task_updated", bid, tid)
     return task
@@ -192,17 +206,37 @@ def readiness(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
     )
     tieout = controls(db, bid, as_of)
     tax = tax_support(db, bid, date(1900, 1, 1), as_of)
+    prepaids: int = db.execute(
+        text("""
+          SELECT count(*) FROM app.prepaid_installments
+          WHERE business_id=:b AND due_date<=:day AND journal_id IS NULL
+        """),
+        {"b": bid, "day": as_of},
+    ).scalar_one()
     return {
         "as_of": as_of,
         "unreviewed_bank_rows": pending,
         "mandatory_tasks_pending": tasks,
+        "prepaid_installments_pending": prepaids,
         "controls": tieout,
         "tax_controls": tax,
-        "ready": pending == 0 and tasks == 0 and tieout["balanced"] and tax["balanced"],
+        "ready": pending == 0
+        and tasks == 0
+        and prepaids == 0
+        and tieout["balanced"]
+        and tax["balanced"],
         "checks": ["unreviewed bank rows", "required close tasks", "AR/AP/loan control tie-outs"],
         "limitations": [
             "Document completeness and external source freshness require explicit evidence."
         ],
+    }
+
+
+def readiness_report(db: Session, bid: UUID, as_of: date) -> dict[str, Any]:
+    return {
+        **context(db, bid, as_of, "operational_readiness"),
+        "kind": "readiness",
+        **readiness(db, bid, as_of),
     }
 
 

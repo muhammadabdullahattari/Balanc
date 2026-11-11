@@ -13,6 +13,7 @@ class PreferencesUpdate(Schema):
     expected_version: int = Field(ge=0)
     marketing: bool = False
     reminders: bool = True
+    email_reminders: bool | None = None
     quiet_start: int = Field(default=21, ge=0, le=23)
     quiet_end: int = Field(default=8, ge=0, le=23)
 
@@ -32,7 +33,8 @@ class TaskUpdate(Schema):
     expected_version: int = Field(ge=0)
     state: Literal["open", "prepared", "approved"]
     evidence_id: UUID | None = None
-    comment: str = Field(default="", max_length=2000)
+    comment: str | None = Field(default=None, max_length=2000)
+    review_comment: str | None = Field(default=None, max_length=2000)
 
 
 class ConsentCreate(Schema):
@@ -48,7 +50,16 @@ class PrivacyCreate(Schema):
 
 class AssistantRequest(Schema):
     report_id: UUID
-    metric: Literal["income", "expense", "net_profit", "total", "balanced", "retained_earnings"]
+    metric: Literal[
+        "income",
+        "expense",
+        "net_profit",
+        "total",
+        "balanced",
+        "retained_earnings",
+        "forecast_first_shortfall",
+        "forecast_closing_cash",
+    ]
 
 
 class MembershipUpdate(Schema):

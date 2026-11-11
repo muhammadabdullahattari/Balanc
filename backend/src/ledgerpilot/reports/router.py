@@ -4,15 +4,33 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.reports import service
 from ledgerpilot.shared import contracts
+from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.service import authorize
 from ledgerpilot.workspace.service import save_report
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["reports"])
+
+
+@router.get(
+    "/reports/profit-variance", response_model=contracts.responses["reports.profit_variance"]
+)
+def profit_variance(
+    business_id: UUID,
+    current_report_id: UUID,
+    previous_report_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Profit comparisons are unavailable.", 404)
+    return service.profit_variance(db, business_id, current_report_id, previous_report_id)
 
 
 @router.get(
@@ -131,8 +149,19 @@ def forecast(
     identity: Identity,
     db: DB,
     bank_ids: Annotated[list[UUID], Query(min_length=1, max_length=20)],
+    request: Request,
+    receipt_percent: Annotated[int | None, Query(ge=0, le=200)] = None,
+    payment_percent: Annotated[int | None, Query(ge=0, le=200)] = None,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
+    scenario = None
+    if receipt_percent is not None or payment_percent is not None:
+        if not request.app.state.settings.allows_p2_insights(business_id):
+            raise DomainError("ERR_NOT_FOUND", "Cash scenarios are unavailable.", 404)
+        scenario = (
+            100 if receipt_percent is None else receipt_percent,
+            100 if payment_percent is None else payment_percent,
+        )
     return save_report(
-        db, identity, business_id, service.forecast(db, business_id, as_of, bank_ids)
+        db, identity, business_id, service.forecast(db, business_id, as_of, bank_ids, scenario)
     )

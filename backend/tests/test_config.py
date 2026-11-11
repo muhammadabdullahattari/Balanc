@@ -1,5 +1,7 @@
 """Configuration must fail safely before a misconfigured API starts."""
 
+from uuid import uuid4
+
 import pytest
 from pydantic import SecretStr, ValidationError
 
@@ -89,3 +91,36 @@ def test_pool_limits_and_secret_redaction() -> None:
     assert "configuration-test-password" not in repr(configured)
     with pytest.raises(ValidationError):
         settings(db_pool_size=0)
+
+
+def test_p2_email_rollout_requires_switch_and_exact_business(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    allowed, other = uuid4(), uuid4()
+    assert not settings().allows_p2_email_delivery(allowed)
+    assert not settings(p2_email_delivery_enabled=True).allows_p2_email_delivery(allowed)
+    assert not settings(p2_email_delivery_business_ids=[allowed]).allows_p2_email_delivery(allowed)
+
+    monkeypatch.setenv("P2_EMAIL_DELIVERY_ENABLED", "true")
+    monkeypatch.setenv("P2_EMAIL_DELIVERY_BUSINESS_IDS", f'["{allowed}"]')
+    configured = settings()
+    assert configured.allows_p2_email_delivery(allowed)
+    assert not configured.allows_p2_email_delivery(other)
+    assert not settings(p2_email_delivery_enabled=False).allows_p2_email_delivery(allowed)
+    assert not settings(
+        app_env="demo",
+        frontend_origins="https://app.example.com",
+        database_url=SecretStr(URL + "?sslmode=verify-full"),
+    ).allows_p2_email_delivery(allowed)
+
+
+def test_p2_email_allowlist_accepts_file_json_and_rejects_wildcards() -> None:
+    allowed = uuid4()
+    assert settings(
+        p2_email_delivery_enabled=True,
+        p2_email_delivery_business_ids=f'["{allowed}"]',
+    ).allows_p2_email_delivery(allowed)
+    with pytest.raises(ValidationError):
+        settings(p2_email_delivery_business_ids='["*"]')
+    with pytest.raises(ValidationError):
+        settings(p2_email_delivery_business_ids="not-json")

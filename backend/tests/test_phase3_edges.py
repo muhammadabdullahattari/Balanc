@@ -78,6 +78,10 @@ async def test_trial_expiry_retains_export_privacy_and_quota_limits_apply(
             base + "/privacy-requests", json={"kind": "export", "reason": "Retention access"}
         )
         assert privacy_request.status_code == 201
+        request_id = privacy_request.json()["id"]
+        export_query = {"request_id": request_id}
+        pending = await api.get(base + "/privacy-export", params=export_query)
+        assert pending.status_code == 409, pending.text
         reviewed = await client.post(
             base + f"/privacy-requests/{privacy_request.json()['id']}/reviews",
             json={
@@ -90,6 +94,14 @@ async def test_trial_expiry_retains_export_privacy_and_quota_limits_apply(
         own_export = await api.get(base + "/privacy-export")
         assert own_export.status_code == 200, own_export.text
         assert own_export.json()["privacy_requests"][0]["status"] == "export_ready"
+        linked = await api.get(base + "/privacy-export", params=export_query)
+        assert linked.status_code == 200 and linked.headers["Cache-Control"] == "no-store"
+        assert (await client.get(base + "/privacy-export", params=export_query)).status_code == 404
+        audit = await client.get(base + "/audit-events", params={"limit": 200})
+        assert any(
+            row["action"] == "privacy.request_exported" and row["resource_id"] == request_id
+            for row in audit.json()["items"]
+        )
         with operator(database_settings, uid, bid) as db:
             db.execute(
                 text(

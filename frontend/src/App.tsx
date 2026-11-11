@@ -101,6 +101,12 @@ const Evidence = lazy(() =>
 const Reports = lazy(() =>
   import("./features/reports").then((m) => ({ default: m.Reports })),
 );
+const Prepaids = lazy(() =>
+  import("./features/prepaids").then((m) => ({ default: m.Prepaids })),
+);
+const Projects = lazy(() =>
+  import("./features/projects").then((m) => ({ default: m.Projects })),
+);
 const Loans = lazy(() =>
   import("./features/loans").then((m) => ({ default: m.Loans })),
 );
@@ -128,6 +134,8 @@ const navigation = [
   { to: "/loans", label: "Loans", icon: Landmark },
   { to: "/evidence", label: "Documents", icon: FolderOpen },
   { to: "/reports", label: "Reports", icon: BarChart3 },
+  { to: "/projects", label: "Projects", icon: FolderOpen },
+  { to: "/prepaids", label: "Prepaid expenses", icon: BookOpen },
   { to: "/accounts", label: "Accounts", icon: BookOpen },
   { to: "/close", label: "Month-end close", icon: CheckSquare },
 ];
@@ -419,6 +427,12 @@ function Workspace() {
                     "/sales",
                     "/purchases",
                     "/people",
+                    ...(business.data.p2_prepaids_available
+                      ? ["/prepaids"]
+                      : []),
+                    ...(business.data.p2_projects_available
+                      ? ["/projects"]
+                      : []),
                     "/evidence",
                     "/reports",
                   ],
@@ -567,6 +581,8 @@ function Workspace() {
                   <Route path="/loans" element={<Loans />} />
                   <Route path="/evidence" element={<Evidence />} />
                   <Route path="/reports" element={<Reports />} />
+                  <Route path="/projects" element={<Projects />} />
+                  <Route path="/prepaids" element={<Prepaids />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
                   <Route path="/settings" element={<Settings />} />

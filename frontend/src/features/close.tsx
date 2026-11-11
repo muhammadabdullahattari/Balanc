@@ -10,6 +10,7 @@ import {
   Field,
   Loading,
   Modal,
+  money,
   PageHeading,
   Table,
 } from "../components/ui";
@@ -102,8 +103,12 @@ export function Close() {
           body: {
             expected_version: selected!.version,
             state: v.get("state") as "open" | "prepared" | "approved",
-            comment: String(v.get("comment")),
-            evidence_id: String(v.get("evidence")) || null,
+            ...(v.get("state") === "approved"
+              ? { review_comment: String(v.get("review_comment") || "") }
+              : {
+                  comment: String(v.get("comment")),
+                  evidence_id: String(v.get("evidence")) || null,
+                }),
           },
         }),
       );
@@ -192,6 +197,8 @@ export function Close() {
             <p>
               {readiness.data.unreviewed_bank_rows} bank rows to review ·{" "}
               {readiness.data.mandatory_tasks_pending} required tasks pending
+              {!!readiness.data.prepaid_installments_pending &&
+                ` · ${readiness.data.prepaid_installments_pending} prepaid installments pending`}
             </p>
           </div>
           <Badge tone={readiness.data.ready ? "good" : "warning"}>
@@ -199,6 +206,7 @@ export function Close() {
           </Badge>
         </section>
       )}
+      {b.p2_micro_close_available && <NightlyWorkpaper key={b.id} />}
       <section className="panel">
         {!period ? (
           <Empty title="Choose the period you’re closing.">
@@ -329,6 +337,13 @@ export function Close() {
           </Field>
           <Field label="Review comment">
             <textarea
+              name="review_comment"
+              maxLength={2000}
+              defaultValue={selected?.review_comment}
+            />
+          </Field>
+          <Field label="Preparation comment">
+            <textarea
               name="comment"
               maxLength={2000}
               defaultValue={selected?.comment}
@@ -364,5 +379,143 @@ export function Close() {
         </Button>
       </Modal>
     </>
+  );
+}
+
+function NightlyWorkpaper() {
+  const business = useBusiness();
+  const businessToday = today(business.timezone);
+  const yesterday = new Date(Date.parse(businessToday) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  const [asOf, setAsOf] = useState(yesterday);
+  const query = useQuery({
+    queryKey: [...keys.business(business.id), "micro-close", asOf],
+    enabled: Boolean(asOf) && asOf <= yesterday,
+    queryFn: ({ signal }) =>
+      result(
+        api.GET("/api/v1/businesses/{business_id}/micro-close", {
+          signal,
+          params: {
+            path: { business_id: business.id },
+            query: { as_of: asOf },
+          },
+        }),
+      ),
+  });
+  const workpaper = query.data?.workpaper;
+  const report = workpaper?.report;
+  return (
+    <section className="panel settings-section">
+      <h2>Nightly close workpaper</h2>
+      <Field label="Workpaper date">
+        <input
+          type="date"
+          value={asOf}
+          max={yesterday}
+          onChange={(event) => setAsOf(event.target.value)}
+        />
+      </Field>
+      <ErrorNotice error={query.error} retry={() => void query.refetch()} />
+      {query.isFetching && <Loading />}
+      {query.isSuccess && !workpaper && (
+        <p className="muted">No workpaper was captured for this date.</p>
+      )}
+      {workpaper && report && (
+        <>
+          <Badge tone={report.ready ? "good" : "warning"}>
+            {report.ready ? "Checks passed" : "Review needed"}
+          </Badge>
+          <dl className="review-summary">
+            <dt>Bank rows still in review</dt>
+            <dd>{report.unreviewed_bank_rows}</dd>
+            <dt>Required close tasks pending</dt>
+            <dd>{report.mandatory_tasks_pending}</dd>
+            <dt>Prepaid installments pending</dt>
+            <dd>{report.prepaid_installments_pending ?? 0}</dd>
+            <dt>Receivables, payables and loan controls</dt>
+            <dd>{report.controls.balanced ? "Tied out" : "Review needed"}</dd>
+            <dt>Tax controls</dt>
+            <dd>
+              {report.tax_controls.balanced ? "Tied out" : "Review needed"}
+            </dd>
+          </dl>
+          <details className="chart-data">
+            <summary>Control account workpapers</summary>
+            <p className="report-footnote">
+              Control report {report.controls.report_id}
+            </p>
+            <Table
+              caption="Subledger control account balances"
+              rows={report.controls.items}
+              rowKey={(row) => row.account_id}
+              columns={[
+                {
+                  label: "Control",
+                  render: (row) => row.control.replaceAll("_", " "),
+                },
+                { label: "Account reference", render: (row) => row.account_id },
+                {
+                  label: "Ledger",
+                  render: (row) => money(row.ledger_balance, business.currency),
+                },
+                {
+                  label: "Subledger",
+                  render: (row) =>
+                    money(row.subledger_balance, business.currency),
+                },
+                {
+                  label: "Difference",
+                  render: (row) => money(row.difference, business.currency),
+                },
+              ]}
+            />
+            <p className="report-footnote">
+              Tax report {report.tax_controls.report_id}
+            </p>
+            <Table
+              caption="Tax control account balances"
+              rows={report.tax_controls.items}
+              rowKey={(row) => row.account_id}
+              columns={[
+                { label: "Account", render: (row) => row.name },
+                {
+                  label: "Ledger",
+                  render: (row) =>
+                    money(row.closing_debit_minus_credit, business.currency),
+                },
+                {
+                  label: "Source balance",
+                  render: (row) => money(row.source_balance, business.currency),
+                },
+                {
+                  label: "Difference",
+                  render: (row) => money(row.difference, business.currency),
+                },
+                {
+                  label: "Source references",
+                  render: (row) => row.source_ids.join(", ") || "—",
+                },
+              ]}
+            />
+          </details>
+          {report.limitations.map((limitation) => (
+            <p key={limitation} className="muted">
+              {limitation}
+            </p>
+          ))}
+          <p className="muted">
+            Captured{" "}
+            {new Intl.DateTimeFormat(undefined, {
+              dateStyle: "medium",
+              timeStyle: "short",
+              timeZone: business.timezone,
+            }).format(new Date(workpaper.captured_at))}{" "}
+            ({business.timezone})
+          </p>
+          <p className="report-footnote">Report {report.report_id}</p>
+        </>
+      )}
+    </section>
   );
 }

@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from sqlalchemy import select
 
 from ledgerpilot.audit.service import record
@@ -134,10 +134,13 @@ def source_draft_issue(
     business_id: UUID,
     draft_id: UUID,
     data: source_drafts.DraftAction,
+    request: Request,
     identity: Identity,
     db: DB,
 ) -> dict[str, Any]:
-    return source_drafts.publish(db, identity, business_id, draft_id, data)
+    return source_drafts.publish(
+        db, identity, business_id, draft_id, data, request.app.state.settings
+    )
 
 
 @router.post(

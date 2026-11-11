@@ -177,6 +177,7 @@ class Preference(TenantRecord, Base):
     user_id: Mapped[UUID]
     marketing: Mapped[bool] = mapped_column(default=False)
     reminders: Mapped[bool] = mapped_column(default=True)
+    email_reminders: Mapped[bool] = mapped_column(default=False, server_default=text("false"))
     quiet_start: Mapped[int] = mapped_column(default=21)
     quiet_end: Mapped[int] = mapped_column(default=8)
     version: Mapped[int] = mapped_column(default=0)
@@ -194,6 +195,7 @@ class CloseTask(TenantRecord, Base):
     reviewed_by: Mapped[UUID | None]
     evidence_id: Mapped[UUID | None]
     comment: Mapped[str] = mapped_column(String(2000), default="")
+    review_comment: Mapped[str] = mapped_column(String(2000), default="", server_default=text("''"))
     version: Mapped[int] = mapped_column(default=0)
 
 

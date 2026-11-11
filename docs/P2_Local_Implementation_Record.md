@@ -13,8 +13,116 @@ The frontend production build, TypeScript check and 13 focused frontend tests pa
 - The extended drill passed as part of the 42-test local run, using the existing PostgreSQL container's `pg_dump` and `pg_restore`.
 - This drill uses a synthetic encryption key and a local copy. Hosted recovery still needs a coordinated snapshot method, independent key recovery and agreed RTO and RPO. Record elapsed restore time, backup age and financial and evidence reconciliation in that exercise.
 
-## Next implementation checkpoint
+## L2 Rollout gate and worker restart
 
-Define the P2 email rollout gate with a default-off tenant allowlist before the first delivery path can send. Reuse the existing PostgreSQL transaction and job conventions. The worker restart exercise should prove stale leases cannot complete reclaimed work. Build the email outbox and Mailpit workflow after those controls are in place.
+- The server-side rollout policy requires `P2_EMAIL_DELIVERY_ENABLED=true` and the verified business UUID in the JSON array `P2_EMAIL_DELIVERY_BUSINESS_IDS`. The switch defaults to false, the list defaults to empty, and the demo profile denies delivery. Reload the process after changing configuration. The rollout decision is separate from tenant authorization and recipient consent.
+- The synthetic restore drill now opens independent restricted PostgreSQL sessions to simulate a worker restart. It checks that an active lease blocks a second claim, an expired lease is reclaimed under the same job ID with a new token, the old token cannot complete the job, and the current token records a retry only once.
+- The settings and Phase 4 integration suites passed 30 tests, including the restore and lease drill on local PostgreSQL. Backend lint, formatting and strict type checking passed.
 
-Design the outbox around stable delivery IDs, consent and business-state rechecks before send, and bounded attempts. For ambiguous SMTP outcomes, use a review or reconciliation state. A timeout after SMTP acceptance is insufficient evidence to resend safely. The hosted queue and production mail provider remain later decisions.
+## L3 Local business email delivery
+
+Migration `0023` adds opt-in workspace email preferences and a tenant-scoped PostgreSQL outbox. In Activity, an eligible member can opt in, queue a current-day review, and inspect their own delivery history. The review can queue two messages per business, member and business day. One summarizes overdue invoices and the other summarizes overdue invoices with missing evidence. The recipient is the verified workspace member who requested the review. Email contains counts and directs the recipient back to the authenticated workspace for details.
+
+The existing business and role checks apply to the review. The queue and worker both check rollout and consent. The worker checks quiet hours, invoice payment and dispute state, and linked evidence at claim time. It commits the sending state before SMTP I/O and uses a stable message ID. Explicit transient rejection and connection failures can retry up to three attempts. A dropped connection with unknown outcome or an interrupted sending job is held as uncertain for review. Mailpit acceptance is recorded as sent.
+
+Verification used disposable PostgreSQL and real local Mailpit. The 31-test settings, restore and delivery run passed. A separate run of the final email integration passed with delivery history, cross-member denial of history access, concurrent delivery, duplicate queue requests, interrupted sends and payment suppression. Fourteen focused UI tests, the production build, lint, strict typing and OpenAPI checks passed.
+
+### Run locally
+
+1. Apply migration `0023` with the existing Alembic migration role. Keep the API and worker pointed at the matching schema.
+2. Start Mailpit with `docker compose -f docker-compose.auth.yml up -d`. Use loopback SMTP on port 1025 without authentication or TLS for this local profile.
+3. In the ignored runtime configuration, set `P2_EMAIL_DELIVERY_ENABLED=true` and set `P2_EMAIL_DELIVERY_BUSINESS_IDS` to a JSON array containing the approved synthetic business UUID. Restart the API after editing settings.
+4. Sign in with an eligible verified member. In Activity, enable workspace reminders, save preferences, then review and queue today's emails. The workspace needs overdue, undisputed invoices with an outstanding balance.
+5. From `backend/`, run the following command for the verified member and business. Each invocation processes at most one job. Repeat for the next job. Add `--status` to list the latest delivery states without sending. Inspect the captured messages in Mailpit on port 8025.
+
+```powershell
+uv run python -m ledgerpilot.notifications.worker --actor MEMBER_UUID --business BUSINESS_UUID
+```
+
+## L4 Projects and billable expenses
+
+Migration `0024` adds tenant-scoped customer projects, tags for posted income and expense lines, and billable allocations. Tagging adds project and optional location metadata to the existing ledger line. It leaves the journal amounts intact. The Projects page reports posted income, cost and margin from tagged lines and includes exact linked reversal lines in the requested date range.
+
+A billable source is a tagged, undisputed supplier-bill expense debit without a reversal or credit. The local slice rebills the full source expense once. It allows separately entered sales tax, validates it through the invoice rules, and reserves the expense when preparing a draft. Posting still requires the existing invoice approval, version check and period controls. Voiding a draft releases its reservation. Issuing a draft marks the allocation as billed and tags the resulting income line within the same transaction. Billable drafts are edited by voiding and recreating them. Partial rebilling, tag correction and imported time are outside this slice.
+
+To use the feature locally, migrate with the migration role, set `P2_PROJECT_BUSINESS_IDS` to a JSON array of approved synthetic business UUIDs and restart the API. Open **Projects**, create a customer project, select the expense date range, tag an eligible line and draft the invoice. Use **Draft review** to issue or void it. The project feature is off by default and available only in the local and test profiles.
+
+Six service-backed PostgreSQL and Mailpit tests passed, including the project workflow, email delivery and restore regression. The project test covers default-off and cross-tenant access, a $50 posted expense, idempotent draft preparation, duplicate prevention, void and release, approval and atomic allocation, and posted project margin. The production web build, backend lint, strict type checks, and generated client checks passed.
+
+## L4 Prepaid schedules and close review
+
+Migration `0025` adds tenant-scoped prepaid schedules. In an approved local workspace, a preparer selects a posted manual-journal asset debit and a separate expense account. The schedule allocates the full debit across 2–36 month ends in exact currency units. A different member with posting permission approves each due installment in order. The approval uses the existing journal gateway and links the debit to expense and credit to prepaid asset to the schedule in the same transaction.
+
+Close readiness includes outstanding prepaid installments. PostgreSQL rejects a period lock while it contains unposted installments, and prevents direct reversals of journals linked to a schedule. Schedule correction, cancellation, and scheduling against supplier bills remain outside this local slice. Independent close reviewers can add a separate note while preserving the original preparation evidence and comment.
+
+For local use, apply migration `0025` with the migration role, add the approved workspace UUID to the JSON array `P2_PREPAID_BUSINESS_IDS` in the runtime configuration, and restart the API. The feature is off by default. Use **Prepaid expenses** to prepare or review installments and **Month-end close** to see the pending count.
+
+Three focused service-backed prepaid and close tests passed after correcting the approval fixture to use a second accountant with posting rights. A separate run passed the populated migration and restore checks. The prepaid test verified a $100 schedule, exact minor-unit allocation, duplicate prevention, separation of duties, period lock, reversal protection and final ledger balances. Fifteen focused frontend tests, type checks, lint and OpenAPI verification passed.
+
+## L4 Statement reconciliation preview
+
+The local Reconciliation page previews a selected account and statement date against posted ledger entries, matched and outstanding items, and imported bank rows still in review. It shows the unexplained difference before approval. Preview creates no statement. Sign-off repeats the same checks inside the existing authorized, versioned command. Use `P2_RECONCILIATION_BUSINESS_IDS` to enable the preview for approved synthetic workspaces.
+
+## L5 Cash scenarios and cited variance
+
+In Reports, select the due-date baseline or the stress scenario with 75% of expected receipts and 125% of expected payments. The forecast API also accepts integer receipt and payment percentages from 0 to 200. It preserves opening cash, dates and source document references, scales weekly receipts and payments in exact decimal units, and displays the first week ending below zero. Each scenario is stored with its assumptions in the existing report history. There is no confidence band without calibration evidence.
+
+Profit and loss can compare the selected period with the immediately preceding period of the same length. The comparison reads two saved reports from the authorized workspace, rejects mismatched report settings or overlapping periods, and identifies up to five account contributions by absolute impact. The screen cites both report IDs. The amounts describe changes in the books and do not infer business causes.
+
+Enable these local features with `P2_INSIGHT_BUSINESS_IDS`. Both new settings use JSON arrays of business UUIDs, default to empty, and require an API restart. No new migration is required for this slice.
+
+## Verification of statement preview and report insights
+
+Two focused tests passed using disposable PostgreSQL, Mailpit and ClamAV. They covered the cash scenario, report history, comparison validation, preview availability, reconciliation mismatch, final sign-off and signed evidence export. The full frontend component suite passed all 46 tests using one worker. The production web build, TypeScript, backend source and test lint, strict backend typing, OpenAPI, generated client, and integration inventory passed. Broad lint across Alembic history still reports pre-existing line-length violations in older migrations.
+
+## L4 Nightly close workpaper
+
+Nightly close captures the previous calendar date in the workspace timezone. It runs the existing close checks against one PostgreSQL snapshot and stores the workpaper, its control reports and the audit event in one transaction. Each workspace has one immutable capture per date. Repeating the command for that date returns the original report ID. The dated workpaper shows bank rows in review, required tasks, prepaid installments, and accounting and tax control tie-outs. The capture timestamp distinguishes the workpaper from later ledger and review activity.
+
+Set `P2_MICRO_CLOSE_BUSINESS_IDS` to a JSON array of approved workspace UUIDs and restart the local API. Run the following from `backend` with a verified active owner or accountant as the actor. The command exits with a failure status if the capture fails. The Close page displays the saved result under **Nightly close workpaper**.
+
+```powershell
+.\.venv\Scripts\python.exe -m ledgerpilot.workspace.micro_close --actor USER_UUID --business BUSINESS_UUID
+```
+
+The command captures the previous workspace date each time it runs. Add `--watch` to check once a minute and capture each completed workspace day while the local process runs. It uses the workspace timezone and reuses existing captures after restart. It captures the latest completed date after downtime. Daily capture is observational and leaves approval and period locking to the existing close workflow. Document completeness and external source freshness still require evidence.
+
+The PostgreSQL and Mailpit integration run passed both tests. It verified the timezone cutoff, concurrent capture, one audit event, access to the cited reports, and immutable results after a late bank import. The forecast and variance regression passed in the same run. The frontend build, API contract checks, Ruff and mypy passed. The full frontend suite passed 45 of 46 tests on its first run. The evidence refresh test timed out waiting for the initial list in that run and passed when rerun on its own.
+
+## L4 Onboarding parallel-run comparison
+
+Owners and accountants can select a financial import from **Opening balances**, choose a comparison date on or after cutover, and paste legacy account codes and signed debit-minus-credit balances from two spreadsheet columns. LedgerPilot compares the supplied balances with the posted general ledger as of that date, reports exact differences per account, and runs the existing receivable, payable and loan control checks. The submitted trial balance must net to zero. Omitted accounts are treated as zero. The comparison leaves journal and import records intact.
+
+The original cutover comparison continues to use the baseline saved on the import. The parallel-run comparison uses the newly supplied source balances and supports up to 1,000 supplied account codes.
+
+The PostgreSQL and Mailpit integration test passed for both comparison routes. It verified exact differences, control reconciliation, and rejection of an unbalanced source trial or a date before cutover. Eleven focused frontend component tests passed, including the spreadsheet paste workflow. The frontend build, API contract checks, Ruff and mypy passed.
+
+## P2-B Workspace email operations and delegated support
+
+Migration `0026` adds immutable bounce and complaint feedback and revocable diagnostics grants. The local email rollout settings from L3 also enable **Workspace email operations** in Activity. Owners and accountants with MFA can inspect counts and recent job outcomes, record confirmed delivery feedback against a job ID, and grant an existing workspace reviewer up to 24 hours of read-only email diagnostics. Grant creation, delegated reads, revocation and feedback are audited. The API and PostgreSQL enforce the business scope. Delegated diagnostics exclude recipient identities and email contents.
+
+Confirmed feedback suppresses future workspace email for that recipient in the same workspace. New jobs are skipped and queued jobs are suppressed when the worker claims them. The same feedback on the same job is recorded once. A send already claimed by the worker may be in flight. SMTP acceptance and later feedback are stored independently.
+
+The local workflow uses Mailpit and manual recording of confirmed feedback. Hosted sender setup and automatic provider feedback ingestion require a selected provider and sandbox verification.
+
+The PostgreSQL and Mailpit integration and populated upgrade tests passed. The integration covered duplicate feedback, complaint and bounce suppression, redacted reviewer diagnostics, denial before granting and after revocation or expiry, and persisted audit events. Twelve focused frontend tests, backend lint and typing, and the generated OpenAPI checks passed.
+
+## Local nightly close details, cited forecast answers and approved privacy exports
+
+The nightly workpaper shows saved ledger and source balances, differences, and control report references for receivables, payables, loans, and tax. A local watcher runs the existing immutable capture and retries temporary database failures.
+
+In Reports, approved local workspaces can ask for the first projected shortfall and projected closing cash for a saved forecast. Both answers cite the selected report. A forecast with no shortfall returns an empty date and the UI explains the result. Answers use the saved data and execute no actions.
+
+Privacy settings offer an MFA-protected personal data download. For an approved export request, the server checks the requester and current approval before generating the attachment, then records the request ID in the audit log. The existing general self-export stays available. The attached data uses the existing account and workspace privacy scope.
+
+Three PostgreSQL and Mailpit integration tests passed. They covered the watcher crossing a workspace day boundary, source citations and no-shortfall answers, and requester-only approved exports with an audit event. Twelve focused frontend tests passed, including the cited shortfall answer.
+
+## Next implementation checkpoints
+
+- **P2-B:** Hosted sender and automatic provider feedback ingestion and verification.
+- **P2-C/D:** Stripe subscription entitlements and event reconciliation, Financial Connections consent and feed ingestion, and QuickBooks Online direct synchronization. CSV remains available. Local provider contract work and sandbox acceptance remain open.
+- **P2-E:** Scoped, revocable auditor access and workpapers beyond the nightly control checks.
+- **P2-F/H:** Scheduled shortfall notifications, calibrated forecast bands where data supports them, shadow evaluation for controlled posting and a versioned quality and cost benchmark.
+- **P2-G:** Configurable record-class retention and legal holds. Automated disposal requires an approved policy matrix.
+
+P2-C, P2-D and P2-G now have recorded launch choices in the [P2 plan](P2_Implementation_Plan.md#launch-and-provider-decisions). Plan acceptance first for a US cohort, then expand globally market by market. Use Stripe for subscriptions and Stripe Financial Connections for live bank data. Keep CSV as the first available import and fallback, with QuickBooks Online as the first direct accounting connector. Use ten years as the default for in-scope financial records, with approved policy rules and exceptions. Provider eligibility, sandbox credentials and market retention review remain open. Hosted gates remain deferred.

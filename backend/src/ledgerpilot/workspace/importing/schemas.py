@@ -37,6 +37,11 @@ class ImportApply(ImportPreview, ops.Command):
     preview_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
 
 
+class ParallelTrialBalance(Schema):
+    as_of: date
+    expected_trial: dict[str, str] = Field(min_length=1, max_length=1000)
+
+
 class ImportJournal(ops.Command):
     accounting_date: date
     memo: str = Field(max_length=2000)

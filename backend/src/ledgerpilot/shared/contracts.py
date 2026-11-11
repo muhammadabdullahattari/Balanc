@@ -118,7 +118,14 @@ Week = obj(
     document_ids=many(UUID),
 )
 Forecast = obj(
-    "ForecastReport", **Context, weeks=many(Week), confidence=str, bands=None, assumptions=many(str)
+    "ForecastReport",
+    **Context,
+    weeks=many(Week),
+    confidence=str,
+    bands=None,
+    assumptions=many(str),
+    scenario=opt(obj("ForecastScenario", receipt_percent=int, payment_percent=int)),
+    first_shortfall=opt(date | None),
 )
 Trend = obj("MonthlyTrend", start_date=date, end_date=date, income=str, expense=str, net_profit=str)
 Dashboard = create_model(
@@ -137,6 +144,7 @@ Readiness = obj(
     kind=str,
     unreviewed_bank_rows=int,
     mandatory_tasks_pending=int,
+    prepaid_installments_pending=(int, 0),
     controls=Controls,
     tax_controls=Tax,
     ready=bool,
@@ -459,6 +467,7 @@ Task = obj(
     reviewed_by=UUID | None,
     evidence_id=UUID | None,
     comment=str,
+    review_comment=(str, ""),
     version=int,
 )
 Preference = obj(
@@ -466,6 +475,10 @@ Preference = obj(
     version=int,
     marketing=bool,
     reminders=bool,
+    email_reminders=bool,
+    email_delivery_available=bool,
+    email_operations_available=(bool, False),
+    email_suppressed=(bool, False),
     quiet_start=int,
     quiet_end=int,
 )
@@ -603,6 +616,15 @@ responses: dict[str, Any] = {
     "banking.activate_rule": Rule,
     "banking.rollback_rule": Rule,
     "banking.proposal": Proposal,
+    "banking.statement_preview": obj(
+        "StatementPreview",
+        ledger_balance=str,
+        statement_balance=str,
+        outstanding=str,
+        unexplained_difference=str,
+        pending_bank_rows=int,
+        ready=bool,
+    ),
     "banking.sign_off": obj(
         "StatementSignoff",
         id=UUID,
@@ -633,6 +655,17 @@ responses: dict[str, Any] = {
     "reports.controls": Controls,
     "reports.tax_support": Tax,
     "reports.forecast": Forecast,
+    "reports.profit_variance": obj(
+        "ProfitVariance",
+        current_report_id=UUID,
+        previous_report_id=UUID,
+        currency=str,
+        basis=str,
+        net_profit_change=str,
+        income_change=str,
+        expense_change=str,
+        drivers=many(obj("ProfitVarianceDriver", account_id=UUID, name=str, contribution=str)),
+    ),
     "reports.dashboard": Dashboard,
     "trade.party_statement": PartyStatement,
     "trade.preview_document": obj(
@@ -751,7 +784,7 @@ responses: dict[str, Any] = {
         "ReportAnswer",
         report_id=UUID,
         metric=str,
-        value=str | bool,
+        value=str | bool | None,
         currency=str | None,
         basis=str | None,
         mode=str,
@@ -762,13 +795,25 @@ responses: dict[str, Any] = {
     "workspace.notification_read": obj("NotificationMarkedRead", read=bool),
     "workspace.preferences": Preference,
     "workspace.preference_update": Preference,
+    "workspace.email_history": obj(
+        "WorkspaceEmailHistory",
+        items=many(
+            obj(
+                "WorkspaceEmailJob", job_id=UUID, kind=str, state=str, attempts=int, code=str | None
+            )
+        ),
+    ),
     "workspace.review_reminders": obj(
-        "ReminderReview", created=int, channel=str, external_messages_sent=int
+        "ReminderReview", created=int, channel=str, external_messages_sent=int, email_queued=int
     ),
     "workspace.create_task": IdState,
     "workspace.task_update": IdState,
     "workspace.tasks": page("CloseTasks", Task),
     "workspace.readiness": Readiness,
+    "workspace.micro_close": obj(
+        "MicroCloseLookup",
+        workpaper=(obj("MicroCloseWorkpaper", captured_at=datetime, report=Readiness) | None),
+    ),
     "workspace.audits": page("AuditEvents", Audit),
     "workspace.search": page(
         "SearchResults", obj("SearchHit", id=UUID, kind=str, number=str, party_id=UUID)

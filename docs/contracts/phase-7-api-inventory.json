@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 122,
-  "distinct_operations": 94,
+  "call_sites": 153,
+  "distinct_operations": 116,
   "operations": [
     {
       "file": "App.tsx",
@@ -35,6 +35,11 @@
     },
     {
       "file": "features/activity.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/notification-email-history"
+    },
+    {
+      "file": "features/activity.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/notifications/{notification_id}/read"
     },
@@ -42,6 +47,11 @@
       "file": "features/activity.tsx",
       "method": "PATCH",
       "path": "/api/v1/businesses/{business_id}/notification-preferences"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/reminders/review"
     },
     {
       "file": "features/activity.tsx",
@@ -92,6 +102,11 @@
       "file": "features/auth.tsx",
       "method": "POST",
       "path": "/api/v1/auth/register"
+    },
+    {
+      "file": "features/auth.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/login"
     },
     {
       "file": "features/auth.tsx",
@@ -199,6 +214,11 @@
       "path": "/api/v1/businesses/{business_id}/periods/{period_id}"
     },
     {
+      "file": "features/close.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/micro-close"
+    },
+    {
       "file": "features/dashboard.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/accounts"
@@ -259,6 +279,31 @@
       "path": "/api/v1/businesses/{business_id}/source-drafts/{draft_id}"
     },
     {
+      "file": "features/email-operations.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/email-operations"
+    },
+    {
+      "file": "features/email-operations.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/memberships"
+    },
+    {
+      "file": "features/email-operations.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/email-operations/jobs/{job_id}/feedback"
+    },
+    {
+      "file": "features/email-operations.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/email-operations/grants"
+    },
+    {
+      "file": "features/email-operations.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/email-operations/grants/{grant_id}/revoke"
+    },
+    {
       "file": "features/evidence.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/evidence"
@@ -312,6 +357,11 @@
       "file": "features/google-signin.tsx",
       "method": "POST",
       "path": "/api/v1/auth/google/link"
+    },
+    {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/login"
     },
     {
       "file": "features/google-signin.tsx",
@@ -439,6 +489,86 @@
       "path": "/api/v1/businesses/{business_id}/imports/apply"
     },
     {
+      "file": "features/openings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/imports"
+    },
+    {
+      "file": "features/openings.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/imports/{batch_id}/parallel-comparison"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/prepaids"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/prepaids/sources"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/prepaids"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/prepaids.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/prepaids/{schedule_id}/recognize"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/projects"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/projects/ledger-lines"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/projects/{project_id}/totals"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/parties"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/projects"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/projects/ledger-lines/{line_id}/tag"
+    },
+    {
+      "file": "features/projects.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/projects/billable-drafts"
+    },
+    {
       "file": "features/reconciliation.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/accounts"
@@ -452,6 +582,11 @@
       "file": "features/reconciliation.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/reconciliation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/statements/preview"
     },
     {
       "file": "features/reconciliation.tsx",
@@ -514,6 +649,21 @@
       "path": "/api/v1/businesses/{business_id}/reports/tax-support"
     },
     {
+      "file": "features/reports.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/assistant/report-answer"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/profit-loss"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/profit-variance"
+    },
+    {
       "file": "features/rules.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/bank-rules"
@@ -557,6 +707,11 @@
       "file": "features/settings.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/privacy-requests"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/privacy-export"
     },
     {
       "file": "features/settings.tsx",

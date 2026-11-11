@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, Request
 from sqlalchemy import select
 
 from ledgerpilot.audit.service import record
@@ -21,6 +21,7 @@ from ledgerpilot.banking.schemas import (
     RuleRollback,
     RuleUpdate,
     StatementCreate,
+    StatementInput,
 )
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.shared import contracts
@@ -519,6 +520,18 @@ def rollback_rule(
         identity,
         db,
     )
+
+
+@router.post("/statements/preview", response_model=contracts.responses["banking.statement_preview"])
+def statement_preview(
+    business_id: UUID, data: StatementInput, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    from ledgerpilot.banking.reconciliation import preview
+
+    authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
+    if not request.app.state.settings.allows_p2_reconciliation(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Statement preview is unavailable.", 404)
+    return preview(db, get_business(db, business_id), data)
 
 
 @router.post(

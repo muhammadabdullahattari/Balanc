@@ -48,16 +48,31 @@ export function Reconciliation() {
       const current = await result(
         api.GET("/api/v1/businesses/{business_id}", { params: { path } }),
       );
-      setCommand({
-        idempotency_key: crypto.randomUUID(),
-        expected_version: current.version,
+      const statement = {
         account_id: String(v.get("account")),
         as_of: String(v.get("date")),
         closing_balance: String(v.get("balance")),
         evidence_id: String(v.get("evidence")),
         outstanding,
-      });
+      };
+      const preview = b.p2_reconciliation_available
+        ? await result(
+            api.POST("/api/v1/businesses/{business_id}/statements/preview", {
+              params: { path },
+              body: statement,
+            }),
+          )
+        : undefined;
+      return {
+        preview,
+        command: {
+          ...statement,
+          idempotency_key: crypto.randomUUID(),
+          expected_version: current.version,
+        },
+      };
     },
+    onSuccess: (prepared) => setCommand(prepared.command),
   });
   const post = useMutation({
     mutationFn: (body: components["schemas"]["StatementCreate"]) =>
@@ -254,10 +269,34 @@ export function Reconciliation() {
               <dt>Statement balance</dt>
               <dd>{money(command.closing_balance, b.currency)}</dd>
               <dt>Outstanding items</dt>
-              <dd>{outstanding.length}</dd>
+              <dd>{command.outstanding?.length ?? 0}</dd>
+              {prepare.data?.preview && (
+                <>
+                  <dt>Ledger balance</dt>
+                  <dd>
+                    {money(prepare.data.preview.ledger_balance, b.currency)}
+                  </dd>
+                  <dt>Unexplained difference</dt>
+                  <dd>
+                    {money(
+                      prepare.data.preview.unexplained_difference,
+                      b.currency,
+                    )}
+                  </dd>
+                  <dt>Bank rows still in review</dt>
+                  <dd>{prepare.data.preview.pending_bank_rows}</dd>
+                </>
+              )}
             </dl>
+            {prepare.data?.preview?.ready === false && (
+              <p role="status" className="notice">
+                Resolve the statement difference and review remaining bank rows
+                before signing off.
+              </p>
+            )}
             <Button
               permission="post"
+              disabled={prepare.data?.preview?.ready === false}
               busy={post.isPending}
               onClick={() => post.mutate(command)}
             >

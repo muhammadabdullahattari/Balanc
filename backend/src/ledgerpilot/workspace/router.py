@@ -11,13 +11,24 @@ from ledgerpilot.accounting.models import Period
 from ledgerpilot.audit.models import AuditEvent
 from ledgerpilot.audit.service import record
 from ledgerpilot.identity.dependencies import DB, Identity
+from ledgerpilot.notifications import email_operations, email_outbox
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.service import authorize, get_business
 from ledgerpilot.trade.models import Operation, TradeDocument
-from ledgerpilot.workspace import beneficiaries, opening_adjustments, resumable, service
+from ledgerpilot.workspace import (
+    beneficiaries,
+    micro_close,
+    opening_adjustments,
+    prepaids,
+    projects,
+    resumable,
+    service,
+)
 from ledgerpilot.workspace import imports as migrations
 from ledgerpilot.workspace import privacy as privacy_workflows
+from ledgerpilot.workspace.importing.comparison import compare
+from ledgerpilot.workspace.importing.schemas import ParallelTrialBalance
 from ledgerpilot.workspace.models import (
     BeneficiaryChange,
     CloseTask,
@@ -45,6 +56,125 @@ from ledgerpilot.workspace.schemas import (
 )
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["workspace"])
+
+
+def require_prepaids(request: Request, business_id: UUID) -> None:
+    if not request.app.state.settings.allows_p2_prepaids(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Prepaid schedules are unavailable.", 404)
+
+
+@router.get("/prepaids", response_model=prepaids.Schedules)
+def prepaid_list(business_id: UUID, request: Request, identity: Identity, db: DB) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    require_prepaids(request, business_id)
+    return {"items": prepaids.schedules(db, business_id)}
+
+
+@router.get("/prepaids/sources", response_model=prepaids.Sources)
+def prepaid_sources(
+    business_id: UUID, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, prepaids.WRITERS)
+    require_prepaids(request, business_id)
+    return {"items": prepaids.sources(db, business_id)}
+
+
+@router.post("/prepaids", status_code=201, response_model=contracts.ID)
+def prepaid_prepare(
+    business_id: UUID, request: Request, identity: Identity, db: DB, data: prepaids.Prepare
+) -> dict[str, str]:
+    authorize(db, identity, business_id, prepaids.WRITERS)
+    require_prepaids(request, business_id)
+    return {"id": str(prepaids.prepare(db, identity, business_id, data))}
+
+
+@router.post("/prepaids/{schedule_id}/recognize", response_model=contracts.ID)
+def prepaid_recognize(
+    business_id: UUID,
+    schedule_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    data: prepaids.Recognize,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, prepaids.WRITERS, posting=True)
+    require_prepaids(request, business_id)
+    return prepaids.recognize(
+        db,
+        identity,
+        business_id,
+        prepaids.Recognition(schedule_id=schedule_id, **data.model_dump()),
+    )
+
+
+@router.get("/projects", response_model=projects.ProjectList)
+def projects_list(
+    business_id: UUID, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    projects.gate(request.app.state.settings, business_id)
+    return {"items": projects.list_projects(db, business_id)}
+
+
+@router.post("/projects", status_code=201, response_model=projects.ProjectRead)
+def project_create(
+    business_id: UUID, data: projects.ProjectCreate, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, projects.WRITERS)
+    projects.gate(request.app.state.settings, business_id)
+    return projects.create_project(db, identity, business_id, data)
+
+
+@router.get("/projects/ledger-lines", response_model=projects.ProjectLedgerLines)
+def project_ledger_lines(
+    business_id: UUID, request: Request, identity: Identity, db: DB, start: date, end: date
+) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    projects.gate(request.app.state.settings, business_id)
+    return {"items": projects.ledger_lines(db, business_id, start, end)}
+
+
+@router.get("/projects/{project_id}/totals", response_model=projects.ProjectTotals)
+def project_totals(
+    business_id: UUID,
+    project_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    start: date,
+    end: date,
+) -> dict[str, str]:
+    authorize(db, identity, business_id)
+    projects.gate(request.app.state.settings, business_id)
+    return projects.profitability(db, business_id, project_id, start, end)
+
+
+@router.post("/projects/ledger-lines/{line_id}/tag", response_model=contracts.Status)
+def project_line_tag(
+    business_id: UUID,
+    line_id: UUID,
+    data: projects.LineTag,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, str]:
+    authorize(db, identity, business_id, projects.WRITERS)
+    projects.gate(request.app.state.settings, business_id)
+    projects.tag_line(db, identity, business_id, line_id, data)
+    return {"status": "tagged"}
+
+
+@router.post(
+    "/projects/billable-drafts",
+    status_code=201,
+    response_model=contracts.responses["trade.source_draft_create"],
+)
+def project_billable_draft(
+    business_id: UUID, data: projects.RebillDraft, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, projects.WRITERS)
+    projects.gate(request.app.state.settings, business_id)
+    return projects.draft_invoice(db, identity, business_id, data)
 
 
 @router.post(
@@ -312,7 +442,11 @@ def opening_balances(
     response_model_exclude_unset=True,
 )
 def privacy_export(
-    business_id: UUID, identity: Identity, db: DB, response: Response
+    business_id: UUID,
+    identity: Identity,
+    db: DB,
+    response: Response,
+    request_id: UUID | None = None,
 ) -> dict[str, Any]:
     member = authorize(db, identity, business_id)
     if not identity.family.mfa:
@@ -339,9 +473,20 @@ def privacy_export(
     if len(consents) > 1000 or len(requests) > 1000:
         raise DomainError("ERR_QUOTA", "Contact the privacy reviewer for a larger export.", 413)
     current_statuses = privacy_workflows.statuses(db, business_id, [r.id for r in requests])
+    if request_id is not None:
+        if not any(item.id == request_id and item.kind == "export" for item in requests):
+            raise DomainError("ERR_NOT_FOUND", "Privacy export request not found.", 404)
+        if current_statuses.get(request_id) != "export_ready":
+            raise DomainError("ERR_PRIVACY_STATE", "This request is awaiting export approval.", 409)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Content-Disposition"] = 'attachment; filename="personal-data.json"'
-    record(db, identity.user.id, "privacy.self_exported", business_id)
+    record(
+        db,
+        identity.user.id,
+        "privacy.request_exported" if request_id is not None else "privacy.self_exported",
+        business_id,
+        request_id,
+    )
     return {
         "scope": "own_account_and_selected_business_privacy_records",
         "user": {
@@ -625,51 +770,20 @@ def import_comparison(
     identity: Identity,
     db: DB,
 ) -> dict[str, Any]:
-    from decimal import Decimal
-
-    from ledgerpilot.accounting.models import Account
-    from ledgerpilot.reports.service import balances, controls
-
     authorize(db, identity, business_id)
-    item = db.scalar(
-        select(ImportBatch).where(
-            ImportBatch.business_id == business_id, ImportBatch.id == batch_id
-        )
-    )
-    if item is None:
-        raise DomainError("ERR_NOT_FOUND", "Import batch not found.", 404)
-    if item.mode == "chart":
-        return {
-            "batch_id": str(item.id),
-            "comparison_available": False,
-            "reason": "Chart-only imports have no financial baseline.",
-        }
-    actual = balances(db, business_id, item.cutover_date)
-    rows = []
-    for account in db.scalars(
-        select(Account).where(Account.business_id == business_id).order_by(Account.code)
-    ):
-        expected, current = (
-            Decimal(item.expected_trial.get(account.code, "0")),
-            actual.get(account.id, Decimal(0)),
-        )
-        rows.append(
-            {
-                "account_id": str(account.id),
-                "code": account.code,
-                "expected": str(expected),
-                "actual": str(current),
-                "difference": str(current - expected),
-            }
-        )
-    return {
-        "batch_id": str(item.id),
-        "as_of": item.cutover_date,
-        "items": rows,
-        "balanced": all(Decimal(r["difference"]) == 0 for r in rows),
-        "controls": controls(db, business_id, item.cutover_date),
-        "basis": "accrual_general_ledger_baseline",
-    }
+    return compare(db, business_id, batch_id)
+
+
+@router.post(
+    "/imports/{batch_id}/parallel-comparison",
+    response_model=contracts.responses["workspace.import_comparison"],
+    response_model_exclude_unset=True,
+)
+def parallel_import_comparison(
+    business_id: UUID, batch_id: UUID, data: ParallelTrialBalance, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner", "accountant"})
+    return compare(db, business_id, batch_id, data)
 
 
 @router.get(
@@ -861,14 +975,27 @@ def report(business_id: UUID, report_id: UUID, identity: Identity, db: DB) -> di
     response_model=contracts.responses["workspace.answer"],
     response_model_exclude_unset=True,
 )
-def answer(business_id: UUID, data: AssistantRequest, identity: Identity, db: DB) -> dict[str, Any]:
+def answer(
+    business_id: UUID, data: AssistantRequest, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
     result = report(business_id, data.report_id, identity, db)
-    if data.metric not in result:
+    if data.metric in {"forecast_first_shortfall", "forecast_closing_cash"}:
+        if not request.app.state.settings.allows_p2_insights(business_id):
+            raise DomainError("ERR_NOT_FOUND", "Forecast answers are unavailable.", 404)
+        if result.get("basis") != "deterministic_cash_plan" or not result.get("weeks"):
+            raise DomainError("ERR_METRIC", "Choose a saved cash forecast for this question.")
+        if data.metric == "forecast_first_shortfall":
+            value = next((row["end_date"] for row in result["weeks"] if row["shortfall"]), None)
+        else:
+            value = result["weeks"][-1]["closing_cash"]
+    elif data.metric in result:
+        value = result[data.metric]
+    else:
         raise DomainError("ERR_METRIC", "The selected report does not contain this metric.")
     return {
         "report_id": str(data.report_id),
         "metric": data.metric,
-        "value": result[data.metric],
+        "value": value,
         "currency": result.get("currency"),
         "basis": result.get("basis"),
         "mode": "authorized_report_lookup",
@@ -944,19 +1071,20 @@ def notification_read(
     response_model=contracts.responses["workspace.preferences"],
     response_model_exclude_unset=True,
 )
-def preferences(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]:
-    authorize(db, identity, business_id)
+def preferences(business_id: UUID, request: Request, identity: Identity, db: DB) -> dict[str, Any]:
+    member = authorize(db, identity, business_id)
     item = db.scalar(
         select(Preference).where(
             Preference.business_id == business_id, Preference.user_id == identity.user.id
         )
     )
-    return (
+    result = (
         {
             k: getattr(item, k)
             for k in (
                 "marketing",
                 "reminders",
+                "email_reminders",
                 "quiet_start",
                 "quiet_end",
                 "version",
@@ -966,11 +1094,32 @@ def preferences(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]
         else {
             "marketing": False,
             "reminders": True,
+            "email_reminders": False,
             "quiet_start": 21,
             "quiet_end": 8,
             "version": 0,
         }
     )
+    result["email_delivery_available"] = (
+        identity.user.verified
+        and member.role in email_outbox.ROLES
+        and email_outbox.local_delivery_available(request.app.state.settings, business_id)
+    )
+    result["email_operations_available"] = (
+        identity.family.mfa
+        and email_outbox.local_delivery_available(request.app.state.settings, business_id)
+        and (
+            member.role in email_operations.ADMINS
+            or (
+                member.role == "reviewer"
+                and email_operations.active_grant(db, business_id, identity.user.id) is not None
+            )
+        )
+    )
+    result["email_suppressed"] = result["email_delivery_available"] and email_outbox.suppressed(
+        db, business_id, identity.user.id
+    )
+    return result
 
 
 @router.patch(
@@ -981,10 +1130,11 @@ def preferences(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]
 def preference_update(
     business_id: UUID,
     data: PreferencesUpdate,
+    request: Request,
     identity: Identity,
     db: DB,
 ) -> dict[str, Any]:
-    authorize(db, identity, business_id)
+    member = authorize(db, identity, business_id)
     get_business(db, business_id, lock=True)
     item = db.scalar(
         select(Preference).where(
@@ -998,12 +1148,95 @@ def preference_update(
         db.add(item)
     if item.version != data.expected_version:
         raise DomainError("ERR_VERSION", "Preferences changed.", 409)
-    for key, value in data.model_dump(exclude={"expected_version"}).items():
+    if (
+        data.email_reminders
+        and not item.email_reminders
+        and (
+            not identity.user.verified
+            or member.role not in email_outbox.ROLES
+            or not email_outbox.local_delivery_available(request.app.state.settings, business_id)
+        )
+    ):
+        raise DomainError("ERR_EMAIL_ROLLOUT", "Workspace email is unavailable.", 403)
+    if data.email_reminders is not None and data.email_reminders != bool(item.email_reminders):
+        record(
+            db,
+            identity.user.id,
+            "business_email.opted_in" if data.email_reminders else "business_email.opted_out",
+            business_id,
+        )
+    for key, value in data.model_dump(exclude={"expected_version"}, exclude_none=True).items():
         setattr(item, key, value)
     item.version += 1
     record(db, identity.user.id, "preferences.updated", business_id)
     db.flush()
-    return preferences(business_id, identity, db)
+    return preferences(business_id, request, identity, db)
+
+
+@router.get(
+    "/notification-email-history",
+    response_model=contracts.responses["workspace.email_history"],
+)
+def email_history(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]:
+    authorize(db, identity, business_id, email_outbox.ROLES)
+    return {"items": email_outbox.history(db, business_id, identity.user.id)}
+
+
+def email_operations_access(
+    business_id: UUID, request: Request, identity: Identity, db: DB, *, admin_only: bool = True
+) -> bool:
+    roles = email_operations.ADMINS if admin_only else email_operations.ADMINS | {"reviewer"}
+    member = authorize(db, identity, business_id, roles)
+    if not email_outbox.local_delivery_available(request.app.state.settings, business_id):
+        raise DomainError("ERR_NOT_FOUND", "Workspace email operations are unavailable.", 404)
+    if not identity.family.mfa:
+        raise DomainError("ERR_MFA_REQUIRED", "MFA authentication is required.", 403)
+    return member.role in email_operations.ADMINS
+
+
+@router.get("/email-operations", response_model=email_operations.Diagnostics)
+def workspace_email_operations(
+    business_id: UUID, request: Request, identity: Identity, db: DB
+) -> email_operations.Diagnostics:
+    administrator = email_operations_access(business_id, request, identity, db, admin_only=False)
+    return email_operations.diagnostics(db, identity, business_id, administrator)
+
+
+@router.post(
+    "/email-operations/jobs/{job_id}/feedback", response_model=email_operations.FeedbackRead
+)
+def workspace_email_feedback(
+    business_id: UUID,
+    job_id: UUID,
+    data: email_operations.FeedbackCreate,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> email_operations.FeedbackRead:
+    email_operations_access(business_id, request, identity, db)
+    return email_operations.record_feedback(db, identity.user.id, business_id, job_id, data)
+
+
+@router.post("/email-operations/grants", status_code=201, response_model=email_operations.GrantRead)
+def create_email_support_grant(
+    business_id: UUID,
+    data: email_operations.GrantCreate,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> email_operations.GrantRead:
+    email_operations_access(business_id, request, identity, db)
+    return email_operations.grant_support(db, identity.user.id, business_id, data)
+
+
+@router.post(
+    "/email-operations/grants/{grant_id}/revoke", response_model=email_operations.GrantRead
+)
+def revoke_email_support_grant(
+    business_id: UUID, grant_id: UUID, request: Request, identity: Identity, db: DB
+) -> email_operations.GrantRead:
+    email_operations_access(business_id, request, identity, db)
+    return email_operations.revoke_support(db, identity.user.id, business_id, grant_id)
 
 
 @router.post(
@@ -1014,14 +1247,23 @@ def preference_update(
 def review_reminders(
     business_id: UUID,
     data: ReminderRequest,
+    request: Request,
     identity: Identity,
     db: DB,
 ) -> dict[str, Any]:
-    authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper"})
+    authorize(db, identity, business_id, email_outbox.ROLES)
+    created = service.reminders(db, identity, business_id, data.as_of)
+    queued = 0
+    settings = request.app.state.settings
+    if identity.user.verified and email_outbox.local_delivery_available(settings, business_id):
+        queued = email_outbox.enqueue(
+            db, settings, get_business(db, business_id), identity.user.id, data.as_of
+        )
     return {
-        "created": service.reminders(db, identity, business_id, data.as_of),
+        "created": created,
         "channel": "in_app",
         "external_messages_sent": 0,
+        "email_queued": queued,
     }
 
 
@@ -1086,6 +1328,7 @@ def tasks(
                     "reviewed_by",
                     "evidence_id",
                     "comment",
+                    "review_comment",
                     "version",
                 )
             }
@@ -1119,18 +1362,26 @@ def task_update(
 )
 def readiness(business_id: UUID, as_of: date, identity: Identity, db: DB) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    from ledgerpilot.reports.service import context
-
     return service.save_report(
-        db,
-        identity,
-        business_id,
-        {
-            **context(db, business_id, as_of, "operational_readiness"),
-            "kind": "readiness",
-            **service.readiness(db, business_id, as_of),
-        },
+        db, identity, business_id, service.readiness_report(db, business_id, as_of)
     )
+
+
+@router.get("/micro-close", response_model=contracts.responses["workspace.micro_close"])
+def micro_close_workpaper(
+    business_id: UUID, as_of: date, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    if not request.app.state.settings.allows_p2_micro_close(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Nightly close is unavailable.", 404)
+    workpaper = micro_close.lookup(db, business_id, as_of)
+    return {
+        "workpaper": (
+            {"report": workpaper.result, "captured_at": workpaper.created_at}
+            if workpaper is not None
+            else None
+        )
+    }
 
 
 @router.get(

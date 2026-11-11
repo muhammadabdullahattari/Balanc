@@ -72,6 +72,10 @@ def post(
     except DBAPIError as exc:
         message = getattr(getattr(exc.orig, "diag", None), "message_primary", "")
         known = {"ERR_VERSION", "ERR_IDEMPOTENCY_CONFLICT", "ERR_PERIOD_LOCKED"}
+        if message == "ERR_PREPAID_REVERSAL":
+            raise DomainError(
+                message, "This journal is linked to a prepaid schedule.", 409
+            ) from None
         if message in known:
             raise DomainError(message, "Conflict with the current accounting state.", 409) from None
         raise
