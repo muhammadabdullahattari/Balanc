@@ -19,65 +19,74 @@ jobs:
     uses: ./.github/workflows/checks.yml
 
   deploy-api-demo:
-    name: Deploy API demo to AWS EC2 through SSM
+    name: Deploy API to Floci EC2
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [checks]
     environment: demo
-    permissions:
-      contents: read
-      id-token: write
-    env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      EC2_INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
     steps:
       - uses: actions/checkout@v7
-      - name: Validate deployment environment
-        env:
-          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-        run: |
-          for name in AWS_ROLE_ARN AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY EC2_INSTANCE_ID; do
-            if [[ -z "${!name}" ]]; then
-              echo "Missing demo environment variable: $name" >&2
-              exit 1
-            fi
-          done
-      - name: Configure short-lived AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-      - name: Sign in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
       - name: Download checked API image
         uses: actions/download-artifact@v8
         with:
           name: ledgerpilot-api-image-${{ github.sha }}
           path: /tmp/checked-image
-      - name: Publish checked API image
+      - name: Publish image to Floci ECR
         id: image
         env:
-          REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com
+          FLOCI_REGISTRY: aws.meissasoft.com
+          FLOCI_REPOSITORY: 027852729302/us-east-1/balanc
         run: |
           docker load --input /tmp/checked-image/api-image.tar
-          image="$REGISTRY/$ECR_REPOSITORY:${GITHUB_SHA}"
-          docker tag "ledgerpilot-api:${GITHUB_SHA}" "$image"
-          docker push "$image"
-          echo "uri=$image" >> "$GITHUB_OUTPUT"
-      - name: Deploy image through AWS Systems Manager
+          full_image="$FLOCI_REGISTRY/$FLOCI_REPOSITORY:${GITHUB_SHA}"
+          latest_image="$FLOCI_REGISTRY/$FLOCI_REPOSITORY:latest"
+          docker tag "ledgerpilot-api:${GITHUB_SHA}" "$full_image"
+          docker tag "ledgerpilot-api:${GITHUB_SHA}" "$latest_image"
+          docker push "$full_image"
+          docker push "$latest_image"
+          echo "uri=$full_image" >> "$GITHUB_OUTPUT"
+      - name: Deploy to Floci EC2 via SSH
         env:
+          SSH_PRIVATE_KEY: ${{ secrets.FLOCI_SSH_KEY }}
+          SSH_HOST: ${{ vars.FLOCI_HOST || '221.120.236.55' }}
+          SSH_PORT: ${{ vars.FLOCI_SSH_PORT || '2223' }}
+          SSH_USER: ${{ vars.EC2_INSTANCE_ID || 'i-ec605373a19fbe9dd' }}
           IMAGE_URI: ${{ steps.image.outputs.uri }}
         run: |
-          command_id="$(aws ssm send-command \
-            --instance-ids "$EC2_INSTANCE_ID" \
-            --document-name AWS-RunShellScript \
-            --parameters "commands=sudo /opt/ledgerpilot/deploy-api.sh $IMAGE_URI $AWS_REGION" \
-            --query 'Command.CommandId' --output text)"
-          aws ssm wait command-executed --command-id "$command_id" --instance-id "$EC2_INSTANCE_ID"
-          aws ssm get-command-invocation --command-id "$command_id" --instance-id "$EC2_INSTANCE_ID" \
-            --query '{Status:Status,Output:StandardOutputContent,Errors:StandardErrorContent}' --output json
+          if [[ -z "$SSH_PRIVATE_KEY" ]]; then
+            echo "Missing secret: FLOCI_SSH_KEY. Please add the SSH private key (floci.pem) to GitHub Secrets." >&2
+            exit 1
+          fi
+          mkdir -p ~/.ssh
+          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh -o StrictHostKeyChecking=no -o HostKeyAlgorithms=+ssh-rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
+            "IMAGE_URI='$IMAGE_URI' bash -s" << 'EOF'
+              set -e
+              echo "Pulling image from Floci ECR: $IMAGE_URI"
+              docker pull "$IMAGE_URI"
+
+              echo "Applying database migrations..."
+              docker run --rm --network host --env-file /root/Balanc/.env "$IMAGE_URI" uv run alembic upgrade head
+
+              echo "Restarting application container..."
+              docker stop app || true
+              docker rm app || true
+              docker run -d --name app --restart=always --network host --env-file /root/Balanc/.env "$IMAGE_URI"
+
+              echo "Verifying application readiness..."
+              for i in $(seq 1 20); do
+                if curl -s --fail http://127.0.0.1:8000/health/ready; then
+                  echo ""
+                  echo "Application deployed and healthy!"
+                  exit 0
+                fi
+                sleep 2
+              done
+              echo "Readiness check timed out."
+              docker logs app --tail 50
+              exit 1
+          EOF
 
 
 
