@@ -75,14 +75,16 @@ jobs:
               docker run -d --name app --restart=always --network host --env-file /root/Balanc/.env "$IMAGE_URI"
 
               echo "Verifying application readiness..."
-              for i in $(seq 1 30); do
-                if curl -s --fail http://127.0.0.1:8000/health/ready; then
+              for i in $(seq 1 60); do
+                if curl -s --fail --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/health/ready; then
                   echo ""
                   echo "Application deployed and healthy!"
                   exit 0
                 fi
-                sleep 2
+                echo -n "."
+                sleep 3
               done
+              echo ""
               echo "Readiness check timed out."
               docker logs app --tail 50
               exit 1
