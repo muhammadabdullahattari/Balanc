@@ -85,7 +85,7 @@ jobs:
           LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
         run: |
           npm run build
-          npx playwright install --with-deps chromium
+          npx playwright install --with-deps chromium || npx playwright install chromium
           npm run test:browser:types
           npm run test:browser:live
       - name: Save frontend integration evidence
@@ -152,7 +152,7 @@ jobs:
       - name: Build production web application
         run: npm run build
       - name: Install Chromium for UI acceptance
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium || npx playwright install chromium
       - name: Run isolated browser UI journeys
         run: |
           npm run test:browser:types
