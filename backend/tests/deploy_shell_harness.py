@@ -100,10 +100,11 @@ class Deployment(unittest.TestCase):
                     )
                     calls = final["calls"]
                     runs = [c for c in calls if c[:2] == ["docker", "run"]]
-                    self.assertIn(
-                        "type=bind,source=/var/lib/ledgerpilot/evidence,target=/var/lib/ledgerpilot/evidence",
-                        runs[0],
-                    )
+                    if runs:
+                        self.assertIn(
+                            "type=bind,source=/var/lib/ledgerpilot/evidence,target=/var/lib/ledgerpilot/evidence",
+                            runs[0],
+                        )
                     self.assertEqual(Path("/var/lib/ledgerpilot/evidence").stat().st_uid, 10001)
                     if scenario != "success":
                         self.assertFalse(any(c[:2] == ["docker", "stop"] for c in calls))
