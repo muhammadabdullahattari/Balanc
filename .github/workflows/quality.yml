@@ -35,18 +35,19 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - name: Validate deployment environment
+        env:
+          AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
         run: |
-          for name in AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY EC2_INSTANCE_ID; do
+          for name in AWS_ROLE_ARN AWS_REGION AWS_ACCOUNT_ID ECR_REPOSITORY EC2_INSTANCE_ID; do
             if [[ -z "${!name}" ]]; then
               echo "Missing demo environment variable: $name" >&2
               exit 1
             fi
           done
-      - name: Configure AWS credentials
+      - name: Configure short-lived AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
       - name: Sign in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
