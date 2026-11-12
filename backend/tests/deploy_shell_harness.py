@@ -10,29 +10,31 @@ from pathlib import Path
 MOCK = r"""#!/usr/bin/env python3
 import json, os, sys
 from pathlib import Path
-name=Path(sys.argv[0]).name; args=sys.argv[1:]
-p=Path('/tmp/deploy-state.json'); state=json.loads(p.read_text())
-state['calls'].append([name,*args]); result=0
-if name=='aws': print('synthetic-test-password')
-elif name=='seq': print(*range(1,4),sep=chr(10))
-elif name=='docker':
- if args[0]=='login': sys.stdin.read()
- elif args[0]=='container': result=0 if args[-1] in state['containers'] else 1
- elif args[0]=='run':
-  if state['scenario']=='run_failure': result=1
-  else: state['containers'][args[args.index('--name')+1]]=args[-1]
- elif args[0]=='exec':
-  state['probes']=state.get('probes',0)+int(args[1]=='ledgerpilot-api-candidate')
-  bad=state['scenario']=='bad_readiness'
-  bad=bad or (state['scenario']=='post_handoff_failure' and state['probes']>1)
-  result=int(args[1]=='ledgerpilot-api-candidate' and bad)
- elif args[0]=='rename':
-  if state['scenario']=='rename_failure' and args[1]=='ledgerpilot-api-candidate': result=1
-  else: state['containers'][args[2]]=state['containers'].pop(args[1])
- elif args[0]=='rm': state['containers'].pop(args[-1],None)
-elif name=='nginx' and args==['-s','reload']:
- if state['scenario']=='reload_failure' and not state.get('failed_reload'):
-  state['failed_reload']=True; result=1
+name = Path(sys.argv[0]).name; args = sys.argv[1:]
+if name == 'aws': print('synthetic-test-password', flush=True); sys.exit(0)
+if name == 'docker' and args and args[0] == 'login': sys.stdin.read(); sys.exit(0)
+if name == 'sleep': sys.exit(0)
+if name == 'seq': print(*range(1, 4), sep=chr(10), flush=True); sys.exit(0)
+p = Path('/tmp/deploy-state.json')
+state = json.loads(p.read_text())
+state['calls'].append([name, *args]); result = 0
+if name == 'docker':
+ if args[0] == 'container': result = 0 if args[-1] in state['containers'] else 1
+ elif args[0] == 'run':
+  if state['scenario'] == 'run_failure': result = 1
+  else: state['containers'][args[args.index('--name') + 1]] = args[-1]
+ elif args[0] == 'exec':
+  state['probes'] = state.get('probes', 0) + int(args[1] == 'ledgerpilot-api-candidate')
+  bad = state['scenario'] == 'bad_readiness'
+  bad = bad or (state['scenario'] == 'post_handoff_failure' and state['probes'] > 1)
+  result = int(args[1] == 'ledgerpilot-api-candidate' and bad)
+ elif args[0] == 'rename':
+  if state['scenario'] == 'rename_failure' and args[1] == 'ledgerpilot-api-candidate': result = 1
+  else: state['containers'][args[2]] = state['containers'].pop(args[1])
+ elif args[0] == 'rm': state['containers'].pop(args[-1], None)
+elif name == 'nginx' and args == ['-s', 'reload']:
+ if state['scenario'] == 'reload_failure' and not state.get('failed_reload'):
+  state['failed_reload'] = True; result = 1
 p.write_text(json.dumps(state)); sys.exit(result)
 """
 
