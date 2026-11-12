@@ -20,7 +20,7 @@ jobs:
 
   deploy-api-demo:
     name: Deploy API demo to AWS EC2 through SSM
-    if: github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && vars.ENABLE_DEMO_DEPLOY == 'true'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [checks]
     environment: demo
