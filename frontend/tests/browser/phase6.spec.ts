@@ -12,6 +12,11 @@ const business = {
   policy_version: 1,
   fiscal_month: 1,
   jurisdiction: "US",
+  p2_insights_available: false,
+  p2_micro_close_available: false,
+  p2_prepaids_available: false,
+  p2_projects_available: false,
+  p2_reconciliation_available: false,
 } satisfies components["schemas"]["BusinessRead"];
 const account = {
   id,
