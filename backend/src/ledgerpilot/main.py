@@ -210,6 +210,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def live() -> dict[str, str]:
         return {"status": "ok"}
 
+    @application.get("/settings/billing", response_class=HTMLResponse, include_in_schema=False)
+    @application.get("/billing/return", response_class=HTMLResponse, include_in_schema=False)
+    def billing_return() -> HTMLResponse:
+        content = (
+            "<!doctype html><html><head><meta charset='utf-8'>"
+            "<title>Billing Return</title></head><body><h1>Checkout Complete</h1>"
+            "<p>Your subscription checkout was completed. You may return to the application.</p>"
+            "</body></html>"
+        )
+        return HTMLResponse(content)
+
     @application.get(
         "/health/ready",
         tags=["health"],

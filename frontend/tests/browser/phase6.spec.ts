@@ -17,6 +17,8 @@ const business = {
   p2_prepaids_available: false,
   p2_projects_available: false,
   p2_reconciliation_available: false,
+  p2_audit_available: false,
+  p2_retention_available: false,
 } satisfies components["schemas"]["BusinessRead"];
 const account = {
   id,
