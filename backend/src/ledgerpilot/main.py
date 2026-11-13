@@ -22,6 +22,7 @@ from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.database import build_engine
 from ledgerpilot.documents.router import router as evidence_router
 from ledgerpilot.identity.router import router as identity_router
+from ledgerpilot.provider_integrations import router as provider_router
 from ledgerpilot.reports.router import router as reports_router
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.middleware import FoundationMiddleware
@@ -31,6 +32,8 @@ from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.swagger import local_swagger
 from ledgerpilot.tenancy.router import router as tenancy_router
 from ledgerpilot.trade.router import router as trade_router
+from ledgerpilot.workspace.audit_access import router as audit_access_router
+from ledgerpilot.workspace.retention import router as retention_router
 from ledgerpilot.workspace.router import router as workspace_router
 
 
@@ -227,7 +230,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one()
-                if not safe or version != "0026":
+                if not safe or version != "0029":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
@@ -240,6 +243,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(banking_router, prefix=configured.api_v1_prefix)
     application.include_router(reports_router, prefix=configured.api_v1_prefix)
     application.include_router(workspace_router, prefix=configured.api_v1_prefix)
+    application.include_router(retention_router, prefix=configured.api_v1_prefix)
+    application.include_router(audit_access_router, prefix=configured.api_v1_prefix)
+    application.include_router(provider_router, prefix=configured.api_v1_prefix)
     application.include_router(evidence_router, prefix=configured.api_v1_prefix)
     return application
 

@@ -8,12 +8,41 @@ from fastapi import APIRouter, Query, Request
 
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.reports import service
+from ledgerpilot.reports.uncertainty import CashInterval, interval
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.service import authorize
 from ledgerpilot.workspace.service import save_report
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["reports"])
+
+
+@router.get("/reports/forecast/{report_id}/interval", response_model=CashInterval)
+def forecast_interval(
+    business_id: UUID,
+    report_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    week: Annotated[int, Query(ge=1, le=13)] = 1,
+) -> CashInterval:
+    authorize(db, identity, business_id)
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Forecast intervals are unavailable.", 404)
+    return interval(db, business_id, report_id, week)
+
+
+@router.get(
+    "/reports/forecast/{report_id}/evaluation",
+    response_model=contracts.responses["reports.forecast_evaluation"],
+)
+def forecast_evaluation(
+    business_id: UUID, report_id: UUID, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    authorize(db, identity, business_id)
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Forecast evaluation is unavailable.", 404)
+    return service.evaluate_forecast(db, business_id, report_id)
 
 
 @router.get(

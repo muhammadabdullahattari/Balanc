@@ -77,6 +77,14 @@ def business(business_id: UUID, request: Request, identity: Identity, db: DB) ->
         "jurisdiction": policy.jurisdiction if policy else b.jurisdiction,
         "p2_projects_available": request.app.state.settings.allows_p2_projects(b.id),
         "p2_insights_available": request.app.state.settings.allows_p2_insights(b.id),
+        "p2_retention_available": (
+            request.app.state.settings.app_env in {"local", "test"}
+            and b.id in request.app.state.settings.p2_retention_business_ids
+        ),
+        "p2_audit_available": (
+            request.app.state.settings.app_env in {"local", "test"}
+            and b.id in request.app.state.settings.p2_audit_business_ids
+        ),
         "p2_reconciliation_available": request.app.state.settings.allows_p2_reconciliation(b.id),
         "p2_micro_close_available": request.app.state.settings.allows_p2_micro_close(b.id),
         "p2_prepaids_available": request.app.state.settings.allows_p2_prepaids(b.id),

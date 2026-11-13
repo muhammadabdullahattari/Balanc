@@ -77,10 +77,23 @@ def authorize(
         )
         path = db.info.get("request_path", "")
         retained_action = path.endswith(
-            ("/privacy-requests", "/consents", "/preview", "/read", "/exports/snapshots")
+            (
+                "/privacy-requests",
+                "/consents",
+                "/preview",
+                "/read",
+                "/exports/snapshots",
+                "/billing/checkout",
+            )
         )
         retained_action = retained_action or (
             f"/businesses/{business_id}/privacy-requests/" in path and path.endswith("/reviews")
+        )
+        # Retention obligations remain manageable when the commercial trial expires.
+        # Each retention route separately requires an owner/accountant MFA session.
+        retained_action = retained_action or f"/businesses/{business_id}/retention/" in path
+        retained_action = retained_action or (
+            f"/businesses/{business_id}/audit-grants/" in path and path.endswith("/revoke")
         )
         if (
             trial

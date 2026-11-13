@@ -109,6 +109,7 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
     spec = create_app(hosted()).openapi()
     public = {
         ("/health/live", "get"),
+        ("/api/v1/billing/stripe/webhook", "post"),
         ("/health/ready", "get"),
         ("/api/v1/auth/csrf", "get"),
         ("/api/v1/auth/google/config", "get"),
@@ -140,7 +141,8 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
                 private += 1
     assert seen == public and private > 100
     # No generic prompt/tool executor or inbound payment webhook exists in P1.
-    assert not any("webhook" in p or "/execute" in p for p in spec["paths"])
+    assert {p for p in spec["paths"] if "webhook" in p} == {"/api/v1/billing/stripe/webhook"}
+    assert not any("/execute" in p for p in spec["paths"])
 
 
 @REAL

@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 153,
-  "distinct_operations": 116,
+  "call_sites": 166,
+  "distinct_operations": 129,
   "operations": [
     {
       "file": "App.tsx",
@@ -22,6 +22,11 @@
       "file": "App.tsx",
       "method": "POST",
       "path": "/api/v1/auth/logout"
+    },
+    {
+      "file": "features/activity.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/history/{report_id}"
     },
     {
       "file": "features/activity.tsx",
@@ -87,6 +92,26 @@
       "file": "features/advances.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/advances"
+    },
+    {
+      "file": "features/audit-access.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audit-grants"
+    },
+    {
+      "file": "features/audit-access.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/audit-grants"
+    },
+    {
+      "file": "features/audit-access.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/audit-grants/{grant_id}/revoke"
+    },
+    {
+      "file": "features/audit-access.tsx",
+      "method": "GET",
+      "path": "/api/v1/audit-access/{grant_id}/reports/{report_id}"
     },
     {
       "file": "features/auth.tsx",
@@ -650,6 +675,16 @@
     },
     {
       "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/forecast/{report_id}/interval"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/forecast/{report_id}/evaluation"
+    },
+    {
+      "file": "features/reports.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/assistant/report-answer"
     },
@@ -662,6 +697,31 @@
       "file": "features/reports.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/reports/profit-variance"
+    },
+    {
+      "file": "features/retention.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/retention"
+    },
+    {
+      "file": "features/retention.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/policies"
+    },
+    {
+      "file": "features/retention.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/holds"
+    },
+    {
+      "file": "features/retention.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/holds/{hold_id}/release"
+    },
+    {
+      "file": "features/retention.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/preview"
     },
     {
       "file": "features/rules.tsx",
@@ -687,6 +747,11 @@
       "file": "features/rules.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/activation"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/shadow-evaluation"
     },
     {
       "file": "features/settings.tsx",

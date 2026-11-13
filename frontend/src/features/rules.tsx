@@ -195,6 +195,9 @@ export function Rules() {
         description="Activation changes suggestions; bank entries still require individual review."
       >
         <ErrorNotice error={preview.error || activate.error} />
+        {b.p2_insights_available && selected?.id && (
+          <RuleShadowEvaluation key={selected.id} ruleId={selected.id} />
+        )}
         {preview.data && (
           <>
             <Table
@@ -213,5 +216,73 @@ export function Rules() {
         )}
       </Modal>
     </>
+  );
+}
+
+function RuleShadowEvaluation({ ruleId }: { ruleId: string }) {
+  const business = useBusiness();
+  const check = useMutation({
+    mutationFn: (form: FormData) =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/bank-rules/{rule_id}/shadow-evaluation",
+          {
+            params: {
+              path: { business_id: business.id, rule_id: ruleId },
+              query: {
+                start: String(form.get("start")),
+                end: String(form.get("end")),
+                max_amount: String(form.get("cap")),
+              },
+            },
+          },
+        ),
+      ),
+  });
+  return (
+    <details className="chart-data">
+      <summary>Test this rule against reviewed entries</summary>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          check.mutate(new FormData(event.currentTarget));
+        }}
+      >
+        <Field label="Start date">
+          <input type="date" name="start" required />
+        </Field>
+        <Field label="End date">
+          <input type="date" name="end" required />
+        </Field>
+        <Field label={`Maximum transaction amount (${business.currency})`}>
+          <input
+            name="cap"
+            inputMode="decimal"
+            required
+            pattern="[0-9]+(\.[0-9]{1,6})?"
+          />
+        </Field>
+        <Button variant="secondary" busy={check.isPending}>
+          Evaluate rule
+        </Button>
+      </form>
+      <ErrorNotice error={check.error} />
+      {check.data && (
+        <>
+          <p role="status">
+            Rule version {check.data.rule_version} agreed with{" "}
+            {check.data.matched} of {check.data.evaluated} eligible reviewed
+            entries.
+          </p>
+          {check.data.mismatched_row_ids.length > 0 && (
+            <ul aria-label="Bank rows where the rule disagreed">
+              {check.data.mismatched_row_ids.map((id) => (
+                <li key={id}>{id}</li>
+              ))}
+            </ul>
+          )}
+        </>
+      )}
+    </details>
   );
 }

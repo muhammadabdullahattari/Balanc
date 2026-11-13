@@ -1,4 +1,6 @@
 import { GoogleSignIn } from "./google-signin";
+import { RetentionControls } from "./retention";
+import { AuditShares } from "./audit-access";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
@@ -240,6 +242,8 @@ export function Settings() {
         )}
         {section === "privacy" && (
           <>
+            <RetentionControls />
+            <AuditShares />
             <h2>Your data, with a clear process.</h2>
             <p className="muted">
               Requests are reviewed independently. Accounting retention and

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query, Request
 from sqlalchemy import select
 
 from ledgerpilot.audit.service import record
-from ledgerpilot.banking import corrections, service
+from ledgerpilot.banking import corrections, service, shadow
 from ledgerpilot.banking.models import BankCorrection, BankImport, BankRow, BankRule
 from ledgerpilot.banking.read import BankImportRead, BankImportResult, BankRowRead, DispositionRead
 from ledgerpilot.banking.schemas import (
@@ -322,6 +322,26 @@ def rule(db: DB, bid: UUID, rid: UUID) -> BankRule:
     if not item:
         raise DomainError("ERR_NOT_FOUND", "Rule not found.", 404)
     return item
+
+
+@router.get(
+    "/bank-rules/{rule_id}/shadow-evaluation",
+    response_model=contracts.responses["banking.shadow_evaluation"],
+)
+def shadow_evaluation(
+    business_id: UUID,
+    rule_id: UUID,
+    start: date,
+    end: date,
+    max_amount: Annotated[Decimal, Query(gt=0, le=1000000, max_digits=13, decimal_places=6)],
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner", "accountant"})
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Rule shadow evaluation is unavailable.", 404)
+    return shadow.evaluate(db, business_id, rule(db, business_id, rule_id), start, end, max_amount)
 
 
 @router.get(

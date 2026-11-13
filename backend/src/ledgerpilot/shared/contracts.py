@@ -123,6 +123,7 @@ Forecast = obj(
     weeks=many(Week),
     confidence=str,
     bands=None,
+    cash_account_ids=opt(many(UUID)),
     assumptions=many(str),
     scenario=opt(obj("ForecastScenario", receipt_percent=int, payment_percent=int)),
     first_shortfall=opt(date | None),
@@ -655,6 +656,30 @@ responses: dict[str, Any] = {
     "reports.controls": Controls,
     "reports.tax_support": Tax,
     "reports.forecast": Forecast,
+    "banking.shadow_evaluation": obj(
+        "BankRuleShadowEvaluation",
+        rule_id=UUID,
+        rule_version=int,
+        evaluated=int,
+        matched=int,
+        mismatched_row_ids=many(UUID),
+    ),
+    "reports.forecast_evaluation": obj(
+        "ForecastEvaluation",
+        report_id=UUID,
+        method=str,
+        currency=str,
+        weeks=many(
+            obj(
+                "ForecastEvaluationWeek",
+                end_date=date,
+                forecast_cash=str,
+                ledger_cash=str,
+                difference=str,
+            )
+        ),
+        mean_absolute_error=str | None,
+    ),
     "reports.profit_variance": obj(
         "ProfitVariance",
         current_report_id=UUID,

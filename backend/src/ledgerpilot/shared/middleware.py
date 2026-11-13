@@ -57,7 +57,11 @@ class FoundationMiddleware:
             )
             await response(scope, receive, send)
 
-        if request.method not in {"GET", "HEAD", "OPTIONS"}:
+        signed_webhook = (
+            request.method == "POST"
+            and request.url.path == f"{settings.api_v1_prefix}/billing/stripe/webhook"
+        )
+        if request.method not in {"GET", "HEAD", "OPTIONS"} and not signed_webhook:
             cookie = request.cookies.get(CSRF_COOKIE, "")
             csrf = request.headers.get("x-csrf-token", "")
             if (

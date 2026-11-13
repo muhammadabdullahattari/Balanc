@@ -117,12 +117,76 @@ Privacy settings offer an MFA-protected personal data download. For an approved 
 
 Three PostgreSQL and Mailpit integration tests passed. They covered the watcher crossing a workspace day boundary, source citations and no-shortfall answers, and requester-only approved exports with an audit event. Twelve focused frontend tests passed, including the cited shortfall answer.
 
+## P2-F/H Local forecast and bank-rule evaluation
+
+Reports can compare a saved baseline cash forecast with posted cash on its selected accounts. The evaluator accepts baselines captured on their forecast date and measures only completed weeks in the workspace timezone. It reports weekly differences and mean absolute error using decimal balances. The ledger can change after a week closes through later postings. The evaluation therefore describes posted balances at the time of review. Scenarios and older reports without saved cash account IDs are excluded.
+
+Bank rule review can compare a saved rule version with previously categorized entries in a date range and under an explicit amount cap. It reports agreements and the bank row IDs that disagree. The sample excludes splits, reversed or corrected entries, and entries outside the rule's income or expense direction. The result evaluates this rule on the selected history. Representative holdout testing and accounting approval remain separate.
+
+The PostgreSQL integration test verified a completed forecast week with a $42 difference and a shadow run with one agreement and one disagreement. It also verified the amount cap and default-off access to the rule evaluation.
+
 ## Next implementation checkpoints
 
 - **P2-B:** Hosted sender and automatic provider feedback ingestion and verification.
 - **P2-C/D:** Stripe subscription entitlements and event reconciliation, Financial Connections consent and feed ingestion, and QuickBooks Online direct synchronization. CSV remains available. Local provider contract work and sandbox acceptance remain open.
-- **P2-E:** Scoped, revocable auditor access and workpapers beyond the nightly control checks.
-- **P2-F/H:** Scheduled shortfall notifications, calibrated forecast bands where data supports them, shadow evaluation for controlled posting and a versioned quality and cost benchmark.
-- **P2-G:** Configurable record-class retention and legal holds. Automated disposal requires an approved policy matrix.
+- **P2-E:** Scoped, revocable sharing of saved workpapers is implemented below. Workpapers beyond the nightly control checks remain open.
+- **P2-F/H:** Scheduled inbox shortfall notifications and historical-error interval evaluation are implemented below. Representative holdout results for controlled posting and a versioned quality/cost benchmark remain open. No customer-quality claim follows from synthetic tests.
+- **P2-G:** Configurable record-class retention and legal holds are implemented below. Automated disposal requires the approved record/copy/backup policy matrix and remains open.
 
 P2-C, P2-D and P2-G now have recorded launch choices in the [P2 plan](P2_Implementation_Plan.md#launch-and-provider-decisions). Plan acceptance first for a US cohort, then expand globally market by market. Use Stripe for subscriptions and Stripe Financial Connections for live bank data. Keep CSV as the first available import and fallback, with QuickBooks Online as the first direct accounting connector. Use ten years as the default for in-scope financial records, with approved policy rules and exceptions. Provider eligibility, sandbox credentials and market retention review remain open. Hosted gates remain deferred.
+
+## 13 November 2026 · Retention controls, cash alerts and forecast intervals
+
+### Retention and legal holds
+
+Migration `0027` adds immutable policy versions and durable category-wide or workspace-wide legal holds. Owner/accountant MFA sessions can record a cited policy, place a hold and release it with a recorded reason. Concurrent policy edits use an expected version; a repeated release preserves the first release evidence. PostgreSQL enforces tenant scope, allowed write columns, policy immutability and one-way release. Retention operations remain available after trial expiry, subject to the same role, MFA and rollout checks.
+
+Set `P2_RETENTION_BUSINESS_IDS` to a JSON array of approved local/test workspace IDs and apply migrations with the migration role. Settings → Privacy displays the policies, hold history, policy form, hold/release controls and date-based eligibility preview. The default is ten years from the supplied record date. A February 29 anniversary falls on March 1 in a non-leap year. Any active matching hold blocks disposal review. This does not implement physical deletion, backup expiry or legal compliance certification; the response always states `deletion_authorized=false`.
+
+### Scheduled cash-shortfall inbox alerts
+
+The local worker checks the current workspace-day baseline for explicitly selected cash accounts. It requires an active, verified owner/accountant and the existing `P2_INSIGHT_BUSINESS_IDS` rollout. It respects the member's reminder preference and quiet hours. It stores the forecast and inbox notification atomically, citing the saved report, and deduplicates per member/day/account selection under the business lock. Activity offers a source viewer showing the saved projected shortfall and report date. Alerts are in-app, not new SMTP deliveries.
+
+Run from `backend`:
+
+```powershell
+.\.venv\Scripts\python.exe -m ledgerpilot.notifications.shortfalls --actor USER_UUID --business BUSINESS_UUID --cash-account ACCOUNT_UUID --watch
+```
+
+Repeat `--cash-account` for additional cash accounts (maximum 20). `--watch` checks every five minutes while the process runs; omit it for one check. Downtime does not create historical notifications. A same-day alert is an immutable snapshot, not a continuously updated cash balance. No background service is automatically installed.
+
+### Historical-error uncertainty intervals
+
+Reports → Compare a saved forecast offers an uncertainty evaluation for weeks 1–13. The evaluator accepts a contemporaneously captured baseline, uses only earlier baselines with matching currency, timezone and cash accounts, and excludes overlapping forecast windows. It uses 20 chronological calibration samples and 10 later validation samples; the absolute-error radius uses the finite-sample 80% quantile. Validation coverage below 80% yields no interval. Insufficient history also yields no interval. All source report IDs, method version and counts are returned. Source reads are bounded at 500 reports, and actual cash is calculated in three bounded grouped queries, preserving the shared 14-checkpoint limit. Actuals can include subsequent accounting corrections, so this is historical validation rather than a guarantee of future coverage or a frozen external benchmark.
+
+### Verification status
+
+The initial individual PostgreSQL/Mailpit tests passed for retention and concurrent cash alerts. After restarting Docker, the combined run exposed the existing 14-checkpoint query limit; calibration was corrected to three bounded grouped reads. The final retention/alerts/forecast run passed five tests, including synthetic temporal holdouts through the real API and database. The broader backend suite passed 76 tests with 104 service-dependent tests skipped; those skips are not integration evidence. Frontend production build, 50 component tests, nine transport tests, API client generation and integration inventory passed before the subsequent audit-sharing addition. Final audit-sharing checks follow below. No deployment, commit or push was performed. P2 is still open for the local work listed above, including subscriptions and direct connectors.
+
+### Scoped auditor workpaper sharing
+
+Migration `0028` adds recipient-specific, expiring grants for 1–20 selected immutable saved reports. Set `P2_AUDIT_BUSINESS_IDS` for approved local/test businesses. Under Settings → Privacy, an owner/accountant with MFA records the recipient's LedgerPilot account UUID, saved report UUIDs, a reason and a 1–720-hour duration. Share the displayed recipient link through your own authorized channel. The recipient opens `/audit-access`, signs in with MFA and opens/downloads only the selected workpaper. That page also displays their account reference to give to the owner. No email is sent by the share action.
+
+The recipient does not need workspace membership. PostgreSQL limits the non-member to report rows named in active grants. Revocation and expiry are checked at each read, and reads are written to the workspace audit trail. Report links inside a shared snapshot do not confer access to the linked documents. Existing independent memberships or other grants are unaffected; downloaded copies cannot be recalled. Revocation remains available after trial expiry. Grant history uses bounded pagination, and source report scope is checked both by the API and the database trigger.
+
+### Final local verification for this increment
+
+Ten tests passed in the combined real PostgreSQL/Mailpit run covering retention, cash-alert concurrency, forecast evaluation/calibration, scoped auditor access, populated upgrade and isolated database/evidence restore. Auditor tests verify no workspace membership, database row filtering, wrong-recipient denial, audit recording, expiry and revocation. Readiness and upgrade/restore expectations now require schema `0028`.
+
+All 51 frontend component tests passed. The production bundle, generated API types, 154-path OpenAPI check, 166-call-site/129-operation frontend inventory, Ruff and strict mypy passed. Nine API transport tests passed earlier in this increment. The general backend run passed 76 tests with 104 service-dependent skips before audit sharing; use the focused real-service evidence above for the added workflows. These are local checks, not provider sandbox, browser-manual or deployment sign-off. Migrations were exercised on disposable databases; rollout flags remain opt-in and were not changed in the user's private `.env`.
+
+Pending product input: subscription plan names/prices/currency, per-plan limits and failed-payment grace rules. Remaining local implementation is still recorded under Next implementation checkpoints; billing and connectors are not implemented by this increment.
+
+## P2 sandbox endpoints
+
+Apply migration 0029 before running the backend. The Stripe dashboard endpoint is the
+public HTTPS API origin followed by /api/v1/billing/stripe/webhook. Put its signing secret
+in STRIPE_WEBHOOK_SECRET. Set BILLING_RETURN_URL to the HTTPS application return page.
+For Intuit, register the public HTTPS API origin followed by
+/api/v1/integrations/quickbooks/callback and use the identical value in QUICKBOOKS_REDIRECT_URI.
+Start the flow as a signed-in workspace owner from the same API origin.
+
+Checkout, signed event receipt, owner-triggered billing reconciliation, QuickBooks OAuth,
+token refresh and paginated sandbox preview are available. The event inbox does not yet
+trigger reconciliation automatically. Entitlement enforcement, Stripe plan changes and
+the reviewed QuickBooks ledger import worker remain open.

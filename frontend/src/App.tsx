@@ -50,6 +50,7 @@ import {
 import { Button, ErrorNotice, Loading } from "./components/ui";
 import { Auth } from "./features/auth";
 import { BusinessChooser } from "./features/onboarding";
+import { AuditRecipient } from "./features/audit-access";
 import { BusinessContext, AccessContext } from "./features/context";
 const Drafts = lazy(() =>
   import("./features/drafts").then((m) => ({ default: m.Drafts })),
@@ -340,6 +341,8 @@ function Workspace() {
       </main>
     );
   if (!session.data) return <Auth />;
+  if (location.pathname === "/audit-access")
+    return <AuditRecipient accountId={session.data.id} />;
   if (!businessId)
     return (
       <BusinessChooser

@@ -453,6 +453,12 @@ export function Reports() {
                     reportId={forecast.data.report_id}
                   />
                 )}
+                {b.p2_insights_available && (
+                  <ForecastEvaluation
+                    key={forecast.data.report_id}
+                    reportId={forecast.data.report_id}
+                  />
+                )}
                 <p className="report-footnote">
                   Report {forecast.data.report_id}
                 </p>
@@ -462,6 +468,139 @@ export function Reports() {
         )}
       </section>
     </>
+  );
+}
+
+function ForecastEvaluation({ reportId }: { reportId: string }) {
+  const business = useBusiness();
+  const interval = useMutation({
+    mutationFn: ({ id, week }: { id: string; week: number }) =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/reports/forecast/{report_id}/interval",
+          {
+            params: {
+              path: { business_id: business.id, report_id: id },
+              query: { week },
+            },
+          },
+        ),
+      ),
+  });
+  const evaluation = useMutation({
+    mutationFn: (id: string) =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/reports/forecast/{report_id}/evaluation",
+          {
+            params: { path: { business_id: business.id, report_id: id } },
+          },
+        ),
+      ),
+  });
+  const data = evaluation.data;
+  return (
+    <details className="chart-data">
+      <summary>Compare a saved forecast with actual cash</summary>
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          evaluation.mutate(
+            String(new FormData(event.currentTarget).get("report_id")).trim(),
+          );
+        }}
+      >
+        <Field label="Baseline forecast report ID">
+          <input name="report_id" required defaultValue={reportId} />
+        </Field>
+        <Button variant="secondary" busy={evaluation.isPending}>
+          Compare with ledger
+        </Button>
+      </form>
+      <ErrorNotice error={evaluation.error} />
+      <form
+        onSubmit={(event) => {
+          event.preventDefault();
+          const form = new FormData(event.currentTarget);
+          interval.mutate({
+            id: String(form.get("report_id")).trim(),
+            week: Number(form.get("week")),
+          });
+        }}
+      >
+        <h3>Historical uncertainty interval</h3>
+        <p className="muted">
+          Uses 20 non-overlapping calibration periods and 10 later validation
+          periods. If history is insufficient or validation fails, no interval
+          is shown.
+        </p>
+        <Field label="Forecast report for calibration">
+          <input name="report_id" required defaultValue={reportId} />
+        </Field>
+        <Field label="Forecast week">
+          <input
+            name="week"
+            type="number"
+            min={1}
+            max={13}
+            required
+            defaultValue={1}
+          />
+        </Field>
+        <Button variant="secondary" busy={interval.isPending}>
+          Evaluate uncertainty
+        </Button>
+      </form>
+      <ErrorNotice error={interval.error} />
+      {interval.data && (
+        <div role="status">
+          <p>
+            {interval.data.status === "available"
+              ? `Historical 80% interval: ${money(interval.data.lower_cash!, business.currency)} to ${money(interval.data.upper_cash!, business.currency)}.`
+              : interval.data.status === "validation_failed"
+                ? "Recent validation did not meet the coverage target. No interval is available."
+                : "Not enough matching, non-overlapping history to estimate an interval."}
+          </p>
+          <p>
+            Calibration samples: {interval.data.calibration_count}. Validation
+            samples: {interval.data.validation_count}.
+          </p>
+          <p className="muted">{interval.data.limitations}</p>
+        </div>
+      )}
+      {data && (
+        <>
+          <p role="status">
+            {data.mean_absolute_error === null
+              ? "No weeks have ended for this forecast."
+              : `Average absolute difference across ${data.weeks.length} completed weeks: ${money(data.mean_absolute_error, data.currency)}.`}
+          </p>
+          {data.weeks.length > 0 && (
+            <Table
+              caption="Forecast compared with posted cash balances"
+              rows={data.weeks}
+              rowKey={(row) => row.end_date}
+              columns={[
+                { label: "Week ended", render: (row) => row.end_date },
+                {
+                  label: "Forecast",
+                  render: (row) => money(row.forecast_cash, data.currency),
+                },
+                {
+                  label: "Posted cash",
+                  render: (row) => money(row.ledger_cash, data.currency),
+                },
+                {
+                  label: "Difference",
+                  render: (row) => money(row.difference, data.currency),
+                },
+              ]}
+            />
+          )}
+          <p className="report-footnote">Baseline report {data.report_id}</p>
+        </>
+      )}
+    </details>
   );
 }
 

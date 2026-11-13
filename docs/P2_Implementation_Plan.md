@@ -20,6 +20,16 @@ While deployment is deferred, follow the [local preparation sequence](Next_Phase
 
 Local development can begin with the CSV baseline, provider contracts, fixtures and policy configuration. Provider credentials, sandbox access, the approved retention matrix and hosted acceptance remain release prerequisites.
 
+### Local implementation update · 13 November 2026
+
+P2 remains in progress. The local P2-F implementation now includes a scheduled, preference-aware cash-shortfall inbox worker and an explicit historical-error interval evaluation. Intervals require 20 non-overlapping calibration windows and 10 later validation windows for the same account selection; insufficient history or failed validation returns no interval. This is not evidence that any customer forecast has achieved the target coverage.
+
+P2-G now includes versioned record-class/jurisdiction retention policies, durable legal holds, audited release, and an eligibility preview in Settings. Migration `0027` preserves policy history and restricts updates to hold-release fields. The preview uses an explicitly disclosed record-date clock and never authorizes physical deletion. Disposal still requires the approved record/copy/backup policy matrix. See the local implementation record for verification and activation instructions.
+
+P2-E also adds scoped sharing of selected saved workpapers with a named, MFA-authenticated recipient, expiry and revocation. Sharing grants no workspace membership and does not remove independent access a recipient already holds. Broader workpaper packages remain open.
+
+Open local work still includes P2-C subscriptions, P2-D direct connectors, P2-E broader workpapers, representative P2-H quality/cost baselines, and approved-policy privacy disposal. Billing plan prices, plan limits and failed-payment grace rules require product input; no prices or entitlements have been invented. These are not all deployment tasks and are not marked complete.
+
 ## Implementation sequence
 
 | Package | Build | Acceptance gate |

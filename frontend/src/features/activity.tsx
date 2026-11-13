@@ -14,6 +14,48 @@ import {
 } from "../components/ui";
 import { today, useBusiness } from "./context";
 import { EmailOperations } from "./email-operations";
+
+function ShortfallSource({ reportId }: { reportId: string }) {
+  const business = useBusiness();
+  const saved = useMutation({
+    mutationFn: () =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/reports/history/{report_id}",
+          {
+            params: { path: { business_id: business.id, report_id: reportId } },
+          },
+        ),
+      ),
+  });
+  const report = saved.data;
+  const first =
+    report && "weeks" in report
+      ? report.weeks.find((week) => week.shortfall)
+      : undefined;
+  return (
+    <div>
+      <Button
+        variant="ghost"
+        busy={saved.isPending}
+        onClick={() => saved.mutate()}
+      >
+        View cash warning
+      </Button>
+      <ErrorNotice error={saved.error} />
+      {report && (
+        <p role="status">
+          {first
+            ? `Projected shortfall by ${first.end_date}: ${report.currency} ${first.closing_cash}.`
+            : "No shortfall in this saved report."}{" "}
+          Forecast date: {report.as_of}. Report: {reportId}. This is a saved
+          projection, not the current cash balance.
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function Activity() {
   const b = useBusiness();
   const path = { business_id: b.id };
@@ -128,6 +170,15 @@ export function Activity() {
                 {
                   label: "Activity",
                   render: (n) => n.kind.replaceAll("_", " "),
+                },
+                {
+                  label: "Source",
+                  render: (n) =>
+                    n.kind === "cash_shortfall" && n.resource_id ? (
+                      <ShortfallSource reportId={n.resource_id} />
+                    ) : (
+                      "—"
+                    ),
                 },
                 {
                   label: "Created",

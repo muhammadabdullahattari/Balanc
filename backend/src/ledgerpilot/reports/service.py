@@ -6,12 +6,14 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
 from typing import Any
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import case, func, select
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Account, Journal, JournalLine
 from ledgerpilot.accounting.money import allocate
+from ledgerpilot.identity.security import now
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.query_limits import bounded_rows, bounded_scalars
 from ledgerpilot.tenancy.models import Business
@@ -62,8 +64,10 @@ def balances(
     }
 
 
-def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, dict[UUID, Decimal]]:
-    """A single grouped query for the dashboard's bounded month-end checkpoints."""
+def balance_snapshots(
+    db: Session, bid: UUID, dates: list[date], account_ids: list[UUID] | None = None
+) -> dict[date, dict[UUID, Decimal]]:
+    """Read posted balances for bounded checkpoints in one grouped query."""
     dates = sorted(set(dates))
     if len(dates) > 14:
         raise DomainError(
@@ -72,6 +76,7 @@ def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, d
     values: dict[date, dict[UUID, Decimal]] = {day: {} for day in dates}
     if not dates:
         return values
+    account_filter = () if account_ids is None else (JournalLine.account_id.in_(account_ids),)
     amounts = [
         func.coalesce(
             func.sum(JournalLine.debit - JournalLine.credit).filter(Journal.accounting_date <= day),
@@ -91,6 +96,7 @@ def balance_snapshots(db: Session, bid: UUID, dates: list[date]) -> dict[date, d
             Journal.business_id == bid,
             Journal.status == "posted",
             Journal.accounting_date <= dates[-1],
+            *account_filter,
         )
         .group_by(JournalLine.account_id),
     ):
@@ -514,6 +520,63 @@ def profit_variance(db: Session, bid: UUID, current_id: UUID, previous_id: UUID)
     }
 
 
+def evaluate_forecast(db: Session, bid: UUID, report_id: UUID) -> dict[str, Any]:
+    stored = db.scalar(
+        select(ReportRun).where(
+            ReportRun.business_id == bid,
+            ReportRun.id == report_id,
+            ReportRun.kind == "deterministic_cash_plan",
+        )
+    )
+    if stored is None:
+        raise DomainError("ERR_NOT_FOUND", "Saved cash forecast not found.", 404)
+    report = stored.result
+    if report.get("scenario") or not report.get("cash_account_ids"):
+        raise DomainError(
+            "ERR_FORECAST_EVALUATION",
+            "Choose a baseline forecast saved with its cash account selection.",
+            422,
+        )
+    timezone = ZoneInfo(report["timezone"])
+    as_of = date.fromisoformat(report["as_of"])
+    if stored.created_at.astimezone(timezone).date() != as_of:
+        raise DomainError(
+            "ERR_FORECAST_EVALUATION",
+            "The baseline must have been saved on its forecast date.",
+            422,
+        )
+    today = now().astimezone(timezone).date()
+    completed = [
+        (date.fromisoformat(week["end_date"]), week)
+        for week in report["weeks"]
+        if date.fromisoformat(week["end_date"]) < today
+    ]
+    accounts = [UUID(value) for value in report["cash_account_ids"]]
+    observed = balance_snapshots(db, bid, [day for day, _ in completed], accounts)
+    rows = []
+    errors: list[Decimal] = []
+    for day, week in completed:
+        forecast_cash = Decimal(week["closing_cash"])
+        actual_cash = sum(observed[day].values(), Decimal(0))
+        difference = actual_cash - forecast_cash
+        errors.append(abs(difference))
+        rows.append(
+            {
+                "end_date": day,
+                "forecast_cash": str(forecast_cash),
+                "ledger_cash": str(actual_cash),
+                "difference": str(difference),
+            }
+        )
+    return {
+        "report_id": stored.id,
+        "method": "ledger_cash_error_v1",
+        "currency": report["currency"],
+        "weeks": rows,
+        "mean_absolute_error": str(sum(errors, Decimal(0)) / len(errors)) if errors else None,
+    }
+
+
 def forecast(
     db: Session,
     bid: UUID,
@@ -585,6 +648,7 @@ def forecast(
         )
     result = {
         **context(db, bid, as_of, "deterministic_cash_plan", business),
+        "cash_account_ids": [str(aid) for aid in bank_ids],
         "weeks": rows,
         "confidence": "low",
         "bands": None,

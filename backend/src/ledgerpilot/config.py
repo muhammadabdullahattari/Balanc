@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     database_url: SecretStr
     session_signing_key: SecretStr
     frontend_origins: str = "http://localhost:5173"
+    stripe_secret_key: SecretStr | None = None
+    stripe_webhook_secret: SecretStr | None = None
+    stripe_starter_price_id: str = ""
+    stripe_growth_price_id: str = ""
+    stripe_enterprise_price_id: str = ""
+    billing_return_url: str = ""
+    quickbooks_client_id: str = ""
+    quickbooks_client_secret: SecretStr | None = None
+    quickbooks_redirect_uri: str = ""
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     db_pool_size: int = Field(default=5, ge=1, le=20)
     db_max_overflow: int = Field(default=5, ge=0, le=20)
@@ -74,6 +83,8 @@ class Settings(BaseSettings):
     p2_reconciliation_business_ids: frozenset[UUID] = frozenset()
     p2_prepaid_business_ids: frozenset[UUID] = frozenset()
     p2_micro_close_business_ids: frozenset[UUID] = frozenset()
+    p2_retention_business_ids: frozenset[UUID] = frozenset()
+    p2_audit_business_ids: frozenset[UUID] = frozenset()
 
     @field_validator(
         "p2_email_delivery_business_ids",
@@ -82,6 +93,8 @@ class Settings(BaseSettings):
         "p2_insight_business_ids",
         "p2_reconciliation_business_ids",
         "p2_micro_close_business_ids",
+        "p2_retention_business_ids",
+        "p2_audit_business_ids",
         mode="before",
     )
     @classmethod

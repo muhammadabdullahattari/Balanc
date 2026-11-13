@@ -26,6 +26,8 @@ class BusinessSummary(Identifier):
 class BusinessRead(BusinessSummary):
     p2_projects_available: bool = False
     p2_insights_available: bool = False
+    p2_retention_available: bool = False
+    p2_audit_available: bool = False
     p2_reconciliation_available: bool = False
     p2_micro_close_available: bool = False
     p2_prepaids_available: bool = False
