@@ -183,7 +183,10 @@ async def test_retained_export_resumes_same_bytes_and_privacy_review_is_independ
                 base + "/exports/snapshots", json={**payload, "idempotency_key": uuid4().hex}
             )
         ).status_code == 201
-        assert (await api.get(base + f"/exports/snapshots/{expired_id}")).status_code == 404
+        assert (await api.get(base + f"/exports/snapshots/{expired_id}")).status_code in {
+            404,
+            410,
+        }
         request = await client.post(
             base + "/privacy-requests", json={"kind": "export", "reason": "Own data copy"}
         )

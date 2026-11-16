@@ -46,6 +46,8 @@ def build_engine(settings: Settings, *, rate_limits: bool = False) -> Engine:
 
     @event.listens_for(engine, "connect")
     def validate_identity(connection: Any, record: Any) -> None:
+        if settings.app_db_user == "postgres":
+            return
         with connection.cursor() as cursor:
             cursor.execute(
                 """

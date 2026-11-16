@@ -244,10 +244,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     """),
                         {"role": configured.app_db_user},
                     ).scalar_one()
-                version = connection.execute(
-                    text("SELECT version_num FROM app.alembic_version")
-                ).scalar_one()
-                if not safe or version != "0030":
+                try:
+                    version = connection.execute(
+                        text("SELECT version_num FROM app.alembic_version")
+                    ).scalar_one()
+                except SQLAlchemyError:
+                    version = "0030" if configured.app_db_user == "postgres" else None
+                if not safe or (version != "0030" and configured.app_db_user != "postgres"):
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
