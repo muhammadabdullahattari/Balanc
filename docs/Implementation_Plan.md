@@ -9,6 +9,8 @@
 
 ## 1. Review and sequencing decision
 
+**Railway and Vercel Cloud Deployment & CI/CD Hardening (16 November 2026).** Successfully transitioned cloud deployment from Floci EC2 / AWS ECR to Railway (https://balanc-production.up.railway.app) and Vercel (https://balanc-amber.vercel.app). Implemented transparent edge reverse proxying for /api/* via frontend/vercel.json, resolving all third-party cookie and CORS restrictions. Adapted backend runtime boundaries and database connection listeners to support managed PostgreSQL single-user configurations (APP_DB_USER=postgres). Resolved all CI/CD test regressions (P2 export disposal status assertions, pip-audit CVE patches, and Vercel CLI root-path resolution). GitHub Actions required checks (Backend checks and tests, Frontend checks and production build, Build API container) and frontend deployment passed with 100% green status. See [the deployment record](Deployment_and_CI_CD_Implementation_Record.md).
+
 **Password sign-in verification.** Email and password are submitted first. Accounts requiring MFA use the same verification screen as Google sign-in. The existing login endpoint revalidates the password and verifies the selected authenticator or recovery code before issuing a session.
 
 **Google sign-in verification.** Google account selection now comes first. When LedgerPilot requires MFA, a separate screen accepts an authenticator or recovery code and reuses the browser-bound Google challenge. The Google proof stays in memory while verification is pending. Cancelling or returning after expiry starts a fresh Google challenge.
