@@ -58,13 +58,11 @@ engine = create_engine(
         "options": "-c lock_timeout=3000 -c statement_timeout=30000",
     },
 )
-if migrator == "postgres":
-    with engine.connect() as connection:
+with engine.connect() as connection:
+    if migrator == "postgres":
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
         connection.commit()
-    safe = True
-else:
-    with engine.connect() as connection:
+    else:
         safe = connection.execute(
             text("""
             SELECT current_user=:role AND NOT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole
