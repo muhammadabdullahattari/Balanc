@@ -20,7 +20,12 @@ runtime = os.environ.get("APP_DB_USER") or values.get("APP_DB_USER", "ledgerpilo
 migrator = os.environ.get("MIGRATION_DB_USER") or values.get(
     "MIGRATION_DB_USER", "ledgerpilot_migrator"
 )
-if runtime == "postgres":
+if (
+    runtime == "postgres"
+    or (url and make_url(url).username == "postgres")
+    or (os.environ.get("DATABASE_URL") and make_url(os.environ["DATABASE_URL"]).username == "postgres")
+):
+    runtime = "postgres"
     migrator = "postgres"
     url = url or os.environ.get("DATABASE_URL")
     if url and url.startswith("postgres://"):

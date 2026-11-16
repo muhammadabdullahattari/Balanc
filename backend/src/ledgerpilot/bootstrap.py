@@ -1,6 +1,7 @@
 """Automatic schema initialization and test role seeding for managed platforms."""
 
 import logging
+import os
 from pathlib import Path
 from uuid import UUID, uuid4
 
@@ -17,12 +18,17 @@ logger = logging.getLogger("ledgerpilot.bootstrap")
 
 def run_migrations_and_seed_if_needed(engine: Engine, settings: Settings) -> None:
     """Initialize schema and seed initial test roles on Railway/managed Postgres."""
-    if settings.app_db_user != "postgres":
-        return
-
     # 1. Run migrations if version is not 0030
     needs_migration = False
     with engine.connect() as connection:
+        db_user: str = connection.execute(text("SELECT current_user")).scalar_one()
+        is_hosted = (
+            db_user == "postgres"
+            or settings.app_db_user == "postgres"
+            or bool(os.environ.get("RAILWAY_ENVIRONMENT") or os.environ.get("RAILWAY_SERVICE_NAME"))
+        )
+        if not is_hosted:
+            return
         connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
         connection.commit()
         try:

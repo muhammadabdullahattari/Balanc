@@ -46,9 +46,11 @@ def build_engine(settings: Settings, *, rate_limits: bool = False) -> Engine:
 
     @event.listens_for(engine, "connect")
     def validate_identity(connection: Any, record: Any) -> None:
-        if settings.app_db_user == "postgres":
-            return
         with connection.cursor() as cursor:
+            cursor.execute("SELECT current_user")
+            row = cursor.fetchone()
+            if (row and row[0] == "postgres") or settings.app_db_user == "postgres":
+                return
             cursor.execute(
                 """
                 SELECT current_user=%s AND NOT (r.rolsuper OR r.rolcreatedb OR r.rolcreaterole

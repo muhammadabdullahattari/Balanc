@@ -239,7 +239,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ready(request: Request) -> JSONResponse:
         try:
             with request.app.state.engine.connect() as connection:
-                if configured.app_db_user == "postgres":
+                db_user = connection.execute(text("SELECT current_user")).scalar_one()
+                if db_user == "postgres" or configured.app_db_user == "postgres":
                     safe = True
                 else:
                     safe = connection.execute(
