@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session, aliased
 
 from ledgerpilot.accounting.models import Account, Journal, JournalLine
 from ledgerpilot.audit.service import record
-from ledgerpilot.banking.models import BankCorrection, BankRow, BankRule
+from ledgerpilot.banking.models import BankCorrection, BankMatch, BankRow, BankRule
 from ledgerpilot.shared import operations as ops
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.models import Business
@@ -70,7 +70,6 @@ def set_workspace_posting_control(
         {"reason": reason, "updated_at": now_iso},
     )
     return details
-
 
 
 def evaluate(
@@ -163,6 +162,7 @@ def controlled_posting(
     exclusions: list[str] | None = None,
     paused: bool = False,
     dry_run: bool = True,
+    expected_preview_hash: str | None = None,
 ) -> dict[str, Any]:
     workspace_ctrl = get_workspace_posting_control(db, bid)
     if workspace_ctrl.get("paused"):
@@ -232,7 +232,7 @@ def controlled_posting(
 
     stmt = select(BankRow).where(
         BankRow.business_id == bid,
-        BankRow.state == "imported",
+        BankRow.state == "for_review",
         BankRow.description.icontains(rule.contains, autoescape=True),
         BankRow.amount != 0,
     )
@@ -242,6 +242,8 @@ def controlled_posting(
         stmt = stmt.where(BankRow.accounting_date <= end)
     stmt = stmt.order_by(BankRow.accounting_date, BankRow.id).limit(100)
 
+    if not dry_run:
+        stmt = stmt.with_for_update()
     candidate_rows = list(db.scalars(stmt))
 
     eligible_rows: list[BankRow] = []
@@ -262,6 +264,26 @@ def controlled_posting(
         ):
             continue
         eligible_rows.append(row)
+
+    preview_hash = hashlib.sha256(
+        json.dumps(
+            [
+                str(rule.id),
+                rule.version,
+                str(start),
+                str(end),
+                str(limit_amount),
+                active_exclusions,
+                [
+                    [str(row.id), str(row.amount), str(row.accounting_date), str(row.account_id)]
+                    for row in eligible_rows
+                ],
+            ],
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    if not dry_run and expected_preview_hash is not None and expected_preview_hash != preview_hash:
+        raise DomainError("ERR_PREVIEW_CHANGED", "Candidates changed. Run a new dry run.", 409)
 
     posted_ids: list[UUID] = []
     if not dry_run and eligible_rows:
@@ -284,14 +306,14 @@ def controlled_posting(
                 {
                     "account_id": str(rule.account_id),
                     "position": 1,
-                    "debit": f"{debit:.2f}",
-                    "credit": f"{credit:.2f}",
+                    "debit": format(debit, "f"),
+                    "credit": format(credit, "f"),
                 },
                 {
                     "account_id": str(row.account_id),
                     "position": 2,
-                    "debit": f"{credit:.2f}",
-                    "credit": f"{debit:.2f}",
+                    "debit": format(credit, "f"),
+                    "credit": format(debit, "f"),
                 },
             ]
             journal_id: UUID = db.execute(
@@ -315,6 +337,13 @@ def controlled_posting(
 
             row.journal_id = journal_id
             row.state = "categorized"
+            row.reason = "Controlled posting using the approved bank rule."
+            row.version += 1
+            db.add(
+                BankMatch(
+                    business_id=bid, row_id=row.id, account_id=row.account_id, journal_id=journal_id
+                )
+            )
             posted_ids.append(row.id)
             record(
                 db,
@@ -347,6 +376,18 @@ def controlled_posting(
             "max_amount": str(limit_amount),
         },
         "eligible_count": len(eligible_rows),
+        "preview_hash": preview_hash,
+        "candidates": [
+            {
+                "id": str(row.id),
+                "date": str(row.accounting_date),
+                "description": row.description,
+                "amount": str(row.amount),
+            }
+            for row in eligible_rows
+        ]
+        if dry_run
+        else [],
         "posted_count": len(posted_ids),
         "flagged_amount_count": len(flagged_amount),
         "flagged_exclusion_count": len(flagged_exclusions),

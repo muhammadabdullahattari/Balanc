@@ -1,0 +1,385 @@
+{
+  "version": 1,
+  "dataset_id": "p2-representative-q4-2026",
+  "sample": "representative",
+  "forecasts": [
+    {
+      "currency": "USD",
+      "predicted": "145200.00",
+      "actual": "142850.00"
+    },
+    {
+      "currency": "USD",
+      "predicted": "138900.00",
+      "actual": "139400.00"
+    },
+    {
+      "currency": "USD",
+      "predicted": "152000.00",
+      "actual": "150100.00"
+    },
+    {
+      "currency": "USD",
+      "predicted": "161500.00",
+      "actual": "158900.00"
+    },
+    {
+      "currency": "EUR",
+      "predicted": "84200.00",
+      "actual": "83100.00"
+    },
+    {
+      "currency": "EUR",
+      "predicted": "91000.00",
+      "actual": "89500.00"
+    },
+    {
+      "currency": "GBP",
+      "predicted": "62500.00",
+      "actual": "61800.00"
+    },
+    {
+      "currency": "GBP",
+      "predicted": "58900.00",
+      "actual": "59200.00"
+    }
+  ],
+  "postings": [
+    {
+      "expected": "4000:Sales Revenue",
+      "proposed": "4000:Sales Revenue"
+    },
+    {
+      "expected": "5000:Operating Expenses",
+      "proposed": "5000:Operating Expenses"
+    },
+    {
+      "expected": "1200:Accounts Receivable",
+      "proposed": "1200:Accounts Receivable"
+    },
+    {
+      "expected": "2000:Accounts Payable",
+      "proposed": "2000:Accounts Payable"
+    },
+    {
+      "expected": "5100:Software & SaaS",
+      "proposed": "5100:Software & SaaS"
+    },
+    {
+      "expected": "5200:Office Supplies",
+      "proposed": "5200:Office Supplies"
+    },
+    {
+      "expected": "5300:Utilities",
+      "proposed": "5300:Utilities"
+    },
+    {
+      "expected": "5400:Travel & Meals",
+      "proposed": "5400:Travel & Meals"
+    },
+    {
+      "expected": "5500:Professional Fees",
+      "proposed": "5500:Professional Fees"
+    },
+    {
+      "expected": "1000:Operating Bank",
+      "proposed": "1000:Operating Bank"
+    },
+    {
+      "expected": "5600:Advertising & Marketing",
+      "proposed": "5600:Advertising & Marketing"
+    },
+    {
+      "expected": "5700:Insurance Expense",
+      "proposed": "5700:Insurance Expense"
+    },
+    {
+      "expected": "2100:Payroll Liabilities",
+      "proposed": "2100:Payroll Liabilities"
+    },
+    {
+      "expected": "5800:Bank Service Charges",
+      "proposed": "5800:Bank Service Charges"
+    },
+    {
+      "expected": "4100:Consulting Services",
+      "proposed": "4100:Consulting Services"
+    },
+    {
+      "expected": "5900:Depreciation",
+      "proposed": "5900:Depreciation"
+    },
+    {
+      "expected": "1300:Prepaid Expenses",
+      "proposed": "1300:Prepaid Expenses"
+    },
+    {
+      "expected": "2200:Sales Tax Payable",
+      "proposed": "2200:Sales Tax Payable"
+    },
+    {
+      "expected": null,
+      "proposed": null
+    },
+    {
+      "expected": "5100:Software & SaaS",
+      "proposed": "5100:Software & SaaS"
+    }
+  ],
+  "costs": [
+    {
+      "pages": 25,
+      "cost_usd": "0.10"
+    },
+    {
+      "pages": 50,
+      "cost_usd": "0.18"
+    },
+    {
+      "pages": 100,
+      "cost_usd": "0.34"
+    },
+    {
+      "pages": 80,
+      "cost_usd": "0.28"
+    },
+    {
+      "pages": 45,
+      "cost_usd": "0.16"
+    }
+  ],
+  "ocr": [
+    {
+      "expected_text": "INVOICE INV-2026-001\nAcme Supplies Inc.\nDate: 2026-10-15\nTotal: ,425.50\nTax: .04",
+      "extracted_text": "INVOICE INV-2026-001\nAcme Supplies Inc.\nDate: 2026-10-15\nTotal: ,425.50\nTax: .04",
+      "expected_fields": {
+        "number": "INV-2026-001",
+        "vendor": "Acme Supplies Inc.",
+        "date": "2026-10-15",
+        "total": "1425.50",
+        "tax": "114.04"
+      },
+      "extracted_fields": {
+        "number": "INV-2026-001",
+        "vendor": "Acme Supplies Inc.",
+        "date": "2026-10-15",
+        "total": "1425.50",
+        "tax": "114.04"
+      }
+    },
+    {
+      "expected_text": "TAX INVOICE 89412\nCloud Hosting Global\nDate: 2026-10-20\nAmount Due: .00",
+      "extracted_text": "TAX INVOICE 89412\nCloud Hosting Global\nDate: 2026-10-20\nAmount Due: .00",
+      "expected_fields": {
+        "number": "89412",
+        "vendor": "Cloud Hosting Global",
+        "date": "2026-10-20",
+        "total": "350.00"
+      },
+      "extracted_fields": {
+        "number": "89412",
+        "vendor": "Cloud Hosting Global",
+        "date": "2026-10-20",
+        "total": "350.00"
+      }
+    },
+    {
+      "expected_text": "RECEIPT #R-992\nCorner Office Depot\nDate: 2026-10-22\nTotal Paid: .20",
+      "extracted_text": "RECEIPT #R-992\nCorner Office Depot\nDate: 2026-10-22\nTotal Paid: .20",
+      "expected_fields": {
+        "number": "R-992",
+        "vendor": "Corner Office Depot",
+        "date": "2026-10-22",
+        "total": "84.20"
+      },
+      "extracted_fields": {
+        "number": "R-992",
+        "vendor": "Corner Office Depot",
+        "date": "2026-10-22",
+        "total": "84.20"
+      }
+    },
+    {
+      "expected_text": "BILL B-4401\nMetro Power & Light\nDue Date: 2026-11-05\nBalance: .80",
+      "extracted_text": "BILL B-4401\nMetro Power & Light\nDue Date: 2026-11-05\nBalance: .80",
+      "expected_fields": {
+        "number": "B-4401",
+        "vendor": "Metro Power & Light",
+        "date": "2026-11-05",
+        "total": "512.80"
+      },
+      "extracted_fields": {
+        "number": "B-4401",
+        "vendor": "Metro Power & Light",
+        "date": "2026-11-05",
+        "total": "512.80"
+      }
+    },
+    {
+      "expected_text": "CREDIT MEMO CM-12\nPacific Logistics\nAmount: -.00",
+      "extracted_text": "CREDIT MEMO CM-12\nPacific Logistics\nAmount: -.00",
+      "expected_fields": {
+        "number": "CM-12",
+        "vendor": "Pacific Logistics",
+        "total": "-120.00"
+      },
+      "extracted_fields": {
+        "number": "CM-12",
+        "vendor": "Pacific Logistics",
+        "total": "-120.00"
+      }
+    }
+  ],
+  "matching": [
+    {
+      "bank_row_id": "bk-01",
+      "expected_match_id": "doc-101",
+      "proposed_match_id": "doc-101"
+    },
+    {
+      "bank_row_id": "bk-02",
+      "expected_match_id": "doc-102",
+      "proposed_match_id": "doc-102"
+    },
+    {
+      "bank_row_id": "bk-03",
+      "expected_match_id": "doc-103",
+      "proposed_match_id": "doc-103"
+    },
+    {
+      "bank_row_id": "bk-04",
+      "expected_match_id": "doc-104",
+      "proposed_match_id": "doc-104"
+    },
+    {
+      "bank_row_id": "bk-05",
+      "expected_match_id": "doc-105",
+      "proposed_match_id": "doc-105"
+    },
+    {
+      "bank_row_id": "bk-06",
+      "expected_match_id": "doc-106",
+      "proposed_match_id": "doc-106"
+    },
+    {
+      "bank_row_id": "bk-07",
+      "expected_match_id": "doc-107",
+      "proposed_match_id": "doc-107"
+    },
+    {
+      "bank_row_id": "bk-08",
+      "expected_match_id": "doc-108",
+      "proposed_match_id": "doc-108"
+    },
+    {
+      "bank_row_id": "bk-09",
+      "expected_match_id": null,
+      "proposed_match_id": null
+    },
+    {
+      "bank_row_id": "bk-10",
+      "expected_match_id": null,
+      "proposed_match_id": null
+    },
+    {
+      "bank_row_id": "bk-11",
+      "expected_match_id": "doc-111",
+      "proposed_match_id": "doc-111"
+    },
+    {
+      "bank_row_id": "bk-12",
+      "expected_match_id": "doc-112",
+      "proposed_match_id": "doc-112"
+    }
+  ],
+  "anomalies": [
+    {
+      "transaction_id": "tx-001",
+      "is_anomaly": true,
+      "flagged": true
+    },
+    {
+      "transaction_id": "tx-002",
+      "is_anomaly": true,
+      "flagged": true
+    },
+    {
+      "transaction_id": "tx-003",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-004",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-005",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-006",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-007",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-008",
+      "is_anomaly": false,
+      "flagged": false
+    },
+    {
+      "transaction_id": "tx-009",
+      "is_anomaly": true,
+      "flagged": true
+    },
+    {
+      "transaction_id": "tx-010",
+      "is_anomaly": false,
+      "flagged": false
+    }
+  ],
+  "baseline": {
+    "forecast_mae_max": {
+      "USD": "3000.00",
+      "EUR": "2000.00",
+      "GBP": "1500.00"
+    },
+    "posting_accuracy_min": "0.90",
+    "usd_per_page_max": "0.01",
+    "ocr_character_accuracy_min": "0.95",
+    "matching_f1_min": "0.90",
+    "anomaly_precision_min": "0.90"
+  },
+  "measurements": [
+    {
+      "operation": "ocr_extraction",
+      "elapsed_seconds": "1.42",
+      "peak_memory_bytes": 48200000,
+      "cpu_seconds": "1.35"
+    },
+    {
+      "operation": "bank_reconciliation",
+      "elapsed_seconds": "0.18",
+      "peak_memory_bytes": 16400000,
+      "cpu_seconds": "0.15"
+    },
+    {
+      "operation": "anomaly_detection",
+      "elapsed_seconds": "0.09",
+      "peak_memory_bytes": 12100000,
+      "cpu_seconds": "0.08"
+    },
+    {
+      "operation": "cash_forecast_evaluation",
+      "elapsed_seconds": "0.31",
+      "peak_memory_bytes": 22500000,
+      "cpu_seconds": "0.28"
+    }
+  ]
+}

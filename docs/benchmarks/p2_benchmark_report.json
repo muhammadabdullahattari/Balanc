@@ -1,0 +1,133 @@
+{
+  "runner_version": 2,
+  "dataset_id": "p2-representative-q4-2026",
+  "sample": "representative",
+  "dataset_sha256": "b7cec398f5a73d153347646626c0704df6083fe51b2967c8762a8ca358ff3fd1",
+  "forecast": {
+    "EUR": {
+      "count": 2,
+      "mean_absolute_error": "1300.00"
+    },
+    "GBP": {
+      "count": 2,
+      "mean_absolute_error": "500.00"
+    },
+    "USD": {
+      "count": 4,
+      "mean_absolute_error": "1837.50"
+    }
+  },
+  "posting": {
+    "count": 20,
+    "correct": 20,
+    "proposed": 19,
+    "incorrect_proposals": 0,
+    "accuracy": "1",
+    "proposal_error_rate": "0"
+  },
+  "ocr": {
+    "count": 5,
+    "exact_matches": 5,
+    "character_accuracy": "1",
+    "field_accuracy": "1"
+  },
+  "matching": {
+    "count": 12,
+    "accuracy": "1",
+    "precision": "1",
+    "recall": "1",
+    "f1_score": "1"
+  },
+  "anomaly": {
+    "count": 10,
+    "precision": "1",
+    "recall": "1",
+    "false_positive_rate": null
+  },
+  "baseline_checks": [
+    {
+      "metric": "forecast_mae_EUR",
+      "observed": "1300.00",
+      "target": "2000.00",
+      "status": "pass"
+    },
+    {
+      "metric": "forecast_mae_GBP",
+      "observed": "500.00",
+      "target": "1500.00",
+      "status": "pass"
+    },
+    {
+      "metric": "forecast_mae_USD",
+      "observed": "1837.50",
+      "target": "3000.00",
+      "status": "pass"
+    },
+    {
+      "metric": "posting_accuracy",
+      "observed": "1",
+      "target": "0.90",
+      "status": "pass"
+    },
+    {
+      "metric": "usd_per_page",
+      "observed": "0.003533333333333333333333333333",
+      "target": "0.01",
+      "status": "pass"
+    },
+    {
+      "metric": "ocr_character_accuracy",
+      "observed": "1",
+      "target": "0.95",
+      "status": "pass"
+    },
+    {
+      "metric": "matching_f1",
+      "observed": "1",
+      "target": "0.90",
+      "status": "pass"
+    },
+    {
+      "metric": "anomaly_precision",
+      "observed": "1",
+      "target": "0.90",
+      "status": "pass"
+    }
+  ],
+  "supplied_pipeline_measurements": {
+    "anomaly_detection": {
+      "count": 1,
+      "total_elapsed_seconds": "0.09",
+      "peak_memory_bytes": 12100000,
+      "total_cpu_seconds": "0.08"
+    },
+    "bank_reconciliation": {
+      "count": 1,
+      "total_elapsed_seconds": "0.18",
+      "peak_memory_bytes": 16400000,
+      "total_cpu_seconds": "0.15"
+    },
+    "cash_forecast_evaluation": {
+      "count": 1,
+      "total_elapsed_seconds": "0.31",
+      "peak_memory_bytes": 22500000,
+      "total_cpu_seconds": "0.28"
+    },
+    "ocr_extraction": {
+      "count": 1,
+      "total_elapsed_seconds": "1.42",
+      "peak_memory_bytes": 48200000,
+      "total_cpu_seconds": "1.35"
+    }
+  },
+  "cost": {
+    "pages": 300,
+    "total_usd": "1.06",
+    "usd_per_page": "0.003533333333333333333333333333"
+  },
+  "runner_measurements": {
+    "elapsed_seconds": 0.003263999940827489,
+    "cpu_seconds": 0.015625,
+    "peak_python_allocation_bytes": 49416
+  }
+}

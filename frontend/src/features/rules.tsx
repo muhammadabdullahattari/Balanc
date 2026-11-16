@@ -1,3 +1,4 @@
+import { ControlledPosting } from "./controlled-posting";
 import { LookupMore } from "./lookup-more";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -13,11 +14,13 @@ import {
   money,
   Badge,
 } from "../components/ui";
-import { useBusiness } from "./context";
+import { useAccess, useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
 export function Rules() {
   const b = useBusiness(),
     path = { business_id: b.id };
+  const access = useAccess();
+  const [postingOpen, setPostingOpen] = useState(false);
   const [selected, setSelected] =
     useState<components["schemas"]["RuleSnapshot"]>();
   const rules = useQuery({
@@ -104,7 +107,22 @@ export function Rules() {
         eyebrow="REVIEW RULES"
         title="Bank rules"
         description="Create description-based category rules and review affected rows before activation."
+        actions={
+          b.p2_insights_available &&
+          (access?.role === "owner" || access?.role === "accountant") && (
+            <Button variant="secondary" onClick={() => setPostingOpen(true)}>
+              Controlled Posting
+            </Button>
+          )
+        }
       />
+      {postingOpen && (
+        <ControlledPosting
+          key={b.id}
+          rules={rules.data?.items ?? []}
+          onClose={() => setPostingOpen(false)}
+        />
+      )}
       <ErrorNotice error={rules.error || accounts.error || create.error} />
       <section className="panel">
         {rules.data?.items.length ? (

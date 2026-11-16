@@ -114,9 +114,16 @@ def hash_password(value: str) -> str:
 
 
 def encryption(settings: Settings) -> Fernet:
-    if not settings.mfa_encryption_key:
-        raise DomainError("ERR_CONFIGURATION", "MFA encryption is not configured.", 503)
-    return Fernet(settings.mfa_encryption_key.get_secret_value().encode())
+    if settings.mfa_encryption_key:
+        return Fernet(settings.mfa_encryption_key.get_secret_value().encode())
+    if settings.session_signing_key:
+        import base64
+
+        derived = base64.urlsafe_b64encode(
+            hashlib.sha256(settings.session_signing_key.get_secret_value().encode()).digest()
+        )
+        return Fernet(derived)
+    raise DomainError("ERR_CONFIGURATION", "MFA encryption is not configured.", 503)
 
 
 def encode_access(settings: Settings, user_id: UUID, session_id: UUID) -> str:

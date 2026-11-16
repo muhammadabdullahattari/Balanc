@@ -168,7 +168,8 @@ def test_controlled_posting_dry_run_flags_amounts_and_exclusions() -> None:
     row_eligible = BankRow(
         id=uuid4(),
         business_id=bid,
-        state="imported",
+        state="for_review",
+        version=0,
         description="GitHub Sub",
         amount=Decimal("-45.00"),
         account_id=uuid4(),
@@ -177,7 +178,8 @@ def test_controlled_posting_dry_run_flags_amounts_and_exclusions() -> None:
     row_over_limit = BankRow(
         id=uuid4(),
         business_id=bid,
-        state="imported",
+        state="for_review",
+        version=0,
         description="GitHub Enterprise",
         amount=Decimal("-250.00"),
         account_id=uuid4(),
@@ -186,7 +188,8 @@ def test_controlled_posting_dry_run_flags_amounts_and_exclusions() -> None:
     row_excluded = BankRow(
         id=uuid4(),
         business_id=bid,
-        state="imported",
+        state="for_review",
+        version=0,
         description="GitHub Payroll Wire",
         amount=Decimal("-50.00"),
         account_id=uuid4(),
@@ -198,10 +201,12 @@ def test_controlled_posting_dry_run_flags_amounts_and_exclusions() -> None:
     mock_ctrl = patch(
         "ledgerpilot.banking.shadow.get_workspace_posting_control", return_value={"paused": False}
     )
-    with patch("ledgerpilot.banking.shadow.ops.account", return_value=target_account), \
-         patch("ledgerpilot.banking.shadow.get_business", return_value=MagicMock()), \
-         patch("ledgerpilot.banking.shadow.ops.money", side_effect=lambda v, _: Decimal(v)), \
-         mock_ctrl:
+    with (
+        patch("ledgerpilot.banking.shadow.ops.account", return_value=target_account),
+        patch("ledgerpilot.banking.shadow.get_business", return_value=MagicMock()),
+        patch("ledgerpilot.banking.shadow.ops.money", side_effect=lambda v, _: Decimal(v)),
+        mock_ctrl,
+    ):
         result = controlled_posting(
             db,
             bid,
@@ -244,7 +249,8 @@ def test_controlled_posting_live_execution() -> None:
     row_eligible = BankRow(
         id=uuid4(),
         business_id=bid,
-        state="imported",
+        state="for_review",
+        version=0,
         description="AWS Hosting Charge",
         amount=Decimal("-75.00"),
         account_id=uuid4(),
@@ -262,11 +268,26 @@ def test_controlled_posting_live_execution() -> None:
     mock_ctrl = patch(
         "ledgerpilot.banking.shadow.get_workspace_posting_control", return_value={"paused": False}
     )
-    with patch("ledgerpilot.banking.shadow.ops.account", return_value=target_account), \
-         patch("ledgerpilot.banking.shadow.get_business", return_value=MagicMock()), \
-         patch("ledgerpilot.banking.shadow.ops.money", side_effect=lambda v, _: Decimal(v)), \
-         mock_ctrl, \
-         patch("ledgerpilot.banking.shadow.record") as mock_record:
+    with (
+        patch("ledgerpilot.banking.shadow.ops.account", return_value=target_account),
+        patch("ledgerpilot.banking.shadow.get_business", return_value=MagicMock()),
+        patch("ledgerpilot.banking.shadow.ops.money", side_effect=lambda v, _: Decimal(v)),
+        mock_ctrl,
+        patch("ledgerpilot.banking.shadow.record") as mock_record,
+    ):
+        with pytest.raises(DomainError) as stale:
+            controlled_posting(
+                db,
+                bid,
+                who_id,
+                rule,
+                Decimal("100.00"),
+                expected_rule_version=1,
+                dry_run=False,
+                expected_preview_hash="0" * 64,
+            )
+        assert stale.value.code == "ERR_PREVIEW_CHANGED"
+        assert row_eligible.state == "for_review"
         result = controlled_posting(
             db,
             bid,
@@ -286,6 +307,8 @@ def test_controlled_posting_live_execution() -> None:
     assert result["posted_row_ids"] == [row_eligible.id]
     assert row_eligible.state == "categorized"
     assert row_eligible.journal_id == journal_id
+    assert row_eligible.version == 1 and row_eligible.reason
+    assert db.add.call_args.args[0].journal_id == journal_id
 
     mock_record.assert_called_once_with(
         db,

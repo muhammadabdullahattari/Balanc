@@ -375,6 +375,7 @@ def set_controlled_posting_pause(
     authorize(db, identity, business_id, {"owner", "accountant"})
     if not request.app.state.settings.allows_p2_insights(business_id):
         raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
+    get_business(db, business_id, lock=True)
     return shadow.set_workspace_posting_control(
         db, business_id, identity.user.id, paused=paused, reason=reason
     )
@@ -399,10 +400,13 @@ def rule_controlled_posting(
     paused: bool = False,
     dry_run: bool = True,
     exclusions: list[str] | None = None,
+    expected_preview_hash: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"}, posting=not dry_run)
     if not request.app.state.settings.allows_p2_insights(business_id):
         raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
+    if not dry_run:
+        get_business(db, business_id, lock=True)
     return shadow.controlled_posting(
         db,
         business_id,
@@ -415,6 +419,7 @@ def rule_controlled_posting(
         exclusions=exclusions,
         paused=paused,
         dry_run=dry_run,
+        expected_preview_hash=expected_preview_hash,
     )
 
 

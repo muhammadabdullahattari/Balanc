@@ -20528,6 +20528,23 @@
               "title": "Dry Run",
               "type": "boolean"
             }
+          },
+          {
+            "in": "query",
+            "name": "expected_preview_hash",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "pattern": "^[a-f0-9]{64}$",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Expected Preview Hash"
+            }
           }
         ],
         "requestBody": {

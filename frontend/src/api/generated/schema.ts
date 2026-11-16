@@ -14768,6 +14768,7 @@ export interface operations {
                 max_amount?: number | string;
                 paused?: boolean;
                 dry_run?: boolean;
+                expected_preview_hash?: string | null;
             };
             header?: never;
             path: {
