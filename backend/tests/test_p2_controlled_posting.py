@@ -343,11 +343,11 @@ def test_set_and_get_workspace_posting_control() -> None:
         assert res["paused"] is True
         assert res["reason"] == "Maintenance drill"
 
-        db.execute.return_value.scalar_one_or_none.return_value = {
-            "paused": True,
-            "reason": "Maintenance drill",
-            "updated_at": "2026-11-16T23:00:00Z",
-            "updated_by": str(who_id),
+        db.execute.return_value.mappings.return_value.first.return_value = {
+            "action": "workspace.auto_posting_paused",
+            "user_id": who_id,
+            "occurred_at": datetime.datetime.now(datetime.UTC),
+            "details": {"reason": "Maintenance drill"},
         }
         ctrl = get_workspace_posting_control(db, bid)
         assert ctrl["paused"] is True

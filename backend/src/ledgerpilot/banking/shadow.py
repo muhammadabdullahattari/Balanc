@@ -21,22 +21,30 @@ from ledgerpilot.tenancy.service import get_business
 
 
 def get_workspace_posting_control(db: Session, bid: UUID) -> dict[str, Any]:
-    raw = db.execute(
-        text(
-            "SELECT details FROM app.provider_connections "
-            "WHERE business_id=:b AND provider='controlled_posting'"
-        ),
-        {"b": bid},
-    ).scalar_one_or_none()
-    if not raw:
-        return {"paused": False, "reason": None, "updated_at": None, "updated_by": None}
-    data = raw if isinstance(raw, dict) else json.loads(raw)
-    return {
-        "paused": bool(data.get("paused")),
-        "reason": data.get("reason"),
-        "updated_at": data.get("updated_at"),
-        "updated_by": data.get("updated_by"),
-    }
+    try:
+        row = db.execute(
+            text("""
+                SELECT action, user_id, occurred_at, details
+                FROM app.audit_events
+                WHERE business_id = :b
+                  AND action IN ('workspace.auto_posting_paused', 'workspace.auto_posting_resumed')
+                ORDER BY occurred_at DESC, id DESC
+                LIMIT 1
+            """),
+            {"b": bid},
+        ).mappings().first()
+        if row is not None:
+            details = row["details"] or {}
+            is_paused = row["action"] == "workspace.auto_posting_paused"
+            return {
+                "paused": is_paused,
+                "reason": details.get("reason") if is_paused else None,
+                "updated_at": row["occurred_at"].isoformat() if row["occurred_at"] else None,
+                "updated_by": str(row["user_id"]),
+            }
+    except Exception:
+        pass
+    return {"paused": False, "reason": None, "updated_at": None, "updated_by": None}
 
 
 def set_workspace_posting_control(
@@ -47,29 +55,20 @@ def set_workspace_posting_control(
     reason: str | None = None,
 ) -> dict[str, Any]:
     now_iso = datetime.datetime.now(datetime.UTC).isoformat()
-    details = {
-        "paused": paused,
-        "reason": reason,
-        "updated_at": now_iso,
-        "updated_by": str(who_id),
-    }
-    db.execute(
-        text("""
-            INSERT INTO app.provider_connections (business_id, provider, details)
-            VALUES (:b, 'controlled_posting', CAST(:d AS jsonb))
-            ON CONFLICT (business_id, provider) DO UPDATE SET details = CAST(:d AS jsonb)
-        """),
-        {"b": bid, "d": json.dumps(details)},
-    )
     record(
         db,
         who_id,
         "workspace.auto_posting_paused" if paused else "workspace.auto_posting_resumed",
         bid,
         bid,
-        {"reason": reason, "updated_at": now_iso},
+        {"reason": reason},
     )
-    return details
+    return {
+        "paused": paused,
+        "reason": reason if paused else None,
+        "updated_at": now_iso,
+        "updated_by": str(who_id),
+    }
 
 
 def evaluate(
