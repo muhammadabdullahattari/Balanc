@@ -235,3 +235,10 @@ Migration 0030 adds tenant-scoped disposal policies, requests, and append-only e
 Managed targets are encrypted original upload files and expired database export copies. Export creators retain exclusive execution access to their own exports. Accounting records and extraction metadata remain available. Backup and external requests record operator handoff and require an owner to record a confirmation reference. No external provider deletion adapter or independent receipt verification is configured.
 
 The new execution flag defaults off and the existing retention cohort gate applies. Before activation, approve business policy references and the verified source dates used in cleanup requests. Operators must recheck holds before acting on pending external requests and provide evidence for the exact copy removed.
+
+### Hosted P2 acceptance status
+
+- Approved release scope is CSV-first. Live Stripe Financial Connections is deferred.
+- Approved durations are seven years for financial records and 72 hours for new export snapshots. Two-person disposal approval applies. Existing snapshot expirations are unchanged.
+- HTTPS checks returned 200 for the frontend, API readiness and Swagger. The browser-facing CSRF endpoint returned 200, but both authorized test sign-ins returned 503 ERR_DEPENDENCY. The readiness implementation could report ready with missing migrations when using the managed PostgreSQL identity. The local correction requires schema revision 0030 for readiness. Railway logs are needed to identify the actual sign-in failure.
+- QuickBooks preview is implemented. Reviewed write-once import and reconciliation against sandbox balances remain open. Stripe lifecycle acceptance and representative quality/cost evidence also remain open.

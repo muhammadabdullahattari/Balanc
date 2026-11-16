@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import os
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -144,9 +145,13 @@ async def test_retained_export_resumes_same_bytes_and_privacy_review_is_independ
             "start": "2026-10-01",
             "end": "2026-10-31",
         }
+        before = datetime.now(UTC)
         snapshot = await api.post(base + "/exports/snapshots", json=payload)
+        after = datetime.now(UTC)
         assert snapshot.status_code == 201, snapshot.text
         data = snapshot.json()
+        expires_at = datetime.fromisoformat(data["expires_at"])
+        assert before + timedelta(hours=72) <= expires_at <= after + timedelta(hours=72)
         assert (await api.post(base + "/exports/snapshots", json=payload)).json() == data
         path = base + f"/exports/snapshots/{data['id']}/download"
         first = await api.get(path, headers={"Range": "bytes=0-19"})

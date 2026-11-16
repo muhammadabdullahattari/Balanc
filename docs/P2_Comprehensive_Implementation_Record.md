@@ -70,7 +70,7 @@ The table below catalogs every file created or modified during this implementati
 ### Issue 1: Webhook Signature Verification Failures (`ERR_STRIPE_SIGNATURE` / HTTP 400)
 * **Symptom:** When running `stripe listen --forward-to localhost:8000/api/v1/billing/stripe/webhook` and triggering test events (`npx @stripe/cli trigger invoice.payment_succeeded`), the listener reported `[400] POST .../webhook` and the application logged `{"code": "ERR_STRIPE_SIGNATURE", "status": 400}`.
 * **Root Cause Diagnosis:**
-  1. The listener printed a newly generated signing secret: `whsec_cwPMOXwrPEM60Eo6pF0ohmwONmEZJSws`.
+  1. The listener printed a newly generated signing secret: `[REDACTED]`.
   2. The secret had been updated in the file `/root/Balanc/.env`, but the Docker container `app` on Floci EC2 was launched earlier with the previous secret (`whsec_JpOe...`).
   3. Docker containers do not dynamically reload environment variables from `.env` files without container recreation.
 * **Engineered Solution:**

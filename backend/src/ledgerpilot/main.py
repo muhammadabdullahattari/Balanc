@@ -67,7 +67,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
             run_migrations_and_seed_if_needed(engine, configured)
         except Exception as bootstrap_err:
-            logger.warning(f"[BOOTSTRAP] Initialization error: {bootstrap_err}")
+            logger.warning("Database initialization failed (%s)", type(bootstrap_err).__name__)
         try:
             yield
         finally:
@@ -250,13 +250,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     """),
                         {"role": configured.app_db_user},
                     ).scalar_one()
-                try:
-                    version = connection.execute(
-                        text("SELECT version_num FROM app.alembic_version")
-                    ).scalar_one()
-                except SQLAlchemyError:
-                    version = "0030" if configured.app_db_user == "postgres" else None
-                if not safe or (version != "0030" and configured.app_db_user != "postgres"):
+                version = connection.execute(
+                    text("SELECT version_num FROM app.alembic_version")
+                ).scalar_one_or_none()
+                if not safe or version != "0030":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):

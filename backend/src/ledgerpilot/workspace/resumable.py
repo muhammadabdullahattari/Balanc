@@ -105,7 +105,7 @@ def create(
         digest=hashlib.sha256(body).hexdigest(),
         size=len(body),
         payload=cipher(settings).encrypt(body),
-        expires_at=now() + timedelta(hours=24),
+        expires_at=now() + timedelta(hours=settings.export_snapshot_retention_hours),
     )
     db.add(item)
     db.flush()

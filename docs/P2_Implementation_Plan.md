@@ -70,7 +70,7 @@ While deployment is deferred, follow the [local preparation sequence](Next_Phase
 
 
 
-| Ten-year global retention default · P2-G | Use ten years as the default for in-scope financial records, with configurable record-class and market rules, deletion exceptions and legal holds. Approve what is retained, when the clock starts, and how copies and backups expire before enabling automated disposal. |
+| Approved financial retention · P2-G | Use seven years for approved in-scope financial records and 72 hours for new export snapshots, with configurable record-class and market rules, deletion exceptions and legal holds. Approve what is retained, when the clock starts, and how copies and backups expire before enabling automated disposal. |
 
 
 

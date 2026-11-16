@@ -60,7 +60,7 @@ def run_migrations_and_seed_if_needed(engine: Engine, settings: Settings) -> Non
             command.upgrade(alembic_cfg, "head")
             logger.info("[BOOTSTRAP] Alembic migrations successfully applied to 0030.")
         except Exception as e:
-            logger.error(f"[BOOTSTRAP] Migration failed: {e}")
+            logger.error("Database migration failed (%s)", type(e).__name__)
             return
 
     # 2. Seed test roles and workspace

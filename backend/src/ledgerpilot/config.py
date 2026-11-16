@@ -83,6 +83,7 @@ class Settings(BaseSettings):
     p2_reconciliation_business_ids: frozenset[UUID] = frozenset()
     p2_prepaid_business_ids: frozenset[UUID] = frozenset()
     p2_micro_close_business_ids: frozenset[UUID] = frozenset()
+    export_snapshot_retention_hours: int = Field(default=72, ge=1, le=720)
     p2_payload_disposal_enabled: bool = False
     p2_export_disposal_enabled: bool = False
     p2_export_disposal_approval: str = Field(default="", max_length=200)
