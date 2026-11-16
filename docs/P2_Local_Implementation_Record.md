@@ -261,3 +261,21 @@ The new execution flag defaults off and the existing retention cohort gate appli
   - **Railway Historical 503 Resolution**: Earlier `503 ERR_DEPENDENCY` on deployment `4bc08250` was resolved via automated startup migration (0001–0030) and dynamic `postgres` superuser adaptation. Live Railway `/health/ready` confirmed HTTP 200.
   - **Vercel Environment Variable Warning**: Switched `VITE_STRIPE_PUBLISHABLE_KEY` from `Secret` to `Config`, aligning with its public client browser role.
   - **GitHub Actions CI ResourceClosedError Resolution**: Fixed premature connection closure in Alembic `backend/migrations/env.py` by maintaining the engine connection open during `context.run_migrations()`. All 7 provider integration tests, ruff, mypy, and frontend checks pass cleanly.
+- Core P2 Development Gaps Completed:
+  - **P2-B (Tenant Health & Failed Jobs)**: Extended delegated support diagnostics (`Diagnostics`) to aggregate failed jobs across email (`app.business_email_jobs`), evidence ingestion (`app.evidence_jobs`), cleanup/disposal requests (`app.cleanup_requests`), close tasks (`app.close_tasks`), and active legal holds. Surfaced via tenant health dashboard in `frontend/src/features/email-operations.tsx`.
+  - **P2-C (Stripe Webhook Ordering & Grace Preservation & UI)**:
+    - Rejects stale/out-of-order webhook events when `event_created < last_event_created`.
+    - Strictly preserves the original `grace_until` deadline on repeated `invoice.payment_failed` or `past_due` updates instead of calculating a rolling extension from processing time.
+    - Added frontend billing management interface in `frontend/src/features/billing.tsx` wired into Settings (`"billing"` tab), displaying plan tier, status badge, grace period alert, plan change controls (`starter`, `growth`, `enterprise`), checkout redirection, and cancellation.
+  - **P2-D (Full QuickBooks Online Entity Scope & Review UI)**:
+    - Expanded entity importer in `backend/src/ledgerpilot/provider_integrations.py` to cover `Invoice` (AR/income journal and `app.trade_documents` entry), `Bill` (AP/expense journal and `app.trade_documents` entry), `Payment` (bank/AR journal and `app.payments` entry), and `CreditMemo` (income/AR customer credit journal).
+    - Added migration UI in `frontend/src/features/quickbooks-import.tsx` wired into Settings (`"integrations"` tab), featuring cutover date selector, entity checklist, pre-import dry-run preview displaying unmapped accounts and debit/credit balance tie-out, and confirmed live import.
+  - **P2-F (Controlled Automation & Posting Guardrails)**:
+    - Implemented `controlled_posting()` in `backend/src/ledgerpilot/banking/shadow.py` and route `POST /api/v1/businesses/{business_id}/bank-rules/{rule_id}/controlled-posting` in `backend/src/ledgerpilot/banking/router.py`.
+    - Supports configurable maximum amount threshold, keyword exclusions (e.g. `payroll`, `tax`, `wire`, `loan`, `draw`), paused execution state, dry-run previews, and balanced journal creation with immutable `bank.auto_posted` audit events.
+    - Verified via unit test suite in `backend/tests/test_p2_controlled_posting.py`.
+  - **P2-H (Benchmark Tooling Extension)**:
+    - Extended benchmark runner in `backend/src/ledgerpilot/workspace/benchmarks.py` with `OcrCase`, `MatchingCase`, and `AnomalyCase` data models and scoring methods.
+    - Evaluates OCR character accuracy and field accuracy; bank reconciliation precision, recall, and F1 score; and transaction anomaly detection precision, recall, and false positive rate.
+    - Added configurable baseline checks `ocr_character_accuracy_min`, `matching_f1_min`, and `anomaly_precision_min`.
+    - Verified via unit test suite in `backend/tests/test_p2_benchmarks.py`.

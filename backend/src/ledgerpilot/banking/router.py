@@ -344,6 +344,38 @@ def shadow_evaluation(
     return shadow.evaluate(db, business_id, rule(db, business_id, rule_id), start, end, max_amount)
 
 
+@router.post(
+    "/bank-rules/{rule_id}/controlled-posting",
+    response_model=dict[str, Any],
+)
+def rule_controlled_posting(
+    business_id: UUID,
+    rule_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    max_amount: Annotated[
+        Decimal, Query(gt=0, le=1000000, max_digits=13, decimal_places=6)
+    ] = Decimal(500),
+    paused: bool = False,
+    dry_run: bool = True,
+    exclusions: list[str] | None = None,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner", "accountant"}, posting=not dry_run)
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
+    return shadow.controlled_posting(
+        db,
+        business_id,
+        identity.user.id,
+        rule(db, business_id, rule_id),
+        max_amount,
+        exclusions=exclusions,
+        paused=paused,
+        dry_run=dry_run,
+    )
+
+
 @router.get(
     "/bank-rules",
     response_model=contracts.responses["banking.rules"],

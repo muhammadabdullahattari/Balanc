@@ -1,5 +1,6 @@
 """Tenant email diagnostics, operator-recorded feedback and scoped delegation."""
 
+import contextlib
 from datetime import datetime, timedelta
 from typing import Literal
 from uuid import UUID
@@ -63,11 +64,27 @@ class DiagnosticJob(Schema):
     feedback: list[str]
 
 
+class FailedJob(Schema):
+    id: UUID
+    source: str
+    state: str
+    error_detail: str | None = None
+    created_at: datetime
+
+
+class TenantHealth(Schema):
+    status: Literal["healthy", "degraded", "attention_required"]
+    active_holds: int
+    failed_job_count: int
+    failed_jobs: list[FailedJob]
+
+
 class Diagnostics(Schema):
     window_start: datetime
     counts: dict[str, int]
     attention: list[DiagnosticJob]
     grants: list[GrantRead]
+    health: TenantHealth | None = None
 
 
 def active_grant(db: Session, bid: UUID, actor: UUID) -> SupportGrant | None:
@@ -131,6 +148,110 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
             .order_by(EmailFeedback.kind)
         ):
             feedback.setdefault(job_id, []).append(kind)
+
+    # Collect failed jobs across P2 workflows for tenant health diagnostics
+    failed_jobs: list[FailedJob] = []
+    for job in jobs:
+        if job.state in ATTENTION_STATES:
+            failed_jobs.append(
+                FailedJob(
+                    id=job.id,
+                    source="email",
+                    state=job.state,
+                    error_detail=job.outcome_code,
+                    created_at=job.created_at,
+                )
+            )
+
+    with contextlib.suppress(Exception):
+        evidence_failures = db.execute(
+            text("""
+                SELECT id, status, payload->>'error', created_at
+                FROM app.evidence_jobs
+                WHERE business_id = :b AND status = 'failed'
+                ORDER BY created_at DESC LIMIT 10
+            """),
+            {"b": bid},
+        ).fetchall()
+        for ef in evidence_failures:
+            failed_jobs.append(
+                FailedJob(
+                    id=ef[0] if isinstance(ef[0], UUID) else UUID(str(ef[0])),
+                    source="evidence",
+                    state=str(ef[1]),
+                    error_detail=str(ef[2]) if ef[2] else None,
+                    created_at=ef[3],
+                )
+            )
+
+    with contextlib.suppress(Exception):
+        cleanup_failures = db.execute(
+            text("""
+                SELECT id, state, reason, created_at
+                FROM app.cleanup_requests
+                WHERE business_id = :b AND state = 'failed'
+                ORDER BY created_at DESC LIMIT 10
+            """),
+            {"b": bid},
+        ).fetchall()
+        for cf in cleanup_failures:
+            failed_jobs.append(
+                FailedJob(
+                    id=cf[0] if isinstance(cf[0], UUID) else UUID(str(cf[0])),
+                    source="cleanup",
+                    state=str(cf[1]),
+                    error_detail=str(cf[2]) if cf[2] else None,
+                    created_at=cf[3],
+                )
+            )
+
+    with contextlib.suppress(Exception):
+        close_failures = db.execute(
+            text("""
+                SELECT id, status, NULL, created_at
+                FROM app.close_tasks
+                WHERE business_id = :b AND status = 'failed'
+                LIMIT 10
+            """),
+            {"b": bid},
+        ).fetchall()
+        for ctf in close_failures:
+            failed_jobs.append(
+                FailedJob(
+                    id=ctf[0] if isinstance(ctf[0], UUID) else UUID(str(ctf[0])),
+                    source="close",
+                    state=str(ctf[1]),
+                    error_detail=None,
+                    created_at=ctf[3],
+                )
+            )
+
+    active_holds = 0
+    with contextlib.suppress(Exception):
+        active_holds = (
+            db.execute(
+                text(
+                    "SELECT COUNT(*) FROM app.legal_holds "
+                    "WHERE business_id = :b AND released_at IS NULL"
+                ),
+                {"b": bid},
+            ).scalar_one()
+            or 0
+        )
+
+    health_status: Literal["healthy", "degraded", "attention_required"] = "healthy"
+    if len(failed_jobs) > 3:
+        health_status = "degraded"
+    elif len(failed_jobs) > 0 or active_holds > 0:
+        health_status = "attention_required"
+
+    health = TenantHealth(
+        status=health_status,
+        active_holds=active_holds,
+        failed_job_count=len(failed_jobs),
+        failed_jobs=failed_jobs[:50],
+    )
+
     return Diagnostics(
         window_start=since,
         counts=counts,
@@ -147,6 +268,7 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
             for job in jobs
         ],
         grants=[GrantRead.model_validate(grant) for grant in grants],
+        health=health,
     )
 
 

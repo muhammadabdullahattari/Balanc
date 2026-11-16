@@ -102,123 +102,13 @@ P2 core engineering milestones are now implemented and verified:
 
 - **P2-G (Retention & Disposal):** Migrations 0027 and 0030 applied. Retention policies (7-year financial record retention, 72-hour new export snapshots), durable legal holds, dry-run previews, two-person approval, and upload deletion failure-and-retry resilience verified and enabled for the pilot cohort.
 
-- **P2-H (Baselines):** Benchmark runner (ledgerpilot.workspace.benchmarks) implemented with currency MAE, posting accuracy, and USD cost-per-page scoring.eaks the existing Phase 12 commercial milestone into work packages. Phase 11 remains the public API and SDK track and can proceed after P1 sign-off where it does not block P2 work. The package names below are proposed sequencing, not new project-wide phase numbers.
+- **P2-H (Baselines & Benchmarking):** Extended benchmark runner (`ledgerpilot.workspace.benchmarks`) with explicit OCR character and field accuracy evaluation, bank reconciliation matching precision/recall/F1 scoring, transaction anomaly detection precision/recall/FPR scoring, in addition to forecast MAE, posting accuracy, and USD cost per page. Added baseline checks `ocr_character_accuracy_min`, `matching_f1_min`, and `anomaly_precision_min`.
+- **P2-B (Notifications & Support Operations):** Extended delegated support diagnostics beyond email to monitor cross-workflow tenant health and failed jobs across all background systems: email dispatch (`app.business_email_jobs`), evidence ingestion (`app.evidence_jobs`), cleanup/disposal requests (`app.cleanup_requests`), close tasks (`app.close_tasks`), and active legal holds. Surfaced in tenant health panel in the settings web UI.
+- **P2-C (Stripe Billing):** Webhook event processing hardened against race conditions and replay attacks: rejects out-of-order/stale webhook events (`created < last_event_created`), and strictly preserves the original 3-day grace period on repeated payment failures or subscription updates without calculating rolling extensions from processing time. Dynamic grace period check in `authorize()` revokes posting entitlements while preserving read-only export access (`retained_action`). Complete billing UI (`frontend/src/features/billing.tsx`) added with plan tier display, grace period deadline alerts, plan upgrade/downgrade controls, checkout portal redirection, and subscription cancellation.
+- **P2-D (QuickBooks Online Migration):** Expanded one-way importer entity scope from accounts and journal entries to full entity coverage: customers (`app.parties` role `customer`), suppliers (`app.parties` role `supplier`), invoices (`app.trade_documents` kind `invoice` + AR journal), bills (`app.trade_documents` kind `bill` + AP journal), payments (`app.payments` + bank/AR journal), and credit memos (`app.trade_documents` kind `customer_credit`). Replaced silent fallback to arbitrary accounts with reviewable `ERR_UNMAPPED_ACCOUNT` (422) during live import and unmapped account aggregation during dry run. Added interactive migration frontend UI (`frontend/src/features/quickbooks-import.tsx`) with cutover date selector, entity checklist, pre-import dry-run preview with debit/credit balance tie-out, and confirmed execution.
+- **P2-F (Controlled Automation & Scenarios):** Implemented controlled bank rule auto-posting (`POST /bank-rules/{rule_id}/controlled-posting`) with configurable maximum amount limits, keyword exclusions (e.g. `payroll`, `tax`, `wire`, `loan`, `draw`), pause controls, dry-run previews, and balanced journal creation with immutable `bank.auto_posted` audit events.
 
 
-
-
-
-
-
-## Commercial release entry gate
-
-
-
-
-
-
-
-Complete P1 Phases 9 and 10, including deployed end-to-end verification and an isolated restore. Establish a funded operating budget, target jurisdiction and customer cohort, accounting reviewer, security owner and support owner. Capture the signed-off P1 release, baseline reconciliation results and pilot demand. Start provider eligibility reviews early because their lead times affect release scope.
-
-
-
-
-
-
-
-While deployment is deferred, follow the [local preparation sequence](Next_Phases_Implementation_Plan.md#what-to-build-now). Record local evidence separately from hosted, sandbox and release evidence.
-
-
-
-
-
-
-
-## Launch and provider decisions
-
-
-
-
-
-
-
-| Decision | Implementation and acceptance |
-
-
-
-|---|---|
-
-
-
-| United States and global expansion | Use the US as the first acceptance cohort. Keep onboarding, currency, imports and policy configuration ready for additional markets. Activate each additional market after its provider coverage, jurisdiction policy and support scope are approved. |
-
-
-
-| Stripe subscriptions · P2-C | Use Stripe for LedgerPilot's subscription checkout and entitlement reconciliation. Keep billing records, identifiers and event handling separate from customer accounting records. |
-
-
-
-| Stripe Financial Connections · P2-D | Make it the first live bank data connector. Share the Stripe integration foundation with subscription billing while keeping bank consent, connection revocation and feed processing separate. Validate account eligibility and access in the sandbox before enabling a cohort. |
-
-
-
-| CSV and QuickBooks Online · P2-D | Use the existing CSV import as the first available import path and fallback. QuickBooks Online is the first direct accounting connector, subject to sandbox and cutover acceptance. Import historical records through the reviewed mapping and reconciliation workflow. |
-
-
-
-| Approved financial retention · P2-G | Use seven years for approved in-scope financial records and 72 hours for new export snapshots, with configurable record-class and market rules, deletion exceptions and legal holds. Approve what is retained, when the clock starts, and how copies and backups expire before enabling automated disposal. |
-
-
-
-
-
-
-
-Local development can begin with the CSV baseline, provider contracts, fixtures and policy configuration. Provider credentials, sandbox access, the approved retention matrix and hosted acceptance remain release prerequisites.
-
-
-
-
-
-
-
-### Implementation status update · 15 November 2026
-
-
-
-
-
-
-
-P2 core engineering milestones are now implemented and verified:
-
-
-
-- **P2-A (Deployment & Foundation):** CI/CD pipeline on GitHub Actions builds and deploys to Floci EC2 with image tagging and Alembic migrations.
-
-
-
-- **P2-C (Stripe Billing):** Migration `0029` applied. Checkout return endpoints active. HMAC-SHA256 signature verification verified with live signed sandbox webhooks via Stripe CLI forwarding into `app.stripe_event_inbox` (10+ events verified with HTTP 200).
-
-
-
-- **P2-D (QuickBooks Online):** Migration `0029` applied. OAuth 2.0 authorization and callback registered for development.
-
-
-
-- **P2-E (Accounting Workflows):** Migrations `0024`, `0025`, `0028` applied. Project tags, prepaid schedules, nightly close, auditor workpaper sharing, and period close packages with independent sign-off implemented.
-
-
-
-- **P2-F (AI & Scenarios):** 13-week cash scenarios, shortfall inbox worker, and calibrated historical uncertainty intervals (20 calibration / 10 validation windows) implemented.
-
-
-
-- **P2-G (Retention & Disposal):** Migrations `0027` and `0030` applied. Retention policies, durable legal holds, dry-run previews, two-person approval, and upload deletion failure-and-retry resilience verified in integration tests with complete accounting metadata preservation.
-
-
-
-- **P2-H (Baselines):** Benchmark runner (`ledgerpilot.workspace.benchmarks`) implemented with currency MAE, posting accuracy, and USD cost-per-page scoring.
 
 
 
@@ -227,10 +117,6 @@ P2 core engineering milestones are now implemented and verified:
 
 
 See [P2 Comprehensive Implementation Record](P2_Comprehensive_Implementation_Record.md) and [P2 Local Implementation Record](P2_Local_Implementation_Record.md) for full verification details.
-
-
-
-
 
 
 

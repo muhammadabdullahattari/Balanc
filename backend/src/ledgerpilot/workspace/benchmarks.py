@@ -28,10 +28,32 @@ class CostCase(BaseModel):
     cost_usd: Decimal = Field(ge=0, allow_inf_nan=False)
 
 
+class OcrCase(BaseModel):
+    expected_text: str
+    extracted_text: str
+    expected_fields: dict[str, str] = Field(default_factory=dict)
+    extracted_fields: dict[str, str] = Field(default_factory=dict)
+
+
+class MatchingCase(BaseModel):
+    bank_row_id: str
+    expected_match_id: str | None = None
+    proposed_match_id: str | None = None
+
+
+class AnomalyCase(BaseModel):
+    transaction_id: str
+    is_anomaly: bool
+    flagged: bool
+
+
 class Baseline(BaseModel):
     forecast_mae_max: dict[str, Decimal] = Field(default_factory=dict)
     posting_accuracy_min: Decimal | None = Field(default=None, ge=0, le=1)
     usd_per_page_max: Decimal | None = Field(default=None, ge=0, allow_inf_nan=False)
+    ocr_character_accuracy_min: Decimal | None = Field(default=None, ge=0, le=1)
+    matching_f1_min: Decimal | None = Field(default=None, ge=0, le=1)
+    anomaly_precision_min: Decimal | None = Field(default=None, ge=0, le=1)
 
 
 class Measurement(BaseModel):
@@ -45,9 +67,12 @@ class Dataset(BaseModel):
     version: Literal[1]
     dataset_id: str = Field(min_length=1, max_length=100)
     sample: Literal["synthetic", "representative"]
-    forecasts: list[ForecastCase] = Field(max_length=10000)
-    postings: list[PostingCase] = Field(max_length=10000)
-    costs: list[CostCase] = Field(max_length=10000)
+    forecasts: list[ForecastCase] = Field(default_factory=list, max_length=10000)
+    postings: list[PostingCase] = Field(default_factory=list, max_length=10000)
+    costs: list[CostCase] = Field(default_factory=list, max_length=10000)
+    ocr: list[OcrCase] = Field(default_factory=list, max_length=10000)
+    matching: list[MatchingCase] = Field(default_factory=list, max_length=10000)
+    anomalies: list[AnomalyCase] = Field(default_factory=list, max_length=10000)
     baseline: Baseline = Field(default_factory=Baseline)
     measurements: list[Measurement] = Field(default_factory=list, max_length=10000)
 
@@ -94,6 +119,75 @@ def score(raw: bytes) -> dict[str, object]:
     if dataset.baseline.usd_per_page_max is not None:
         compare("usd_per_page", cost_per_page, dataset.baseline.usd_per_page_max)
 
+    # OCR Evaluation
+    ocr_count = len(dataset.ocr)
+    ocr_exact = sum(1 for c in dataset.ocr if c.expected_text.strip() == c.extracted_text.strip())
+    total_fields = sum(len(c.expected_fields) for c in dataset.ocr)
+    matching_fields = sum(
+        sum(1 for k, v in c.expected_fields.items() if c.extracted_fields.get(k) == v)
+        for c in dataset.ocr
+    )
+    ocr_character_accuracy = Decimal(ocr_exact) / ocr_count if ocr_count else None
+    ocr_field_accuracy = Decimal(matching_fields) / total_fields if total_fields else None
+
+    # Matching Evaluation (Bank Reconciliation)
+    matching_count = len(dataset.matching)
+    m_tp = sum(
+        1
+        for m in dataset.matching
+        if m.expected_match_id and m.expected_match_id == m.proposed_match_id
+    )
+    m_fp = sum(
+        1
+        for m in dataset.matching
+        if m.proposed_match_id and m.proposed_match_id != m.expected_match_id
+    )
+    m_fn = sum(
+        1
+        for m in dataset.matching
+        if m.expected_match_id and m.proposed_match_id != m.expected_match_id
+    )
+    matching_accuracy = (
+        Decimal(sum(1 for m in dataset.matching if m.expected_match_id == m.proposed_match_id))
+        / matching_count
+        if matching_count
+        else None
+    )
+    matching_precision = Decimal(m_tp) / (m_tp + m_fp) if (m_tp + m_fp) else None
+    matching_recall = Decimal(m_tp) / (m_tp + m_fn) if (m_tp + m_fn) else None
+    matching_f1 = (
+        (2 * matching_precision * matching_recall) / (matching_precision + matching_recall)
+        if (matching_precision and matching_recall and (matching_precision + matching_recall) > 0)
+        else None
+    )
+
+    # Anomaly Detection Evaluation
+    anomaly_count = len(dataset.anomalies)
+    a_tp = sum(1 for a in dataset.anomalies if a.is_anomaly and a.flagged)
+    a_fp = sum(1 for a in dataset.anomalies if not a.is_anomaly and a.flagged)
+    a_fn = sum(1 for a in dataset.anomalies if a.is_anomaly and not a.flagged)
+    a_tn = sum(1 for a in dataset.anomalies if not a.is_anomaly and not a.flagged)
+    anomaly_precision = Decimal(a_tp) / (a_tp + a_fp) if (a_tp + a_fp) else None
+    anomaly_recall = Decimal(a_tp) / (a_tp + a_fn) if (a_tp + a_fn) else None
+    anomaly_fpr = Decimal(a_fp) / (a_fp + a_tn) if (a_fp + a_tn) else None
+
+    if dataset.baseline.ocr_character_accuracy_min is not None:
+        compare(
+            "ocr_character_accuracy",
+            ocr_character_accuracy,
+            dataset.baseline.ocr_character_accuracy_min,
+            minimum=True,
+        )
+    if dataset.baseline.matching_f1_min is not None:
+        compare("matching_f1", matching_f1, dataset.baseline.matching_f1_min, minimum=True)
+    if dataset.baseline.anomaly_precision_min is not None:
+        compare(
+            "anomaly_precision",
+            anomaly_precision,
+            dataset.baseline.anomaly_precision_min,
+            minimum=True,
+        )
+
     measurements: dict[str, list[Measurement]] = {}
     for measurement in dataset.measurements:
         measurements.setdefault(measurement.operation, []).append(measurement)
@@ -116,6 +210,25 @@ def score(raw: bytes) -> dict[str, object]:
             "incorrect_proposals": incorrect,
             "accuracy": str(Decimal(correct) / count) if count else None,
             "proposal_error_rate": str(Decimal(incorrect) / proposed) if proposed else None,
+        },
+        "ocr": {
+            "count": ocr_count,
+            "exact_matches": ocr_exact,
+            "character_accuracy": str(ocr_character_accuracy) if ocr_character_accuracy else None,
+            "field_accuracy": str(ocr_field_accuracy) if ocr_field_accuracy else None,
+        },
+        "matching": {
+            "count": matching_count,
+            "accuracy": str(matching_accuracy) if matching_accuracy else None,
+            "precision": str(matching_precision) if matching_precision else None,
+            "recall": str(matching_recall) if matching_recall else None,
+            "f1_score": str(matching_f1) if matching_f1 else None,
+        },
+        "anomaly": {
+            "count": anomaly_count,
+            "precision": str(anomaly_precision) if anomaly_precision else None,
+            "recall": str(anomaly_recall) if anomaly_recall else None,
+            "false_positive_rate": str(anomaly_fpr) if anomaly_fpr else None,
         },
         "baseline_checks": checks,
         "supplied_pipeline_measurements": {
@@ -150,6 +263,9 @@ def present(report: dict[str, object]) -> str:
     for heading, key in (
         ("Forecast error by currency", "forecast"),
         ("Posting quality", "posting"),
+        ("OCR extraction quality", "ocr"),
+        ("Bank matching metrics", "matching"),
+        ("Anomaly detection metrics", "anomaly"),
         ("USD processing cost", "cost"),
         ("Pipeline observations supplied by dataset", "supplied_pipeline_measurements"),
         ("Scoring runner measurements", "runner_measurements"),

@@ -1,6 +1,13 @@
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
-import { Button, ErrorNotice, Field, Loading, Table } from "../components/ui";
+import {
+  Badge,
+  Button,
+  ErrorNotice,
+  Field,
+  Loading,
+  Table,
+} from "../components/ui";
 import { useAccess, useBusiness } from "./context";
 
 export function EmailOperations() {
@@ -124,6 +131,55 @@ export function EmailOperations() {
               </div>
             ))}
           </dl>
+          {overviewData.health && (
+            <div
+              style={{
+                margin: "1rem 0",
+                padding: "1rem",
+                background: "var(--surface-raised, #1a1a24)",
+                borderRadius: "4px",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  gap: "1rem",
+                  alignItems: "center",
+                  marginBottom: "0.5rem",
+                }}
+              >
+                <strong>Tenant Health:</strong>
+                <Badge>{overviewData.health.status.toUpperCase()}</Badge>
+                <span>
+                  Active Legal Holds:{" "}
+                  <strong>{overviewData.health.active_holds}</strong>
+                </span>
+                <span>
+                  Failed Workflow Jobs:{" "}
+                  <strong>{overviewData.health.failed_job_count}</strong>
+                </span>
+              </div>
+              {overviewData.health.failed_jobs.length > 0 && (
+                <Table
+                  caption="Failed workflow jobs requiring attention"
+                  rows={overviewData.health.failed_jobs}
+                  rowKey={(j) => j.id}
+                  columns={[
+                    {
+                      label: "Workflow",
+                      render: (j) => j.source.toUpperCase(),
+                    },
+                    { label: "Job ID", render: (j) => j.id },
+                    { label: "State", render: (j) => j.state },
+                    {
+                      label: "Error Detail",
+                      render: (j) => j.error_detail || "—",
+                    },
+                  ]}
+                />
+              )}
+            </div>
+          )}
           {overviewData.attention.length ? (
             <Table
               caption="Recent email jobs"

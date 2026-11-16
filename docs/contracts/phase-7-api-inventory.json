@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 181,
-  "distinct_operations": 144,
+  "call_sites": 188,
+  "distinct_operations": 150,
   "operations": [
     {
       "file": "App.tsx",
@@ -197,6 +197,26 @@
       "file": "features/beneficiary-review.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/billing/subscription"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/billing/subscription/plan"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/billing/subscription/cancel"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/billing/checkout"
     },
     {
       "file": "features/cleanup.tsx",
@@ -667,6 +687,21 @@
       "file": "features/projects.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/projects/billable-drafts"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/preview"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/import"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/import"
     },
     {
       "file": "features/reconciliation.tsx",

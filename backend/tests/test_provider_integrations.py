@@ -3,6 +3,7 @@ import hmac
 import json
 import time
 from datetime import UTC
+from typing import Any
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -332,6 +333,250 @@ def test_quickbooks_customer_and_vendor_import() -> None:
         )
         assert res["status"] == "imported"
         assert res["imported_parties"] == 2
+
+
+def test_repeated_payment_failed_preserves_original_grace() -> None:
+    db = MagicMock()
+    settings = MagicMock(spec=Settings)
+    business_id = uuid4()
+    original_failure_time = 1700000000
+    expected_grace_until = original_failure_time + 3 * 86400
+
+    # First failure event: creates initial grace deadline
+    event1 = {
+        "id": "evt_fail_1",
+        "type": "invoice.payment_failed",
+        "created": original_failure_time,
+        "data": {
+            "object": {
+                "client_reference_id": str(business_id),
+                "customer": "cus_12345",
+            }
+        },
+    }
+    db.execute.return_value.scalar_one_or_none.return_value = {"plan": "growth"}
+    process_stripe_event(db, settings, event1)
+
+    # Inspect saved connection
+    first_saved_snapshot: dict[str, Any] = {}
+    for call in db.execute.call_args_list:
+        args, kwargs = call
+        if "INSERT INTO app.provider_connections" in str(args[0]):
+            params = args[1] if len(args) > 1 else kwargs
+            first_saved_snapshot = json.loads(params["details"])["snapshot"]
+    assert first_saved_snapshot["grace_until"] == expected_grace_until
+
+    # Second failure event 2 days later: must PRESERVE original_failure_time + 3*86400
+    db.reset_mock()
+    second_failure_time = original_failure_time + 2 * 86400
+    event2 = {
+        "id": "evt_fail_2",
+        "type": "invoice.payment_failed",
+        "created": second_failure_time,
+        "data": {
+            "object": {
+                "client_reference_id": str(business_id),
+                "customer": "cus_12345",
+            }
+        },
+    }
+    db.execute.return_value.scalar_one_or_none.return_value = {
+        "plan": "growth",
+        "last_event_created": original_failure_time,
+        "snapshot": first_saved_snapshot,
+    }
+    process_stripe_event(db, settings, event2)
+
+    second_saved_snapshot: dict[str, Any] = {}
+    for call in db.execute.call_args_list:
+        args, kwargs = call
+        if "INSERT INTO app.provider_connections" in str(args[0]):
+            params = args[1] if len(args) > 1 else kwargs
+            second_saved_snapshot = json.loads(params["details"])["snapshot"]
+    # The grace_until must remain the original deadline, not second_failure_time + 3*86400
+    assert second_saved_snapshot["grace_until"] == expected_grace_until
+
+
+def test_stale_stripe_webhook_rejected() -> None:
+    db = MagicMock()
+    settings = MagicMock(spec=Settings)
+    business_id = uuid4()
+    current_time = 1700050000
+
+    # Current state is active with a newer event timestamp
+    current_conn = {
+        "plan": "growth",
+        "last_event_created": current_time,
+        "snapshot": {"status": "active", "paid_access": True, "plan": "growth"},
+    }
+    db.execute.return_value.scalar_one_or_none.return_value = current_conn
+
+    # Incoming stale event from earlier time (e.g., delayed past_due update)
+    stale_event = {
+        "id": "evt_stale",
+        "type": "customer.subscription.updated",
+        "created": current_time - 10000,
+        "data": {
+            "object": {
+                "id": "sub_test",
+                "client_reference_id": str(business_id),
+                "customer": "cus_12345",
+                "status": "past_due",
+            }
+        },
+    }
+    process_stripe_event(db, settings, stale_event)
+
+    # Provider connection must NOT have been updated with stale state
+    saved = False
+    for call in db.execute.call_args_list:
+        args, _ = call
+        if "INSERT INTO app.provider_connections" in str(args[0]):
+            saved = True
+    assert not saved, "Stale webhook event should not update provider connection"
+
+
+def test_quickbooks_full_entity_scope_import() -> None:
+    from typing import Any
+    from unittest.mock import patch
+
+    from cryptography.fernet import Fernet
+    from pydantic import SecretStr
+
+    from ledgerpilot.provider_integrations import import_quickbooks
+
+    db = MagicMock()
+    business_id = uuid4()
+    identity = MagicMock()
+    request = MagicMock()
+
+    key = Fernet.generate_key()
+    cipher = Fernet(key)
+    tokens_json = json.dumps({"access_token": "qb_token_test", "refresh_token": "qb_refresh"})
+    encrypted_tokens = cipher.encrypt(tokens_json.encode()).decode()
+
+    settings = MagicMock(spec=Settings)
+    settings.token_encryption_key = key.decode()
+    settings.mfa_encryption_key = SecretStr(key.decode())
+    request.app.state.settings = settings
+
+    qb_connection = {
+        "tokens": encrypted_tokens,
+        "realm_id": "123456",
+    }
+
+    def fake_provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("params", {}).get("query", "")
+        if "Invoice" in query:
+            return {
+                "QueryResponse": {
+                    "Invoice": [
+                        {
+                            "Id": "inv1",
+                            "DocNumber": "INV-1001",
+                            "TotalAmt": 500.0,
+                            "TxnDate": "2026-11-16",
+                            "CustomerRef": {"name": "Test Client"},
+                        }
+                    ]
+                }
+            }
+        if "Bill" in query:
+            return {
+                "QueryResponse": {
+                    "Bill": [
+                        {
+                            "Id": "bill1",
+                            "DocNumber": "BILL-2001",
+                            "TotalAmt": 250.0,
+                            "TxnDate": "2026-11-16",
+                            "VendorRef": {"name": "Test Supplier"},
+                        }
+                    ]
+                }
+            }
+        if "Payment" in query:
+            return {
+                "QueryResponse": {
+                    "Payment": [
+                        {
+                            "Id": "pmt1",
+                            "TotalAmt": 500.0,
+                            "TxnDate": "2026-11-16",
+                            "CustomerRef": {"name": "Test Client"},
+                        }
+                    ]
+                }
+            }
+        if "CreditMemo" in query:
+            return {
+                "QueryResponse": {
+                    "CreditMemo": [
+                        {
+                            "Id": "cr1",
+                            "DocNumber": "CR-3001",
+                            "TotalAmt": 50.0,
+                            "TxnDate": "2026-11-16",
+                            "CustomerRef": {"name": "Test Client"},
+                        }
+                    ]
+                }
+            }
+        return {"QueryResponse": {}}
+
+    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
+         patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider), \
+         patch("ledgerpilot.provider_integrations.authorize"):
+
+        fake_acc_id = uuid4()
+        fake_party_id = uuid4()
+        fake_journal_id = uuid4()
+
+        # Mock DB queries:
+        def fake_scalar_one_or_none():
+            return None  # No duplicates, no existing party
+
+        db.execute.return_value.scalar_one_or_none.side_effect = [
+            None,  # Invoice not posted
+            None,  # Party not existing
+            fake_acc_id,  # AR account
+            fake_acc_id,  # Rev account
+            None,  # Bill not posted
+            None,  # Vendor party not existing
+            fake_acc_id,  # AP account
+            fake_acc_id,  # Exp account
+            None,  # Payment not posted
+            fake_party_id,  # Customer party
+            fake_acc_id,  # Bank account
+            fake_acc_id,  # AR account
+            None,  # Credit not posted
+            fake_party_id,  # Customer party
+            fake_acc_id,  # AR account
+            fake_acc_id,  # Rev account
+            None,  # orig_id
+        ]
+        db.execute.return_value.scalar_one.return_value = fake_journal_id
+        db.execute.return_value.mappings.return_value.one.return_value = {
+            "version": 1,
+            "currency": "USD",
+        }
+
+        res = import_quickbooks(
+            business_id=business_id,
+            request=request,
+            identity=identity,
+            db=db,
+            entities=["Invoice", "Bill", "Payment", "CreditMemo"],
+            dry_run=False,
+        )
+        assert res["status"] == "imported"
+        assert res["imported_invoices"] == 1
+        assert res["imported_bills"] == 1
+        assert res["imported_payments"] == 1
+        assert res["imported_credits"] == 1
+        assert res["reconciled"] is True
+
+
 
 
 
