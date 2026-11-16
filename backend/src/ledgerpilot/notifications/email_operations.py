@@ -163,14 +163,14 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
                 )
             )
 
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), db.begin_nested():
         evidence_failures = db.execute(
             text("""
-                SELECT id, status, payload->>'error', created_at
-                FROM app.evidence_jobs
-                WHERE business_id = :b AND status = 'failed'
-                ORDER BY created_at DESC LIMIT 10
-            """),
+                    SELECT id, state, error_code, available_at
+                    FROM app.evidence_jobs
+                    WHERE business_id = :b AND state = 'failed'
+                    ORDER BY available_at DESC LIMIT 10
+                """),
             {"b": bid},
         ).fetchall()
         for ef in evidence_failures:
@@ -184,14 +184,14 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
                 )
             )
 
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), db.begin_nested():
         cleanup_failures = db.execute(
             text("""
-                SELECT id, state, reason, created_at
-                FROM app.cleanup_requests
-                WHERE business_id = :b AND state = 'failed'
-                ORDER BY created_at DESC LIMIT 10
-            """),
+                    SELECT id, status, outcome, created_at
+                    FROM app.cleanup_requests
+                    WHERE business_id = :b AND status = 'failed'
+                    ORDER BY created_at DESC LIMIT 10
+                """),
             {"b": bid},
         ).fetchall()
         for cf in cleanup_failures:
@@ -205,14 +205,14 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
                 )
             )
 
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), db.begin_nested():
         close_failures = db.execute(
             text("""
-                SELECT id, status, NULL, created_at
-                FROM app.close_tasks
-                WHERE business_id = :b AND status = 'failed'
-                LIMIT 10
-            """),
+                    SELECT id, state, comment
+                    FROM app.close_tasks
+                    WHERE business_id = :b AND state = 'open' AND required = true
+                    LIMIT 10
+                """),
             {"b": bid},
         ).fetchall()
         for ctf in close_failures:
@@ -221,13 +221,13 @@ def diagnostics(db: Session, identity: Principal, bid: UUID, administrator: bool
                     id=ctf[0] if isinstance(ctf[0], UUID) else UUID(str(ctf[0])),
                     source="close",
                     state=str(ctf[1]),
-                    error_detail=None,
-                    created_at=ctf[3],
+                    error_detail=str(ctf[2]) if ctf[2] else None,
+                    created_at=at,
                 )
             )
 
     active_holds = 0
-    with contextlib.suppress(Exception):
+    with contextlib.suppress(Exception), db.begin_nested():
         active_holds = (
             db.execute(
                 text(
