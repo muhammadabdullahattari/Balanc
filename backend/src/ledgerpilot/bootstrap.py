@@ -42,41 +42,54 @@ def run_migrations_and_seed_if_needed(engine: Engine, settings: Settings) -> Non
 
     if needs_migration:
         logger.info("[BOOTSTRAP] Running Alembic migrations to head...")
-        # Determine paths
-        cwd = Path.cwd()
+        backend_dir = Path(__file__).resolve().parents[2]
         ini_candidates = [
+            backend_dir / "alembic.ini",
             Path("/app/alembic.ini"),
-            cwd / "alembic.ini",
-            cwd / "backend/alembic.ini",
+            Path.cwd() / "alembic.ini",
+            Path.cwd() / "backend/alembic.ini",
         ]
-        ini_path = next((p for p in ini_candidates if p.exists()), Path("alembic.ini"))
+        ini_path = next((p for p in ini_candidates if p.exists()), backend_dir / "alembic.ini")
 
         migrations_candidates = [
+            backend_dir / "migrations",
             Path("/app/migrations"),
-            cwd / "migrations",
-            cwd / "backend/migrations",
+            Path.cwd() / "migrations",
+            Path.cwd() / "backend/migrations",
         ]
-        migrations_path = next((p for p in migrations_candidates if p.exists()), Path("migrations"))
+        migrations_path = next(
+            (p for p in migrations_candidates if p.exists()), backend_dir / "migrations"
+        )
 
         alembic_cfg = Config(str(ini_path))
         alembic_cfg.set_main_option("script_location", str(migrations_path))
         alembic_cfg.attributes["runtime_role"] = "postgres"
 
         try:
-            command.upgrade(alembic_cfg, "head")
+            with engine.connect() as mig_conn:
+                alembic_cfg.attributes["connection"] = mig_conn
+                command.upgrade(alembic_cfg, "head")
+                mig_conn.commit()
             logger.info("[BOOTSTRAP] Alembic migrations successfully applied to 0030.")
+            print("[BOOTSTRAP] Alembic migrations successfully applied to 0030.", flush=True)
         except Exception as e:
-            logger.error("Database migration failed (%s)", type(e).__name__)
+            logger.exception("[BOOTSTRAP] Database migration failed: %s", e)
+            print(
+                f"[BOOTSTRAP ERROR] Database migration failed ({type(e).__name__}): {e}",
+                flush=True,
+            )
             return
 
     # 2. Seed test roles and workspace
     with engine.begin() as conn:
+        conn.execute(text("SET LOCAL row_security = off"))
         existing_owner = conn.execute(
             text("SELECT id FROM app.users WHERE email = 'owner@balanc.local'")
         ).scalar_one_or_none()
 
         if existing_owner is None:
             logger.info("[BOOTSTRAP] Seeding test workspace and users...")
+            print("[BOOTSTRAP] Seeding test workspace and users...", flush=True)
             owner_id = uuid4()
             accountant_id = uuid4()
             business_id = UUID("42132f25-4948-45c0-9142-8def637b0a9c")
@@ -182,4 +195,9 @@ def run_migrations_and_seed_if_needed(engine: Engine, settings: Settings) -> Non
             logger.info(
                 "[BOOTSTRAP] Successfully created test workspace 'Acme Test Corp' "
                 "with Owner (owner@balanc.local) and Accountant (accountant@balanc.local)"
+            )
+            print(
+                "[BOOTSTRAP] Successfully created test workspace 'Acme Test Corp' "
+                "with Owner (owner@balanc.local) and Accountant (accountant@balanc.local)",
+                flush=True,
             )
