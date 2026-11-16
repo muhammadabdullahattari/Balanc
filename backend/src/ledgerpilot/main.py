@@ -63,6 +63,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         application.state.sessions = sessionmaker(engine, expire_on_commit=False)
         application.state.rate_sessions = sessionmaker(rate_engine, expire_on_commit=False)
         try:
+            from ledgerpilot.bootstrap import run_migrations_and_seed_if_needed
+
+            run_migrations_and_seed_if_needed(engine, configured)
+        except Exception as bootstrap_err:
+            logger.warning(f"[BOOTSTRAP] Initialization error: {bootstrap_err}")
+        try:
             yield
         finally:
             rate_engine.dispose()
