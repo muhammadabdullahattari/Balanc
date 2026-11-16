@@ -60,7 +60,7 @@ router = APIRouter(tags=["audit-access"])
 
 def gate(request: Request, bid: UUID) -> None:
     settings = request.app.state.settings
-    if settings.app_env not in {"local", "test"} or bid not in settings.p2_audit_business_ids:
+    if not settings.allows_p2_audit(bid):
         raise DomainError("ERR_NOT_FOUND", "Scoped audit sharing is unavailable.", 404)
 
 

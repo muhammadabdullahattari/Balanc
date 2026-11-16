@@ -2,12 +2,18 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.29
+**Plan version:** 2.30
 **Status:** Governing implementation sequence  
 **Date:** 16 November 2026
 **Scope:** Responsive web SaaS; deployed to Railway and Vercel. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
+
+**P2 Commercial Packages Implementation & Hosted Pilot Activation (16 November 2026).** Completed major P2 work packages and extended live hosted capabilities on Railway and Vercel:
+- **P2-C (Stripe Subscription Lifecycle & Entitlements):** Automatic webhook event-to-entitlement processing (`checkout.session.completed`, `customer.subscription.created/updated` with 3-day `past_due` grace period, `customer.subscription.deleted`, and `charge.refunded`). Real-time entitlement enforcement in `authorize()` grants paid access to subscribers while preserving read-only export and retention access (`retained_action`) for expired accounts. Subscription management endpoints (`GET /billing/subscription`, `POST /billing/subscription/plan`, `POST /billing/subscription/cancel`) added.
+- **P2-D (QuickBooks Online Reviewed Import):** Endpoint `POST /businesses/{business_id}/quickbooks/import` implemented with deterministic deduplication (`qb:{realm_id}:journal:{qb_id}`), balanced general ledger posting via `app.post_journal`, and audit logging into `app.import_batches`.
+- **P2-A/E/G (Hosted Cohort Rollout Enablement):** Enabled P2 features (projects, prepaids, micro-close, reconciliation preview, cash insights, retention controls, and scoped auditor grants) for the pre-seeded workspace `Acme Test Corp` (`42132f25-4948-45c0-9142-8def637b0a9c`) and any configured pilot tenants in staging/production.
+- **API Contracts & Verification:** OpenAPI contract updated (178 operations), frontend TypeScript types regenerated, and all linting (Ruff), strict type checking (Mypy), and test suites passing cleanly.
 
 **Railway and Vercel Cloud Deployment & Authentication Verification (16 November 2026).** Successfully transitioned and verified cloud deployment on Railway (https://balanc-production.up.railway.app) and Vercel (https://balanc-amber.vercel.app).
 - **Backend & Database:** Alembic migrations `0001` through `0030` are applied in-process over managed PostgreSQL. `/health/ready` returns HTTP 200 `{"status": "ready"}`.

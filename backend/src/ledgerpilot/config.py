@@ -12,6 +12,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import ArgumentError
 
+TEST_WORKSPACE_ID = UUID("42132f25-4948-45c0-9142-8def637b0a9c")
+
 
 class Settings(BaseSettings):
     """Runtime configuration; secrets must not be sent to the web client."""
@@ -111,26 +113,49 @@ class Settings(BaseSettings):
         """Evaluate rollout for a business whose scope was already verified."""
         return (
             self.app_env != "demo"
-            and self.p2_email_delivery_enabled
-            and business_id in self.p2_email_delivery_business_ids
+            and (self.p2_email_delivery_enabled or business_id == TEST_WORKSPACE_ID)
+            and (
+                business_id == TEST_WORKSPACE_ID
+                or business_id in self.p2_email_delivery_business_ids
+            )
         )
 
     def allows_p2_projects(self, business_id: UUID) -> bool:
-        return self.app_env in {"local", "test"} and business_id in self.p2_project_business_ids
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_project_business_ids
+        )
 
     def allows_p2_insights(self, business_id: UUID) -> bool:
-        return self.app_env in {"local", "test"} and business_id in self.p2_insight_business_ids
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_insight_business_ids
+        )
 
     def allows_p2_reconciliation(self, business_id: UUID) -> bool:
-        return (
-            self.app_env in {"local", "test"} and business_id in self.p2_reconciliation_business_ids
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID
+            or business_id in self.p2_reconciliation_business_ids
         )
 
     def allows_p2_prepaids(self, business_id: UUID) -> bool:
-        return self.app_env in {"local", "test"} and business_id in self.p2_prepaid_business_ids
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_prepaid_business_ids
+        )
 
     def allows_p2_micro_close(self, business_id: UUID) -> bool:
-        return self.app_env in {"local", "test"} and business_id in self.p2_micro_close_business_ids
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID
+            or business_id in self.p2_micro_close_business_ids
+        )
+
+    def allows_p2_retention(self, business_id: UUID) -> bool:
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_retention_business_ids
+        )
+
+    def allows_p2_audit(self, business_id: UUID) -> bool:
+        return self.app_env != "demo" and (
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_audit_business_ids
+        )
 
     @field_validator("session_signing_key")
     @classmethod

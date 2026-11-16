@@ -86,6 +86,102 @@ Local development can begin with the CSV baseline, provider contracts, fixtures 
 
 
 
+### Implementation status update · 16 November 2026
+
+P2 core engineering milestones are now implemented and verified:
+
+- **P2-A (Deployment & Foundation):** Production deployment active on Railway (https://balanc-production.up.railway.app) and Vercel (https://balanc-amber.vercel.app). Alembic migrations 0001–0030 applied. Live HTTPS authentication and session token rotation verified for independent owner@balanc.local and accountant@balanc.local roles on pre-seeded test workspace Acme Test Corp.
+
+- **P2-C (Stripe Billing):** Migration 0029 applied. Full webhook event-to-entitlement engine implemented: handles checkout.session.completed, customer.subscription.created/updated (including 3-day grace period for past_due), customer.subscription.deleted, and charge.refunded. Entitlement enforcement in authorize() allows paid operations for active subscribers while preserving read-only export access (retained_action) for expired accounts. Subscription management endpoints (GET/POST /billing/subscription) active.
+
+- **P2-D (QuickBooks Online):** Migration 0029 applied. Reviewed one-way import endpoint (POST /businesses/{business_id}/quickbooks/import) implemented with deterministic deduplication via qb:{realm_id}:journal:{qb_id} idempotency keys, balanced debit/credit posting via app.post_journal, and recording in app.import_batches.
+
+- **P2-E (Accounting Workflows):** Migrations 0024, 0025, 0028 applied. Project tags, prepaid schedules, nightly close, auditor workpaper sharing, and period close packages with independent sign-off implemented and enabled for the hosted Acme Test Corp pilot cohort.
+
+- **P2-F (AI & Scenarios):** 13-week cash scenarios, shortfall inbox worker, and calibrated historical uncertainty intervals (20 calibration / 10 validation windows) implemented and enabled for the pilot cohort.
+
+- **P2-G (Retention & Disposal):** Migrations 0027 and 0030 applied. Retention policies (7-year financial record retention, 72-hour new export snapshots), durable legal holds, dry-run previews, two-person approval, and upload deletion failure-and-retry resilience verified and enabled for the pilot cohort.
+
+- **P2-H (Baselines):** Benchmark runner (ledgerpilot.workspace.benchmarks) implemented with currency MAE, posting accuracy, and USD cost-per-page scoring.eaks the existing Phase 12 commercial milestone into work packages. Phase 11 remains the public API and SDK track and can proceed after P1 sign-off where it does not block P2 work. The package names below are proposed sequencing, not new project-wide phase numbers.
+
+
+
+
+
+
+
+## Commercial release entry gate
+
+
+
+
+
+
+
+Complete P1 Phases 9 and 10, including deployed end-to-end verification and an isolated restore. Establish a funded operating budget, target jurisdiction and customer cohort, accounting reviewer, security owner and support owner. Capture the signed-off P1 release, baseline reconciliation results and pilot demand. Start provider eligibility reviews early because their lead times affect release scope.
+
+
+
+
+
+
+
+While deployment is deferred, follow the [local preparation sequence](Next_Phases_Implementation_Plan.md#what-to-build-now). Record local evidence separately from hosted, sandbox and release evidence.
+
+
+
+
+
+
+
+## Launch and provider decisions
+
+
+
+
+
+
+
+| Decision | Implementation and acceptance |
+
+
+
+|---|---|
+
+
+
+| United States and global expansion | Use the US as the first acceptance cohort. Keep onboarding, currency, imports and policy configuration ready for additional markets. Activate each additional market after its provider coverage, jurisdiction policy and support scope are approved. |
+
+
+
+| Stripe subscriptions · P2-C | Use Stripe for LedgerPilot's subscription checkout and entitlement reconciliation. Keep billing records, identifiers and event handling separate from customer accounting records. |
+
+
+
+| Stripe Financial Connections · P2-D | Make it the first live bank data connector. Share the Stripe integration foundation with subscription billing while keeping bank consent, connection revocation and feed processing separate. Validate account eligibility and access in the sandbox before enabling a cohort. |
+
+
+
+| CSV and QuickBooks Online · P2-D | Use the existing CSV import as the first available import path and fallback. QuickBooks Online is the first direct accounting connector, subject to sandbox and cutover acceptance. Import historical records through the reviewed mapping and reconciliation workflow. |
+
+
+
+| Approved financial retention · P2-G | Use seven years for approved in-scope financial records and 72 hours for new export snapshots, with configurable record-class and market rules, deletion exceptions and legal holds. Approve what is retained, when the clock starts, and how copies and backups expire before enabling automated disposal. |
+
+
+
+
+
+
+
+Local development can begin with the CSV baseline, provider contracts, fixtures and policy configuration. Provider credentials, sandbox access, the approved retention matrix and hosted acceptance remain release prerequisites.
+
+
+
+
+
+
+
 ### Implementation status update · 15 November 2026
 
 

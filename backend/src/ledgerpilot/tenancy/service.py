@@ -95,14 +95,27 @@ def authorize(
         retained_action = retained_action or (
             f"/businesses/{business_id}/audit-grants/" in path and path.endswith("/revoke")
         )
-        if (
-            trial
-            and not retained_action
+        # Check if customer has active paid Stripe subscription
+        has_paid_access = False
+        stripe_conn = db.execute(
+            text("""
+                SELECT details FROM app.provider_connections
+                WHERE business_id = :b AND provider = 'stripe'
+            """),
+            {"b": business_id},
+        ).scalar_one_or_none()
+        if stripe_conn and isinstance(stripe_conn, dict):
+            snapshot = stripe_conn.get("snapshot", {})
+            has_paid_access = bool(snapshot.get("paid_access", False))
+
+        trial_expired = (
+            trial is not None
             and (
                 trial.status != "manual_trial"
                 or (trial.expires_at is not None and trial.expires_at <= now())
             )
-        ):
+        )
+        if trial_expired and not has_paid_access and not retained_action:
             raise DomainError(
                 "ERR_ENTITLEMENT",
                 "This business currently permits read/export and privacy access only.",

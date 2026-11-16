@@ -120,10 +120,7 @@ router = APIRouter(prefix="/businesses/{business_id}/retention", tags=["retentio
 
 def gate(request: Request, business_id: UUID) -> None:
     settings = request.app.state.settings
-    if (
-        settings.app_env not in {"local", "test"}
-        or business_id not in settings.p2_retention_business_ids
-    ):
+    if not settings.allows_p2_retention(business_id):
         raise DomainError("ERR_NOT_FOUND", "Retention controls are unavailable.", 404)
 
 

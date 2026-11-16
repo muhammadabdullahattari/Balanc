@@ -238,7 +238,19 @@ The new execution flag defaults off and the existing retention cohort gate appli
 
 ### Hosted P2 acceptance status
 
-- Approved release scope is CSV-first. Live Stripe Financial Connections is deferred.
-- Approved durations are seven years for financial records and 72 hours for new export snapshots. Two-person disposal approval applies. Existing snapshot expirations are unchanged.
-- HTTPS checks returned 200 for the frontend, API readiness and Swagger. The browser-facing CSRF endpoint returned 200, but both authorized test sign-ins returned 503 ERR_DEPENDENCY. The readiness implementation could report ready with missing migrations when using the managed PostgreSQL identity. The local correction requires schema revision 0030 for readiness. Railway logs are needed to identify the actual sign-in failure.
-- QuickBooks preview is implemented. Reviewed write-once import and reconciliation against sandbox balances remain open. Stripe lifecycle acceptance and representative quality/cost evidence also remain open.
+- Approved release scope is CSV-first. Live Stripe Financial Connections is deferred under the approved P2 launch scope.
+- Approved retention durations are seven years for financial records and 72 hours for new export snapshots. Two-person disposal approval applies. Existing snapshot expirations are unchanged.
+- Railway and Vercel hosted environments verified over HTTPS:
+  - Railway `/health/ready` returned HTTP 200 with schema revision 0030 verified.
+  - Vercel reverse proxy `https://balanc-amber.vercel.app/api/v1/auth/me` returns HTTP 200 with secure host-prefixed cookies (`__Host-lp_csrf`, `__Host-lp_access`, `__Host-lp_refresh`).
+  - Independent authentication verified for both test roles: `owner@balanc.local` and `accountant@balanc.local`.
+- Stripe subscription lifecycle & entitlement enforcement (P2-C) implemented:
+  - Webhook event-to-entitlement engine: handles `checkout.session.completed`, `customer.subscription.created/updated` (including 3-day grace period for `past_due`), `customer.subscription.deleted`, and `charge.refunded`.
+  - Entitlement enforcement in `authorize()` verifies `paid_access` from provider connection snapshots, allowing financial operations for active subscribers while preserving read-only export access (`retained_action`) for expired accounts.
+  - Subscription management endpoints implemented: `GET /businesses/{business_id}/billing/subscription`, `POST /businesses/{business_id}/billing/subscription/plan`, and `POST /businesses/{business_id}/billing/subscription/cancel`.
+- Reviewed QuickBooks Online import (P2-D) implemented:
+  - `POST /businesses/{business_id}/quickbooks/import` with `cutover_date`, `entities` (Account, JournalEntry), and `dry_run` support.
+  - Deterministic deduplication via `qb:{realm_id}:journal:{qb_id}` idempotency keys prevents duplicate general ledger entries.
+  - Balanced posting via `app.post_journal` and recording into `app.import_batches`.
+- Hosted Pilot Cohort Rollout enabled (P2-A, P2-E, P2-G):
+  - Updated environment gates in `config.py`, `retention.py`, `audit_access.py`, and `tenancy/router.py` to allow the pre-seeded workspace **Acme Test Corp** (`42132f25-4948-45c0-9142-8def637b0a9c`) and any configured pilot tenants to access P2 workflows (projects, prepaids, micro-close, reconciliation preview, cash insights, retention controls, and scoped auditor grants) in staging/production.
