@@ -237,13 +237,7 @@ export function RetentionControls() {
               />
             </Field>
             <Field label="Retention years">
-              <input
-                name="years"
-                type="number"
-                min={1}
-                max={100}
-                required
-              />
+              <input name="years" type="number" min={1} max={100} required />
             </Field>
             <Field label="Approved policy reference">
               <input name="reference" required maxLength={200} />

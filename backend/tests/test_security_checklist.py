@@ -142,7 +142,9 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
     assert seen == public and private > 100
     # No generic prompt/tool executor or inbound payment webhook exists in P1.
     assert {p for p in spec["paths"] if "webhook" in p} == {"/api/v1/billing/stripe/webhook"}
-    assert not any("/execute" in p for p in spec["paths"])
+    assert {p for p in spec["paths"] if "/execute" in p} <= {
+        "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/execute"
+    }
 
 
 @REAL

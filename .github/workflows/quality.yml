@@ -1,10 +1,9 @@
-name: CI and demo deployment
+name: CI and Deployment
 
 on:
   pull_request:
   push:
     branches: [main, master]
-    tags: ['v*']
   workflow_dispatch:
 
 permissions:
@@ -18,77 +17,43 @@ jobs:
   checks:
     uses: ./.github/workflows/checks.yml
 
-  deploy-api-demo:
-    name: Deploy API to Floci EC2
+  deploy-frontend:
+    name: Deploy Frontend to Vercel
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     needs: [checks]
-    environment: demo
+    defaults:
+      run:
+        working-directory: frontend
     steps:
-      - uses: actions/checkout@v7
-      - name: Download checked API image
-        uses: actions/download-artifact@v8
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
-          name: ledgerpilot-api-image-${{ github.sha }}
-          path: /tmp/checked-image
-      - name: Publish image to Floci ECR
-        id: image
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Vercel CLI
+        run: npm install --global vercel@latest
+
+      - name: Pull Vercel Environment Information
         env:
-          FLOCI_REGISTRY: aws.meissasoft.com
-          FLOCI_REPOSITORY: 027852729302/us-east-1/balanc
-        run: |
-          docker load --input /tmp/checked-image/api-image.tar
-          full_image="$FLOCI_REGISTRY/$FLOCI_REPOSITORY:${GITHUB_SHA}"
-          latest_image="$FLOCI_REGISTRY/$FLOCI_REPOSITORY:latest"
-          docker tag "ledgerpilot-api:${GITHUB_SHA}" "$full_image"
-          docker tag "ledgerpilot-api:${GITHUB_SHA}" "$latest_image"
-          docker push "$full_image"
-          docker push "$latest_image"
-          echo "uri=$full_image" >> "$GITHUB_OUTPUT"
-      - name: Deploy to Floci EC2 via SSH
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: vercel pull --yes --environment=production --token=$VERCEL_TOKEN
+
+      - name: Build Project Artifacts
         env:
-          SSH_PRIVATE_KEY: ${{ secrets.FLOCI_SSH_KEY }}
-          SSH_HOST: ${{ vars.FLOCI_HOST || '221.120.236.55' }}
-          SSH_PORT: ${{ vars.FLOCI_SSH_PORT || '2223' }}
-          SSH_USER: ${{ vars.EC2_INSTANCE_ID || 'i-ec605373a19fbe9dd' }}
-          IMAGE_URI: ${{ steps.image.outputs.uri }}
-        run: |
-          if [[ -z "$SSH_PRIVATE_KEY" ]]; then
-            echo "Missing secret: FLOCI_SSH_KEY. Please add the SSH private key (floci.pem) to GitHub Secrets." >&2
-            exit 1
-          fi
-          mkdir -p ~/.ssh
-          echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-          chmod 600 ~/.ssh/id_rsa
-          ssh -o StrictHostKeyChecking=no -o HostKeyAlgorithms=+ssh-rsa -p "$SSH_PORT" "$SSH_USER@$SSH_HOST" \
-            "IMAGE_URI='$IMAGE_URI' bash -s" << 'EOF'
-              set -e
-              echo "Pulling image from Floci ECR: $IMAGE_URI"
-              docker pull "$IMAGE_URI"
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel build --prod --token=$VERCEL_TOKEN
 
-              echo "Applying database migrations..."
-              docker run --rm --network host --env-file /root/Balanc/.env "$IMAGE_URI" /app/.venv/bin/alembic upgrade head
-
-              echo "Restarting application container..."
-              docker stop app || true
-              docker rm app || true
-              docker run -d --name app --restart=always --network host --env-file /root/Balanc/.env "$IMAGE_URI"
-
-              echo "Verifying application readiness..."
-              for i in $(seq 1 60); do
-                if curl -s --fail --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/health/ready; then
-                  echo ""
-                  echo "Application deployed and healthy!"
-                  exit 0
-                fi
-                echo -n "."
-                sleep 3
-              done
-              echo ""
-              echo "Readiness check timed out."
-              docker logs app --tail 50
-              exit 1
-          EOF
-
-
-
+      - name: Deploy Project Artifacts to Vercel
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+        run: vercel deploy --prebuilt --prod --token=$VERCEL_TOKEN

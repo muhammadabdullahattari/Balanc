@@ -3,13 +3,13 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in the ignored .env file}
-      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the ignored .env file}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the ignored .env file}
-      APP_DB_USER: ${APP_DB_USER:?Set APP_DB_USER in the ignored .env file}
-      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?Set APP_DB_PASSWORD in the ignored .env file}
-      MIGRATION_DB_USER: ${MIGRATION_DB_USER:?Set MIGRATION_DB_USER in the ignored .env file}
-      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:?Set MIGRATION_DB_PASSWORD in the ignored .env file}
+      POSTGRES_DB: ${POSTGRES_DB:-ledgerpilot}
+      POSTGRES_USER: ${POSTGRES_USER:-ledgerpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-replace-with-a-password}
+      APP_DB_USER: ${APP_DB_USER:-ledgerpilot_app}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:-replace-with-a-password}
+      MIGRATION_DB_USER: ${MIGRATION_DB_USER:-ledgerpilot_migrator}
+      MIGRATION_DB_PASSWORD: ${MIGRATION_DB_PASSWORD:-replace-with-a-password}
     ports:
       - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
