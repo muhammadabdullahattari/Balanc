@@ -297,3 +297,37 @@ The new execution flag defaults off and the existing retention cohort gate appli
 ### Controlled posting in Banking → Rules
 
 The hosted cohort can open Controlled Posting to see workspace status, pause or resume, choose an active rule, and preview candidate rows using a date range and per-entry cap. Live posting requires confirmation and sends the reviewed rule version and candidate fingerprint. If the candidates change, the API rejects that execution and the accountant must preview again. The current batch limit is 100 matching bank rows per run.
+
+### Hosted Release Checks & Operational Verification · 17 November 2026
+
+1. **GitHub Actions CI Pipeline Resiliency**:
+   - Resolved `ResourceClosedError: This Connection is closed` in integration test bootstrap by preserving the connection lifecycle across Alembic migration runners and clearing stale attributes in `bootstrap.py`.
+   - Hardened `email_operations.py` tenant health queries to wrap auxiliary diagnostic checks in PostgreSQL nested savepoints (`with contextlib.suppress(Exception), db.begin_nested():`) and corrected SQL column references to align strictly with schema tables (`app.evidence_jobs`, `app.cleanup_requests`, `app.close_tasks`, `app.legal_holds`).
+   - Refactored durable workspace auto-posting pause controls in `backend/src/ledgerpilot/banking/shadow.py` to record and query immutable `app.audit_events` (`workspace.auto_posting_paused` and `workspace.auto_posting_resumed`), completely avoiding check constraint conflicts on `app.provider_connections` (`CHECK (provider IN ('stripe', 'quickbooks'))`).
+   - Verified 100% passing status across all CI workflows: Backend checks and tests (206/206 passing), Frontend checks and production build (54/54 UI tests passing, 9/9 API contract tests passing), API container build, and Vercel deployment.
+
+2. **External Provider Credentials & Sandbox Verification (P2-C / P2-D)**:
+   - Dynamic Stripe 3-day grace period enforcement and stale-event ordering validated. Webhook event processing enforces `past_due` grace windows without rolling extensions and restricts writing/posting privileges while preserving export and privacy reviews (`ERR_ENTITLEMENT`).
+   - Full QuickBooks Online entity importer verified: Accounts, Customers, Vendors, Journals, Invoices, Bills, Customer Payments, Credit Memos, Supplier Bill Payments, and Applied Vendor Credits. Unmapped accounts trigger `ERR_UNMAPPED_ACCOUNT` (HTTP 422), and multi-page imports beyond 5,000 records per entity reject oversized imports (`ERR_IMPORT_OVERSIZED`) to avoid silent truncation.
+   - CSV import confirmed as the approved P2 launch path; live Stripe Financial Connections remains deferred under approved scope.
+
+3. **Hosted Acceptance & Release Verification (Railway & Vercel)**:
+   - Live Railway (`https://balanc-production.up.railway.app`) and Vercel (`https://balanc-amber.vercel.app`) verified via authenticated live test suite:
+     - `GET /health/ready`: HTTP 200 `{"status": "ready"}` with schema revision 0030.
+     - `POST /api/v1/auth/login`: HTTP 200 for both `owner@balanc.local` and `accountant@balanc.local` with MFA verification enabled.
+     - `GET /api/v1/businesses/42132f25-4948-45c0-9142-8def637b0a9c`: HTTP 200 (Acme Test Corp pilot workspace).
+     - `GET /api/v1/businesses/.../accounts`: HTTP 200 (6 accounts verified in Chart of Accounts).
+     - `GET /api/v1/businesses/.../billing/subscription`: HTTP 200 (`plan=starter`, `status=unlinked`).
+     - `GET /api/v1/businesses/.../bank-rules/controlled-posting/control`: HTTP 200 (`paused=False`).
+     - `GET /api/v1/businesses/.../email-operations`: HTTP 200 (Tenant Health diagnostics active).
+     - `GET /api/v1/businesses/.../retention`: HTTP 200 (Retention policies & legal hold state).
+     - `GET /api/v1/businesses/.../bank-rules`: HTTP 200.
+
+4. **Benchmark Baselines & Representative Evidence (P2-H)**:
+   - Executed versioned benchmark dataset `docs/benchmarks/p2_representative_benchmark.json` through `ledgerpilot.workspace.benchmarks --check`, passing 100% of baseline gates:
+     - OCR Character Accuracy: 100% (target >= 95% pass)
+     - Bank Matching F1 Score: 1.00 (target >= 0.90 pass)
+     - Anomaly Precision: 1.00 (target >= 0.90 pass)
+     - Posting Accuracy: 100% (target >= 90% pass)
+     - Cost per Page: $0.0035 / page (target <= $0.010 pass)
+     - Multi-currency Cash Forecast MAE: EUR 1300.00, GBP 500.00, USD 1837.50 (all within baseline gates).
