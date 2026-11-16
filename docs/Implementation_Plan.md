@@ -2,14 +2,21 @@
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.27
+**Plan version:** 2.29
 **Status:** Governing implementation sequence  
-**Date:** 5 November 2026
-**Scope:** Responsive web SaaS; no native mobile application in P1. Product source: updated LedgerPilot Complete SRS.
+**Date:** 16 November 2026
+**Scope:** Responsive web SaaS; deployed to Railway and Vercel. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision
 
-**Railway and Vercel Cloud Deployment & CI/CD Hardening (16 November 2026).** Successfully transitioned cloud deployment from Floci EC2 / AWS ECR to Railway (https://balanc-production.up.railway.app) and Vercel (https://balanc-amber.vercel.app). Implemented transparent edge reverse proxying for /api/* via frontend/vercel.json, resolving all third-party cookie and CORS restrictions. Adapted backend runtime boundaries and database connection listeners to support managed PostgreSQL single-user configurations (APP_DB_USER=postgres). Resolved all CI/CD test regressions (P2 export disposal status assertions, pip-audit CVE patches, and Vercel CLI root-path resolution). GitHub Actions required checks (Backend checks and tests, Frontend checks and production build, Build API container) and frontend deployment passed with 100% green status. See [the deployment record](Deployment_and_CI_CD_Implementation_Record.md).
+**Railway and Vercel Cloud Deployment & Authentication Verification (16 November 2026).** Successfully transitioned and verified cloud deployment on Railway (https://balanc-production.up.railway.app) and Vercel (https://balanc-amber.vercel.app).
+- **Backend & Database:** Alembic migrations `0001` through `0030` are applied in-process over managed PostgreSQL. `/health/ready` returns HTTP 200 `{"status": "ready"}`.
+- **Role-Based Authentication:** Successfully provisioned and verified two-person segregated roles on the `Acme Test Corp` workspace (`42132f25-4948-45c0-9142-8def637b0a9c`):
+  - Owner: `owner@balanc.local` (ID: `d1c40361-f7c0-47c2-8df2-c4acb6ebfab6`)
+  - Accountant: `accountant@balanc.local` (ID: `2c97b067-29ee-4eb8-b99a-7934e761f29f`)
+  - Additional RFC 2606 test identities (`owner@example.com` and `accountant@example.com`) are seeded in parallel.
+- **Frontend & Edge Networking:** Transparent edge reverse-proxying via `frontend/vercel.json` rewrites `/api/*` to Railway, eliminating third-party cookie restrictions and enabling seamless browser sessions with `__Host-lp_csrf`, `__Host-lp_access`, and `__Host-lp_refresh` cookies over HTTPS.
+- **CI/CD Quality Gates:** All GitHub Actions checks (`Backend checks and tests`, `Frontend checks and production build`, `Build API container`, `Deploy Frontend to Vercel`) are active and green. See [Deployment Implementation Record](Deployment_and_CI_CD_Implementation_Record.md).
 
 **Password sign-in verification.** Email and password are submitted first. Accounts requiring MFA use the same verification screen as Google sign-in. The existing login endpoint revalidates the password and verifies the selected authenticator or recovery code before issuing a session.
 
