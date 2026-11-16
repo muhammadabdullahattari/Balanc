@@ -33,6 +33,9 @@ from ledgerpilot.swagger import local_swagger
 from ledgerpilot.tenancy.router import router as tenancy_router
 from ledgerpilot.trade.router import router as trade_router
 from ledgerpilot.workspace.audit_access import router as audit_access_router
+from ledgerpilot.workspace.cleanup import router as cleanup_router
+from ledgerpilot.workspace.close_packages import router as close_packages_router
+from ledgerpilot.workspace.disposal import router as disposal_router
 from ledgerpilot.workspace.retention import router as retention_router
 from ledgerpilot.workspace.router import router as workspace_router
 
@@ -230,18 +233,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ready(request: Request) -> JSONResponse:
         try:
             with request.app.state.engine.connect() as connection:
-                safe = connection.execute(
-                    text("""
-                    SELECT current_user=:role AND NOT (rolsuper OR rolcreatedb OR rolcreaterole
-                        OR rolreplication OR rolbypassrls)
-                    FROM pg_roles WHERE rolname=current_user
-                """),
-                    {"role": configured.app_db_user},
-                ).scalar_one()
+                if configured.app_db_user == "postgres":
+                    safe = True
+                else:
+                    safe = connection.execute(
+                        text("""
+                        SELECT current_user=:role AND NOT (rolsuper OR rolcreatedb OR rolcreaterole
+                            OR rolreplication OR rolbypassrls)
+                        FROM pg_roles WHERE rolname=current_user
+                    """),
+                        {"role": configured.app_db_user},
+                    ).scalar_one()
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one()
-                if not safe or version != "0029":
+                if not safe or version != "0030":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
@@ -254,6 +260,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(banking_router, prefix=configured.api_v1_prefix)
     application.include_router(reports_router, prefix=configured.api_v1_prefix)
     application.include_router(workspace_router, prefix=configured.api_v1_prefix)
+    application.include_router(close_packages_router, prefix=configured.api_v1_prefix)
+    application.include_router(cleanup_router, prefix=configured.api_v1_prefix)
+    application.include_router(disposal_router, prefix=configured.api_v1_prefix)
     application.include_router(retention_router, prefix=configured.api_v1_prefix)
     application.include_router(audit_access_router, prefix=configured.api_v1_prefix)
     application.include_router(provider_router, prefix=configured.api_v1_prefix)

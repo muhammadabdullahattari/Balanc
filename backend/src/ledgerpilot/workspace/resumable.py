@@ -8,7 +8,7 @@ from uuid import UUID
 
 from cryptography.fernet import InvalidToken
 from pydantic import Field
-from sqlalchemy import delete, func, select, text
+from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
@@ -60,13 +60,6 @@ def create(
     business = get_business(db, bid)
     if data.end < data.start:
         raise DomainError("ERR_DATE_RANGE", "Export dates must be ordered.", 422)
-    db.execute(
-        delete(ExportSnapshot).where(
-            ExportSnapshot.business_id == bid,
-            ExportSnapshot.created_by == who.user.id,
-            ExportSnapshot.expires_at <= now(),
-        )
-    )
     old = db.scalar(
         select(ExportSnapshot).where(
             ExportSnapshot.business_id == bid,
@@ -76,6 +69,8 @@ def create(
     )
     request_hash = fingerprint(data, "export.snapshot")
     if old:
+        if old.expires_at <= now():
+            raise DomainError("ERR_EXPORT_EXPIRED", "Use a new key for an expired export.", 410)
         if old.request_hash != request_hash:
             raise DomainError("ERR_IDEMPOTENCY_CONFLICT", "Export key was already used.", 409)
         return metadata(old)
@@ -86,6 +81,7 @@ def create(
             .where(
                 ExportSnapshot.business_id == bid,
                 ExportSnapshot.created_by == who.user.id,
+                ExportSnapshot.expires_at > now(),
             )
         )
         or 0

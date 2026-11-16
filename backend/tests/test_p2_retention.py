@@ -35,7 +35,7 @@ async def test_retention_version_hold_release_and_tenant_boundary(
                 headers=dict(accountant.headers),
             ) as api,
         ):
-            assert (await api.get(base)).json()["default_years"] == 10
+            assert (await api.get(base)).json()["default_years"] is None
             sample = {
                 "category": "evidence",
                 "jurisdiction": "us",
@@ -44,10 +44,10 @@ async def test_retention_version_hold_release_and_tenant_boundary(
             }
             result = await api.post(base + "/preview", json=sample)
             assert result.status_code == 200, result.text
-            assert result.json()["retain_until"] == "2026-03-01"
+            assert result.json()["retain_until"] is None
             assert not result.json()["retention_elapsed"]
             sample["as_of"] = "2026-03-01"
-            assert (await api.post(base + "/preview", json=sample)).json()["retention_elapsed"]
+            assert not (await api.post(base + "/preview", json=sample)).json()["retention_elapsed"]
             policy = {
                 "category": "evidence",
                 "jurisdiction": "us",

@@ -55,8 +55,8 @@ it("does not request controls for a workspace outside the rollout", () => {
 });
 
 it("saves the current policy version and explains legal hold precedence", async () => {
-  vi.spyOn(api, "GET").mockResolvedValue(
-    reply({
+  vi.spyOn(api, "GET").mockImplementation(async (path) =>
+    path.includes("/cleanup/") ? reply([]) : reply({
       default_years: 10,
       policies: [
         {
@@ -79,6 +79,7 @@ it("saves the current policy version and explains legal hold precedence", async 
   fireEvent.change(screen.getByLabelText("Approved policy reference"), {
     target: { value: "Approved US policy" },
   });
+  fireEvent.change(screen.getByLabelText("Retention years"), { target: { value: "10" } });
   fireEvent.click(screen.getByRole("button", { name: "Save policy version" }));
   await waitFor(() =>
     expect(post).toHaveBeenCalledWith(

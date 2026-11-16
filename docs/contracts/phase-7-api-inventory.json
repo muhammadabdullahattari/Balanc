@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 166,
-  "distinct_operations": 129,
+  "call_sites": 181,
+  "distinct_operations": 144,
   "operations": [
     {
       "file": "App.tsx",
@@ -199,6 +199,71 @@
       "path": "/api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes"
     },
     {
+      "file": "features/cleanup.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/policies"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/policies"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/policies/{policy_id}/approve"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/events"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/preview"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/approve"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/execute"
+    },
+    {
+      "file": "features/cleanup.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/confirm"
+    },
+    {
+      "file": "features/close-packages.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/close-packages"
+    },
+    {
+      "file": "features/close-packages.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/close-packages"
+    },
+    {
+      "file": "features/close-packages.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/close-packages/{package_id}/review"
+    },
+    {
       "file": "features/close.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/periods"
@@ -367,6 +432,16 @@
       "file": "features/evidence.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/evidence/{evidence_id}/links"
+    },
+    {
+      "file": "features/export-disposal.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/retention/disposal/exports"
+    },
+    {
+      "file": "features/export-disposal.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/retention/disposal/exports"
     },
     {
       "file": "features/google-signin.tsx",
@@ -721,7 +796,7 @@
     {
       "file": "features/retention.tsx",
       "method": "POST",
-      "path": "/api/v1/businesses/{business_id}/retention/preview"
+      "path": "/api/v1/businesses/{business_id}/retention/disposal/assess"
     },
     {
       "file": "features/rules.tsx",

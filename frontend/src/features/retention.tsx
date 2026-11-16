@@ -1,3 +1,5 @@
+import { CleanupControls } from "./cleanup";
+import { ExportDisposal } from "./export-disposal";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
 import { Button, ErrorNotice, Field, Table } from "../components/ui";
@@ -72,6 +74,8 @@ export function RetentionControls() {
               data.get("category"),
             ) as components["schemas"]["HoldCreate"]["category"],
             reason: String(data.get("reason")),
+            kind: String(data.get("kind") || "legal") as
+              "legal" | "regulatory" | "exception",
           },
         }),
       );
@@ -92,7 +96,7 @@ export function RetentionControls() {
     mutationFn: (form: HTMLFormElement) => {
       const data = new FormData(form);
       return result(
-        api.POST("/api/v1/businesses/{business_id}/retention/preview", {
+        api.POST("/api/v1/businesses/{business_id}/retention/disposal/assess", {
           params: { path },
           body: {
             category: String(
@@ -101,6 +105,9 @@ export function RetentionControls() {
             jurisdiction: String(data.get("jurisdiction")),
             record_date: String(data.get("record_date")),
             as_of: String(data.get("as_of")),
+            location: String(
+              data.get("location") || "original_record",
+            ) as components["schemas"]["StorageAssessment"]["location"],
           },
         }),
       );
@@ -110,10 +117,13 @@ export function RetentionControls() {
   return (
     <section aria-label="Retention and legal holds">
       <h2>Retention and legal holds</h2>
+      <ExportDisposal key={business.id} />
+      <CleanupControls key={`cleanup-${business.id}`} />
       <p className="muted">
-        Financial records default to ten years from the record date. Record
-        approved exceptions here. A legal hold prevents disposal review
-        regardless of age. These controls do not delete records or backups.
+        Financial records remain protected until an explicit policy is
+        configured. Record approved exceptions here. A legal hold prevents
+        disposal review regardless of age. Original records and backups remain
+        subject to their own retention rules.
       </p>
       <ErrorNotice
         error={
@@ -134,6 +144,14 @@ export function RetentionControls() {
             }}
           >
             <h3>Check retention eligibility</h3>
+            <Field label="Storage location">
+              <select name="location">
+                <option value="original_record">Original record</option>
+                <option value="document_storage">Document storage</option>
+                <option value="backup">Backup</option>
+                <option value="external_copy">External copy</option>
+              </select>
+            </Field>
             <Field label="Preview record class">
               <select name="category">
                 {categories.map((c) => (
@@ -167,7 +185,10 @@ export function RetentionControls() {
           </form>
           {preview.data && (
             <p role="status">
-              Retain until {preview.data.retain_until}.{" "}
+              Retain until{" "}
+              {preview.data.retain_until ??
+                "No approved retention period configured"}
+              .{" "}
               {preview.data.active_hold_ids.length > 0
                 ? "An active legal hold prevents disposal review."
                 : preview.data.eligible_for_disposal_review
@@ -221,7 +242,6 @@ export function RetentionControls() {
                 type="number"
                 min={1}
                 max={100}
-                defaultValue={10}
                 required
               />
             </Field>
@@ -237,7 +257,16 @@ export function RetentionControls() {
               hold.mutate(e.currentTarget);
             }}
           >
-            <h3>Place a legal hold</h3>
+            <h3>Place a protective hold</h3>
+            <Field label="Hold type">
+              <select name="kind">
+                <option value="legal">Legal hold</option>
+                <option value="regulatory">Regulatory hold</option>
+                <option value="exception">
+                  Retention exception � protect from cleanup
+                </option>
+              </select>
+            </Field>
             <Field label="Hold scope">
               <select name="category">
                 <option value="all">All financial records</option>
@@ -263,6 +292,7 @@ export function RetentionControls() {
                 label: "Scope",
                 render: (h) => h.category.replaceAll("_", " "),
               },
+              { label: "Type", render: (h) => h.kind },
               { label: "Reason", render: (h) => h.reason },
               {
                 label: "State",

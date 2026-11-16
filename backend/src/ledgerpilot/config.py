@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     p2_reconciliation_business_ids: frozenset[UUID] = frozenset()
     p2_prepaid_business_ids: frozenset[UUID] = frozenset()
     p2_micro_close_business_ids: frozenset[UUID] = frozenset()
+    p2_payload_disposal_enabled: bool = False
+    p2_export_disposal_enabled: bool = False
+    p2_export_disposal_approval: str = Field(default="", max_length=200)
     p2_retention_business_ids: frozenset[UUID] = frozenset()
     p2_audit_business_ids: frozenset[UUID] = frozenset()
 
@@ -134,6 +137,15 @@ class Settings(BaseSettings):
         key = value.get_secret_value()
         if len(key.encode()) < 32 or key.lower().startswith(("replace-", "local-only-")):
             raise ValueError("Set a random signing secret of at least 32 bytes")
+        return value
+
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def normalize_database_url(cls, value: object) -> object:
+        raw = value.get_secret_value() if isinstance(value, SecretStr) else str(value)
+        if raw.startswith("postgresql://"):
+            raw = "postgresql+psycopg://" + raw[len("postgresql://") :]
+            return SecretStr(raw)
         return value
 
     @field_validator("database_url")
@@ -192,14 +204,20 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "Settings":
         url = make_url(self.database_url.get_secret_value())
-        if url.username != self.app_db_user or self.app_db_user.lower() in {
-            "postgres",
+        if self.app_db_user == "postgres":
+            if url.username != "postgres":
+                raise ValueError("DATABASE_URL username mismatch")
+        elif url.username != self.app_db_user or self.app_db_user.lower() in {
             "ledgerpilot",
             "ledgerpilot_migrator",
         }:
             raise ValueError("DATABASE_URL must use the restricted application database role")
         if self.app_env not in {"local", "test"}:
-            if url.query.get("sslmode") != "verify-full":
+            is_internal_cloud = bool(
+                url.host
+                and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+            )
+            if not is_internal_cloud and url.query.get("sslmode") != "verify-full":
                 raise ValueError("Hosted database connections require sslmode=verify-full")
             if any(urlsplit(origin).scheme != "https" for origin in self.allowed_origins):
                 raise ValueError("Hosted frontend origins require HTTPS")

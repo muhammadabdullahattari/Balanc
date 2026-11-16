@@ -144,7 +144,7 @@ async def client(database_settings: FileSettings) -> AsyncIterator[httpx.AsyncCl
 
 
 async def mail_token(email: str) -> str:
-    async with httpx.AsyncClient() as mailbox:
+    async with httpx.AsyncClient(timeout=30.0) as mailbox:
         result = await mailbox.get(
             "http://127.0.0.1:8025/api/v1/search", params={"query": "to:" + email}
         )

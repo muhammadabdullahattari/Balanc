@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ClosePackages } from "./close-packages";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { CheckCircle2, Plus } from "lucide-react";
 import { api, keys, queryClient, result } from "../api/runtime";
@@ -207,6 +208,9 @@ export function Close() {
         </section>
       )}
       {b.p2_micro_close_available && <NightlyWorkpaper key={b.id} />}
+      {b.p2_micro_close_available && (
+        <ClosePackages key={period} periodId={period} />
+      )}
       <section className="panel">
         {!period ? (
           <Empty title="Choose the period you’re closing.">

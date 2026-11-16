@@ -348,6 +348,26 @@ def download(
 ) -> Response:
     authorize(db, identity, business_id)
     item = evidence(db, business_id, evidence_id)
+    from ledgerpilot.workspace.cleanup_models import CleanupPolicy, CleanupRequest
+
+    disposed = db.scalar(
+        select(CleanupRequest.id)
+        .join(CleanupPolicy, CleanupPolicy.id == CleanupRequest.policy_id)
+        .where(
+            CleanupRequest.business_id == business_id,
+            CleanupPolicy.business_id == business_id,
+            CleanupPolicy.location == "local_evidence",
+            CleanupRequest.resource_id == evidence_id,
+            CleanupRequest.status == "verified",
+        )
+        .limit(1)
+    )
+    if disposed is not None:
+        raise DomainError(
+            "ERR_DISPOSED",
+            "This document payload was removed under an approved retention policy.",
+            410,
+        )
     content = storage.get(request.app.state.settings, item.object_key, item.content_hash)
     record(db, identity.user.id, "evidence.downloaded", business_id, evidence_id)
     return Response(

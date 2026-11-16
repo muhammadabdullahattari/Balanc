@@ -129,9 +129,9 @@ The PostgreSQL integration test verified a completed forecast week with a $42 di
 
 - **P2-B:** Hosted sender and automatic provider feedback ingestion and verification.
 - **P2-C/D:** Stripe subscription entitlements and event reconciliation, Financial Connections consent and feed ingestion, and QuickBooks Online direct synchronization. CSV remains available. Local provider contract work and sandbox acceptance remain open.
-- **P2-E:** Scoped, revocable sharing of saved workpapers is implemented below. Workpapers beyond the nightly control checks remain open.
-- **P2-F/H:** Scheduled inbox shortfall notifications and historical-error interval evaluation are implemented below. Representative holdout results for controlled posting and a versioned quality/cost benchmark remain open. No customer-quality claim follows from synthetic tests.
-- **P2-G:** Configurable record-class retention and legal holds are implemented below. Automated disposal requires the approved record/copy/backup policy matrix and remains open.
+- **P2-E:** Scoped, revocable sharing of saved workpapers is implemented below. Period-close packages and browser sign-off are implemented. Accountant acceptance remains open.
+- **P2-F/H:** Scheduled inbox shortfall notifications and historical-error interval evaluation are implemented below. The benchmark runner is implemented. Representative holdout results for controlled posting and measured cost baselines remain open. No customer-quality claim follows from synthetic tests.
+- **P2-G:** Configurable record-class retention and legal holds are implemented below. Managed export disposal is implemented and requires explicit approval configuration. Broader disposal requires approved policies and verified storage execution.
 
 P2-C, P2-D and P2-G now have recorded launch choices in the [P2 plan](P2_Implementation_Plan.md#launch-and-provider-decisions). Plan acceptance first for a US cohort, then expand globally market by market. Use Stripe for subscriptions and Stripe Financial Connections for live bank data. Keep CSV as the first available import and fallback, with QuickBooks Online as the first direct accounting connector. Use ten years as the default for in-scope financial records, with approved policy rules and exceptions. Provider eligibility, sandbox credentials and market retention review remain open. Hosted gates remain deferred.
 
@@ -190,3 +190,48 @@ Checkout, signed event receipt, owner-triggered billing reconciliation, QuickBoo
 token refresh and paginated sandbox preview are available. The event inbox does not yet
 trigger reconciliation automatically. Entitlement enforcement, Stripe plan changes and
 the reviewed QuickBooks ledger import worker remain open.
+
+## P2 close packages, benchmarks and managed export disposal
+
+Owners and accountants in the local micro-close cohort can prepare and retrieve
+a period close package under /api/v1/businesses/{business_id}/close-packages.
+A different member can sign off a ready, locked period at /{package_id}/review.
+The package preserves close tasks, evidence references, controls and period version.
+
+Run python -m ledgerpilot.workspace.benchmarks DATASET.json from the backend environment.
+The version-1 dataset contains dataset_id, sample (synthetic or representative),
+forecasts (currency, predicted, actual), postings (expected, proposed; null means abstain),
+and costs (pages, cost_usd). Results include a dataset checksum, currency-specific
+forecast error, posting accuracy and proposal error rate, and USD cost per page.
+Approved representative data and observed costs are still needed for acceptance.
+
+The retention cohort can preview its own managed export copies with GET
+/api/v1/businesses/{business_id}/retention/disposal/exports. POST explicit ids
+to the same path to delete expired copies in one audited transaction when
+P2_EXPORT_DISPOSAL_ENABLED is enabled. Active holds conservatively block all
+export deletion in the workspace. Automatic deletion on export creation was removed
+so it cannot bypass the hold check. Authoritative records, external downloads,
+and backups require approved disposal policies and separate execution support.
+
+The Close screen now lists packages for the selected accounting period, shows
+subledger and tax controls, and exposes sign-off only when the server authorizes
+it. Privacy settings now provide managed-export preview and confirmed execution,
+and record-class assessments for originals, documents, backups and external
+copies. Those assessments can produce a manual review decision. A configured
+P2_EXPORT_DISPOSAL_APPROVAL reference and the execution flag are both required
+for managed-export deletion.
+
+Benchmark reports support JSON or --format text, optional --output, and --check
+for configured limits. Dataset baselines can set forecast_mae_max by currency,
+posting_accuracy_min and usd_per_page_max. Optional operation measurements may
+contain elapsed_seconds, cpu_seconds and peak_memory_bytes. The CLI measures
+its own scoring time, CPU time and peak Python allocation separately from
+supplied pipeline observations. Representative runs require approved inputs.
+
+### Approved payload cleanup
+
+Migration 0030 adds tenant-scoped disposal policies, requests, and append-only events. Configure a period and required approval role for each supported record/location pair. An independent approver reviews the policy and an eligible dry run before execution. Legal, regulatory, and exception holds conservatively block all payload cleanup in the workspace. The server rechecks holds under the same business lock used to place them.
+
+Managed targets are encrypted original upload files and expired database export copies. Export creators retain exclusive execution access to their own exports. Accounting records and extraction metadata remain available. Backup and external requests record operator handoff and require an owner to record a confirmation reference. No external provider deletion adapter or independent receipt verification is configured.
+
+The new execution flag defaults off and the existing retention cohort gate applies. Before activation, approve business policy references and the verified source dates used in cleanup requests. Operators must recheck holds before acting on pending external requests and provide evidence for the exact copy removed.
