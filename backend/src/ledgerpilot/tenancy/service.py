@@ -1,5 +1,8 @@
 """Resolve membership before binding any business scope."""
 
+import contextlib
+import json
+import time
 from datetime import date, timedelta
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
@@ -104,9 +107,24 @@ def authorize(
             """),
             {"b": business_id},
         ).scalar_one_or_none()
-        if stripe_conn and isinstance(stripe_conn, dict):
-            snapshot = stripe_conn.get("snapshot", {})
-            has_paid_access = bool(snapshot.get("paid_access", False))
+        if stripe_conn:
+            if isinstance(stripe_conn, str):
+                with contextlib.suppress(Exception):
+                    stripe_conn = json.loads(stripe_conn)
+            if isinstance(stripe_conn, dict):
+                snapshot = stripe_conn.get("snapshot", {})
+                status = snapshot.get("status")
+                grace_until = snapshot.get("grace_until")
+                if status in {"active", "trialing"}:
+                    has_paid_access = True
+                elif status == "past_due" and grace_until is not None:
+                    has_paid_access = time.time() < float(grace_until)
+                elif status in {"canceled", "unpaid"}:
+                    has_paid_access = False
+                else:
+                    has_paid_access = bool(snapshot.get("paid_access", False)) and (
+                        grace_until is None or time.time() < float(grace_until)
+                    )
 
         trial_expired = (
             trial is not None

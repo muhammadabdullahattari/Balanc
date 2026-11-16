@@ -658,16 +658,19 @@ def import_quickbooks(
     realm_id = current["realm_id"]
     access_token = tokens["access_token"]
     effective_cutover = cutover_date or date.today()
-    selected_entities = entities if entities is not None else ["Account", "JournalEntry"]
+    default_entities = ["account", "customer", "vendor", "journalentry"]
+    norm_entities = {e.lower() for e in (entities or default_entities)}
 
     imported_accounts = 0
+    imported_parties = 0
     imported_journals = 0
     skipped_duplicates = 0
+    unmapped_accounts: list[dict[str, str]] = []
     total_debit = Decimal("0")
     total_credit = Decimal("0")
 
     # 1. Accounts mapping & import
-    if "Account" in selected_entities:
+    if norm_entities & {"account", "accounts"}:
         res = provider(
             "GET",
             f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
@@ -713,8 +716,78 @@ def import_quickbooks(
                 )
                 imported_accounts += 1
 
-    # 2. JournalEntry mapping & import
-    if "JournalEntry" in selected_entities:
+    # 2. Customers mapping & import
+    if norm_entities & {"customer", "customers"}:
+        res = provider(
+            "GET",
+            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            params={"query": "SELECT * FROM Customer WHERE Active=true MAXRESULTS 1000"},
+        )
+        qb_customers = res.get("QueryResponse", {}).get("Customer", [])
+        for qb_cust in qb_customers:
+            raw_c_name = (
+                qb_cust.get("DisplayName")
+                or qb_cust.get("CompanyName")
+                or f"Customer {qb_cust.get('Id')}"
+            )
+            c_name = str(raw_c_name).strip()[:160]
+            c_email = (qb_cust.get("PrimaryEmailAddr") or {}).get("Address")
+            if c_email:
+                c_email = str(c_email).strip()[:254]
+            exists = db.execute(
+                text("SELECT 1 FROM app.parties WHERE business_id=:b AND name=:n"),
+                {"b": business_id, "n": c_name},
+            ).scalar_one_or_none()
+            if not exists and not dry_run:
+                db.execute(
+                    text("""
+                        INSERT INTO app.parties (
+                            id, business_id, name, email, roles, active, version
+                        )
+                        VALUES (gen_random_uuid(), :b, :n, :e, '["customer"]'::jsonb, true, 0)
+                    """),
+                    {"b": business_id, "n": c_name, "e": c_email},
+                )
+                imported_parties += 1
+
+    # 3. Vendors mapping & import
+    if norm_entities & {"vendor", "vendors", "supplier", "suppliers"}:
+        res = provider(
+            "GET",
+            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            params={"query": "SELECT * FROM Vendor WHERE Active=true MAXRESULTS 1000"},
+        )
+        qb_vendors = res.get("QueryResponse", {}).get("Vendor", [])
+        for qb_vend in qb_vendors:
+            raw_v_name = (
+                qb_vend.get("DisplayName")
+                or qb_vend.get("CompanyName")
+                or f"Vendor {qb_vend.get('Id')}"
+            )
+            v_name = str(raw_v_name).strip()[:160]
+            v_email = (qb_vend.get("PrimaryEmailAddr") or {}).get("Address")
+            if v_email:
+                v_email = str(v_email).strip()[:254]
+            exists = db.execute(
+                text("SELECT 1 FROM app.parties WHERE business_id=:b AND name=:n"),
+                {"b": business_id, "n": v_name},
+            ).scalar_one_or_none()
+            if not exists and not dry_run:
+                db.execute(
+                    text("""
+                        INSERT INTO app.parties (
+                            id, business_id, name, email, roles, active, version
+                        )
+                        VALUES (gen_random_uuid(), :b, :n, :e, '["supplier"]'::jsonb, true, 0)
+                    """),
+                    {"b": business_id, "n": v_name, "e": v_email},
+                )
+                imported_parties += 1
+
+    # 4. JournalEntry mapping & import
+    if norm_entities & {"journalentry", "journalentries", "journal", "journals"}:
         res = provider(
             "GET",
             f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
@@ -754,15 +827,22 @@ def import_quickbooks(
                     {"b": business_id, "code": str(acc_ref), "name": str(acc_name)},
                 ).scalar_one_or_none()
                 if not acc_row:
-                    acc_row = db.execute(
-                        text("SELECT id FROM app.accounts WHERE business_id=:b LIMIT 1"),
-                        {"b": business_id},
-                    ).scalar_one()
+                    unmapped_accounts.append({
+                        "code": str(acc_ref or ""),
+                        "name": str(acc_name or ""),
+                        "journal_id": str(qb_id or ""),
+                    })
+                    if not dry_run:
+                        err_msg = (
+                            f"Unmapped QuickBooks account '{acc_name or acc_ref}' "
+                            f"in journal entry '{qb_id}'. Map accounts before importing."
+                        )
+                        raise DomainError("ERR_UNMAPPED_ACCOUNT", err_msg, 422)
 
                 debit = amount if posting_type == "debit" else Decimal("0")
                 credit = amount if posting_type == "credit" else Decimal("0")
                 journal_lines.append({
-                    "account_id": str(acc_row),
+                    "account_id": str(acc_row) if acc_row else None,
                     "position": idx + 1,
                     "debit": f"{debit:.2f}",
                     "credit": f"{credit:.2f}",
@@ -801,7 +881,7 @@ def import_quickbooks(
                 )
                 imported_journals += 1
 
-    if not dry_run and (imported_accounts > 0 or imported_journals > 0):
+    if not dry_run and (imported_accounts > 0 or imported_parties > 0 or imported_journals > 0):
         batch_id = uuid4()
         db.execute(
             text("""
@@ -824,10 +904,12 @@ def import_quickbooks(
                 "source": f"quickbooks:{realm_id}",
                 "results": json.dumps({
                     "imported_accounts": imported_accounts,
+                    "imported_parties": imported_parties,
                     "imported_journals": imported_journals,
+                    "skipped_duplicates": skipped_duplicates,
                 }),
                 "expected_trial": json.dumps({
-                    "status": "reconciled",
+                    "status": "reconciled" if len(unmapped_accounts) == 0 else "unmapped_accounts",
                     "debit": str(total_debit),
                     "credit": str(total_credit),
                 }),
@@ -839,10 +921,12 @@ def import_quickbooks(
     return {
         "status": "dry_run" if dry_run else "imported",
         "imported_accounts": imported_accounts,
+        "imported_parties": imported_parties,
         "imported_journals": imported_journals,
         "skipped_duplicates": skipped_duplicates,
+        "unmapped_accounts": unmapped_accounts,
         "total_debit": str(total_debit),
         "total_credit": str(total_credit),
-        "reconciled": total_debit == total_credit,
+        "reconciled": total_debit == total_credit and len(unmapped_accounts) == 0,
         "cutover_date": str(effective_cutover),
     }

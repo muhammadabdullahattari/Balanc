@@ -244,13 +244,20 @@ The new execution flag defaults off and the existing retention cohort gate appli
   - Railway `/health/ready` returned HTTP 200 with schema revision 0030 verified.
   - Vercel reverse proxy `https://balanc-amber.vercel.app/api/v1/auth/me` returns HTTP 200 with secure host-prefixed cookies (`__Host-lp_csrf`, `__Host-lp_access`, `__Host-lp_refresh`).
   - Independent authentication verified for both test roles: `owner@balanc.local` and `accountant@balanc.local`.
-- Stripe subscription lifecycle & entitlement enforcement (P2-C) implemented:
+- Stripe subscription lifecycle & dynamic grace enforcement (P2-C) implemented:
   - Webhook event-to-entitlement engine: handles `checkout.session.completed`, `customer.subscription.created/updated` (including 3-day grace period for `past_due`), `customer.subscription.deleted`, and `charge.refunded`.
-  - Entitlement enforcement in `authorize()` verifies `paid_access` from provider connection snapshots, allowing financial operations for active subscribers while preserving read-only export access (`retained_action`) for expired accounts.
+  - Entitlement enforcement in `authorize()` dynamically checks `time.time() < grace_until` for past-due subscriptions. Once expired, write/posting access is revoked with `ERR_ENTITLEMENT` while preserving read-only export access (`retained_action`) and privacy reviews.
   - Subscription management endpoints implemented: `GET /businesses/{business_id}/billing/subscription`, `POST /businesses/{business_id}/billing/subscription/plan`, and `POST /businesses/{business_id}/billing/subscription/cancel`.
-- Reviewed QuickBooks Online import (P2-D) implemented:
-  - `POST /businesses/{business_id}/quickbooks/import` with `cutover_date`, `entities` (Account, JournalEntry), and `dry_run` support.
+- Reviewed QuickBooks Online import & account mapping hardening (P2-D) implemented:
+  - `POST /businesses/{business_id}/quickbooks/import` with `cutover_date`, `entities` (`Account`, `Customer`, `Vendor`, `JournalEntry`), and `dry_run` support.
+  - Hardened account resolution: completely eliminated silent fallback to arbitrary accounts (`SELECT id FROM app.accounts ... LIMIT 1`). Unmapped accounts trigger `ERR_UNMAPPED_ACCOUNT` (HTTP 422) during live import and are collected into `unmapped_accounts` in dry run mode for accountant review before posting.
+  - Expanded entity coverage: synchronizes `Customer` and `Vendor` entities from QuickBooks to `app.parties` with `['customer']` and `['supplier']` roles respectively.
   - Deterministic deduplication via `qb:{realm_id}:journal:{qb_id}` idempotency keys prevents duplicate general ledger entries.
   - Balanced posting via `app.post_journal` and recording into `app.import_batches`.
 - Hosted Pilot Cohort Rollout enabled (P2-A, P2-E, P2-G):
   - Updated environment gates in `config.py`, `retention.py`, `audit_access.py`, and `tenancy/router.py` to allow the pre-seeded workspace **Acme Test Corp** (`42132f25-4948-45c0-9142-8def637b0a9c`) and any configured pilot tenants to access P2 workflows (projects, prepaids, micro-close, reconciliation preview, cash insights, retention controls, and scoped auditor grants) in staging/production.
+- Screen & Deployment Artifact Diagnostics:
+  - **Vercel Production Deployment**: Confirmed active and Ready (`balanc-amber.vercel.app` / `balanc-bf79tycgh-abd-c462.vercel.app`).
+  - **Railway Historical 503 Resolution**: Earlier `503 ERR_DEPENDENCY` on deployment `4bc08250` was resolved via automated startup migration (0001–0030) and dynamic `postgres` superuser adaptation. Live Railway `/health/ready` confirmed HTTP 200.
+  - **Vercel Environment Variable Warning**: Switched `VITE_STRIPE_PUBLISHABLE_KEY` from `Secret` to `Config`, aligning with its public client browser role.
+  - **GitHub Actions CI ResourceClosedError Resolution**: Fixed premature connection closure in Alembic `backend/migrations/env.py` by maintaining the engine connection open during `context.run_migrations()`. All 7 provider integration tests, ruff, mypy, and frontend checks pass cleanly.
