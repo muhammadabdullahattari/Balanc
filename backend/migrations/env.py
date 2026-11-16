@@ -16,7 +16,7 @@ if config.config_file_name:
     fileConfig(config.config_file_name)
 
 existing_conn = config.attributes.get("connection")
-if existing_conn is not None:
+if existing_conn is not None and not getattr(existing_conn, "closed", False):
     runtime_role = config.attributes.get("runtime_role", "postgres")
     role_exists = existing_conn.execute(
         text("SELECT 1 FROM pg_roles WHERE rolname = :role"),

@@ -1,5 +1,6 @@
 """Evaluate a single saved rule against reviewed entries without posting."""
 
+import datetime
 import hashlib
 import json
 from datetime import date
@@ -17,6 +18,59 @@ from ledgerpilot.shared import operations as ops
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.tenancy.models import Business
 from ledgerpilot.tenancy.service import get_business
+
+
+def get_workspace_posting_control(db: Session, bid: UUID) -> dict[str, Any]:
+    raw = db.execute(
+        text(
+            "SELECT details FROM app.provider_connections "
+            "WHERE business_id=:b AND provider='controlled_posting'"
+        ),
+        {"b": bid},
+    ).scalar_one_or_none()
+    if not raw:
+        return {"paused": False, "reason": None, "updated_at": None, "updated_by": None}
+    data = raw if isinstance(raw, dict) else json.loads(raw)
+    return {
+        "paused": bool(data.get("paused")),
+        "reason": data.get("reason"),
+        "updated_at": data.get("updated_at"),
+        "updated_by": data.get("updated_by"),
+    }
+
+
+def set_workspace_posting_control(
+    db: Session,
+    bid: UUID,
+    who_id: UUID,
+    paused: bool,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    now_iso = datetime.datetime.now(datetime.UTC).isoformat()
+    details = {
+        "paused": paused,
+        "reason": reason,
+        "updated_at": now_iso,
+        "updated_by": str(who_id),
+    }
+    db.execute(
+        text("""
+            INSERT INTO app.provider_connections (business_id, provider, details)
+            VALUES (:b, 'controlled_posting', CAST(:d AS jsonb))
+            ON CONFLICT (business_id, provider) DO UPDATE SET details = CAST(:d AS jsonb)
+        """),
+        {"b": bid, "d": json.dumps(details)},
+    )
+    record(
+        db,
+        who_id,
+        "workspace.auto_posting_paused" if paused else "workspace.auto_posting_resumed",
+        bid,
+        bid,
+        {"reason": reason, "updated_at": now_iso},
+    )
+    return details
+
 
 
 def evaluate(
@@ -103,14 +157,28 @@ def controlled_posting(
     who_id: UUID,
     rule: BankRule,
     max_amount: Decimal,
+    expected_rule_version: int | None = None,
+    start: date | None = None,
+    end: date | None = None,
     exclusions: list[str] | None = None,
     paused: bool = False,
     dry_run: bool = True,
 ) -> dict[str, Any]:
-    if paused:
+    workspace_ctrl = get_workspace_posting_control(db, bid)
+    if workspace_ctrl.get("paused"):
+        if not dry_run:
+            reason = workspace_ctrl.get("reason") or "Paused by operator"
+            raise DomainError(
+                "ERR_PAUSED",
+                f"Controlled auto-posting is durably paused for this workspace: {reason}.",
+                409,
+            )
         return {
-            "status": "paused",
+            "status": "workspace_paused",
             "rule_id": rule.id,
+            "rule_version": rule.version,
+            "rule_active": rule.active,
+            "reason": workspace_ctrl.get("reason"),
             "posted_count": 0,
             "eligible_count": 0,
             "flagged_amount_count": 0,
@@ -120,25 +188,61 @@ def controlled_posting(
             "posted_row_ids": [],
         }
 
+    if paused:
+        return {
+            "status": "paused",
+            "rule_id": rule.id,
+            "rule_version": rule.version,
+            "rule_active": rule.active,
+            "posted_count": 0,
+            "eligible_count": 0,
+            "flagged_amount_count": 0,
+            "flagged_exclusion_count": 0,
+            "flagged_amount_row_ids": [],
+            "flagged_exclusion_row_ids": [],
+            "posted_row_ids": [],
+        }
+
+    if expected_rule_version is not None and rule.version != expected_rule_version:
+        raise DomainError(
+            "ERR_VERSION",
+            f"Rule version mismatch (expected {expected_rule_version}, current {rule.version}).",
+            409,
+        )
+
+    if not dry_run and expected_rule_version is None:
+        raise DomainError(
+            "ERR_VERSION_REQUIRED",
+            "Live automated posting requires expected_rule_version matching reviewed rule version.",
+            422,
+        )
+
+    if (not rule.active or not rule.preview_hash) and not dry_run:
+        raise DomainError(
+            "ERR_RULE_INACTIVE",
+            "Rule must be active and approved before automated posting can execute.",
+            409,
+        )
+
     target = ops.account(db, bid, rule.account_id, {"income", "expense"}, plain=True)
     limit_amount = ops.money(format(max_amount, "f"), get_business(db, bid))
     active_exclusions = [
         e.lower().strip() for e in (exclusions or ["payroll", "tax", "wire", "loan", "draw"])
     ]
 
-    candidate_rows = list(
-        db.scalars(
-            select(BankRow)
-            .where(
-                BankRow.business_id == bid,
-                BankRow.state == "imported",
-                BankRow.description.icontains(rule.contains, autoescape=True),
-                BankRow.amount != 0,
-            )
-            .order_by(BankRow.accounting_date, BankRow.id)
-            .limit(100)
-        )
+    stmt = select(BankRow).where(
+        BankRow.business_id == bid,
+        BankRow.state == "imported",
+        BankRow.description.icontains(rule.contains, autoescape=True),
+        BankRow.amount != 0,
     )
+    if start is not None:
+        stmt = stmt.where(BankRow.accounting_date >= start)
+    if end is not None:
+        stmt = stmt.where(BankRow.accounting_date <= end)
+    stmt = stmt.order_by(BankRow.accounting_date, BankRow.id).limit(100)
+
+    candidate_rows = list(db.scalars(stmt))
 
     eligible_rows: list[BankRow] = []
     flagged_amount: list[UUID] = []
@@ -218,12 +322,30 @@ def controlled_posting(
                 "bank.auto_posted",
                 bid,
                 row.id,
-                {"rule_id": str(rule.id), "journal_id": str(journal_id), "amount": str(row.amount)},
+                {
+                    "rule_id": str(rule.id),
+                    "rule_version": rule.version,
+                    "journal_id": str(journal_id),
+                    "amount": str(row.amount),
+                    "scope": {
+                        "start": str(start) if start else None,
+                        "end": str(end) if end else None,
+                        "max_amount": str(limit_amount),
+                    },
+                    "exclusions": active_exclusions,
+                },
             )
 
     return {
         "status": "dry_run" if dry_run else "posted",
         "rule_id": rule.id,
+        "rule_version": rule.version,
+        "rule_active": rule.active,
+        "scope": {
+            "start": str(start) if start else None,
+            "end": str(end) if end else None,
+            "max_amount": str(limit_amount),
+        },
         "eligible_count": len(eligible_rows),
         "posted_count": len(posted_ids),
         "flagged_amount_count": len(flagged_amount),

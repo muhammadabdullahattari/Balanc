@@ -6,7 +6,8 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import Field, field_validator, model_validator
+from pydantic import Field, ValidationInfo, field_validator, model_validator
+from pydantic_core import PydanticCustomError
 
 from ledgerpilot.shared.schemas import Schema
 
@@ -17,8 +18,9 @@ class AccountCreate(Schema):
     kind: Literal["asset", "liability", "equity", "income", "expense"]
     control: Literal["ar", "ap", "loan_receivable", "loan_payable", "tax", "clearing"] | None = None
 
-    @model_validator(mode="after")
-    def compatible_control(self) -> "AccountCreate":
+    @field_validator("control")
+    @classmethod
+    def compatible_control(cls, control: str | None, info: ValidationInfo) -> str | None:
         kinds = {
             "ar": {"asset"},
             "ap": {"liability"},
@@ -27,9 +29,11 @@ class AccountCreate(Schema):
             "tax": {"asset", "liability"},
             "clearing": {"asset"},
         }
-        if self.control and self.kind not in kinds[self.control]:
-            raise ValueError("Control account kind is incompatible")
-        return self
+        if control and "kind" in info.data and info.data["kind"] not in kinds[control]:
+            raise PydanticCustomError(
+                "account_control_kind", "Choose a control purpose that matches the classification."
+            )
+        return control
 
 
 class AccountUpdate(Schema):

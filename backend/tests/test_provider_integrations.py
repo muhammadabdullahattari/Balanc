@@ -577,6 +577,136 @@ def test_quickbooks_full_entity_scope_import() -> None:
         assert res["reconciled"] is True
 
 
+def test_quickbooks_supplier_settlement_and_pagination() -> None:
+    from typing import Any
+    from unittest.mock import patch
+
+    from cryptography.fernet import Fernet
+    from pydantic import SecretStr
+
+    from ledgerpilot.provider_integrations import import_quickbooks
+
+    db = MagicMock()
+    business_id = uuid4()
+    identity = MagicMock()
+    request = MagicMock()
+
+    key = Fernet.generate_key()
+    cipher = Fernet(key)
+    tokens_json = json.dumps({"access_token": "qb_token_test", "refresh_token": "qb_refresh"})
+    encrypted_tokens = cipher.encrypt(tokens_json.encode()).decode()
+
+    settings = MagicMock(spec=Settings)
+    settings.token_encryption_key = key.decode()
+    settings.mfa_encryption_key = SecretStr(key.decode())
+    request.app.state.settings = settings
+
+    qb_connection = {
+        "tokens": encrypted_tokens,
+        "realm_id": "123456",
+    }
+
+    def fake_provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("params", {}).get("query", "")
+        if "BillPayment" in query:
+            return {
+                "QueryResponse": {
+                    "BillPayment": [
+                        {
+                            "Id": "bp1",
+                            "DocNumber": "BP-7001",
+                            "TotalAmt": 350.0,
+                            "TxnDate": "2026-11-16",
+                            "VendorRef": {"name": "Office Supplies Co"},
+                        }
+                    ]
+                }
+            }
+        if "VendorCredit" in query:
+            return {
+                "QueryResponse": {
+                    "VendorCredit": [
+                        {
+                            "Id": "vc1",
+                            "DocNumber": "VC-8001",
+                            "TotalAmt": 75.0,
+                            "TxnDate": "2026-11-16",
+                            "VendorRef": {"name": "Office Supplies Co"},
+                        }
+                    ]
+                }
+            }
+        return {"QueryResponse": {}}
+
+    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
+         patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider), \
+         patch("ledgerpilot.provider_integrations.authorize"):
+
+        fake_acc_id = uuid4()
+        fake_party_id = uuid4()
+        fake_journal_id = uuid4()
+
+        db.execute.return_value.scalar_one_or_none.side_effect = [
+            None,  # BillPayment not posted
+            fake_party_id,  # Vendor party exists
+            fake_acc_id,  # AP account
+            fake_acc_id,  # Bank account
+            None,  # VendorCredit not posted
+            fake_party_id,  # Vendor party exists
+            fake_acc_id,  # AP account
+            fake_acc_id,  # Expense account
+            None,  # orig_id
+        ]
+        db.execute.return_value.scalar_one.return_value = fake_journal_id
+        db.execute.return_value.mappings.return_value.one.return_value = {
+            "version": 1,
+            "currency": "USD",
+        }
+
+        res = import_quickbooks(
+            business_id=business_id,
+            request=request,
+            identity=identity,
+            db=db,
+            entities=["BillPayment", "VendorCredit"],
+            dry_run=False,
+        )
+        assert res["status"] == "imported"
+        assert res["imported_bill_payments"] == 1
+        assert res["imported_vendor_credits"] == 1
+        assert res["reconciled"] is True
+
+
+def test_quickbooks_pagination_and_oversized_rejection() -> None:
+    calls = []
+
+    def paged_provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        query = kwargs.get("params", {}).get("query", "")
+        calls.append(query)
+        if "STARTPOSITION 1" in query:
+            return {"QueryResponse": {"Invoice": [{"Id": str(i)} for i in range(500)]}}
+        if "STARTPOSITION 501" in query:
+            return {"QueryResponse": {"Invoice": [{"Id": str(i + 500)} for i in range(120)]}}
+        return {"QueryResponse": {}}
+
+    from ledgerpilot.provider_integrations import fetch_qb_pages
+
+    records = fetch_qb_pages(paged_provider, "123", "token", "Invoice", page_size=500)
+    assert len(records) == 620
+    assert len(calls) == 2
+
+    # Oversized rejection
+    def oversized_provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+        return {"QueryResponse": {"Invoice": [{"Id": str(i)} for i in range(500)]}}
+
+    with pytest.raises(DomainError) as exc_info:
+        fetch_qb_pages(
+            oversized_provider, "123", "token", "Invoice", page_size=500, max_records=900
+        )
+    assert exc_info.value.code == "ERR_IMPORT_OVERSIZED"
+
+
+
 
 
 

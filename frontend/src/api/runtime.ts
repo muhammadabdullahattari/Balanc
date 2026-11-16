@@ -95,13 +95,17 @@ export function clearSession() {
 function friendlyError(code?: string, message?: string) {
   const messages: Record<string, string> = {
     ERR_AUTH:
-      "We couldn't verify your sign-in. Check your email, password and authenticator or recovery code, then try again.",
+      "We couldn't verify your sign-in. Check your email and password, or create an account if you're new to LedgerPilot.",
     ERR_MFA_CODE:
       "The authenticator or recovery code is incorrect, expired or already used. Try a fresh code.",
     ERR_MFA_REQUIRED:
       "Enter your authenticator or recovery code, then try signing in again.",
     ERR_LINK_EXPIRED:
       "This code is incorrect, expired or replaced. Request a new code and use the newest email.",
+    ERR_DEPENDENCY:
+      "LedgerPilot is temporarily unavailable. Wait a moment and try again. If the problem continues, share the support reference with support.",
+    ERR_AUTH_BUSY: "Sign-in is temporarily busy. Wait a moment and try again.",
+    ERR_VALIDATION: "Review the details below and try again.",
     ERR_CSRF: "Your secure session changed. Refresh this page and try again.",
     ERR_RATE_LIMIT: "Too many attempts. Please wait before trying again.",
     ERR_PASSWORD:

@@ -17,6 +17,8 @@ export function QuickBooksImport() {
     "Bill",
     "Payment",
     "CreditMemo",
+    "BillPayment",
+    "VendorCredit",
   ]);
 
   const previewQuery = useQuery({
@@ -76,6 +78,8 @@ export function QuickBooksImport() {
         imported_bills?: number;
         imported_payments?: number;
         imported_credits?: number;
+        imported_bill_payments?: number;
+        imported_vendor_credits?: number;
         skipped_duplicates?: number;
         unmapped_accounts?: Array<{
           code?: string;
@@ -98,6 +102,8 @@ export function QuickBooksImport() {
         imported_bills?: number;
         imported_payments?: number;
         imported_credits?: number;
+        imported_bill_payments?: number;
+        imported_vendor_credits?: number;
         skipped_duplicates?: number;
         reconciled?: boolean;
       }
@@ -145,8 +151,10 @@ export function QuickBooksImport() {
           ["JournalEntry", "Journal Entries"],
           ["Invoice", "Invoices"],
           ["Bill", "Bills"],
-          ["Payment", "Payments"],
-          ["CreditMemo", "Credit Memos"],
+          ["Payment", "Payments (Customer Receipts)"],
+          ["CreditMemo", "Credit Memos (Customer Credits)"],
+          ["BillPayment", "Bill Payments (Supplier Settlement)"],
+          ["VendorCredit", "Vendor Credits (Applied Credits)"],
         ].map(([key, label]) => (
           <label
             key={key}
@@ -245,8 +253,10 @@ export function QuickBooksImport() {
             {dryRunData.imported_journals || 0} journals,{" "}
             {dryRunData.imported_invoices || 0} invoices,{" "}
             {dryRunData.imported_bills || 0} bills,{" "}
-            {dryRunData.imported_payments || 0} payments,{" "}
-            {dryRunData.imported_credits || 0} credit memos. (
+            {dryRunData.imported_payments || 0} customer payments,{" "}
+            {dryRunData.imported_credits || 0} customer credits,{" "}
+            {dryRunData.imported_bill_payments || 0} supplier bill payments,{" "}
+            {dryRunData.imported_vendor_credits || 0} vendor credits. (
             {dryRunData.skipped_duplicates || 0} existing duplicates skipped).
           </p>
 

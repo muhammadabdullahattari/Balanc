@@ -79,6 +79,8 @@ def run_migrations_and_seed_if_needed(engine: Engine, settings: Settings) -> Non
                 flush=True,
             )
             return
+        finally:
+            alembic_cfg.attributes.pop("connection", None)
 
     # 2. Seed test roles and workspace
     with engine.begin() as conn:

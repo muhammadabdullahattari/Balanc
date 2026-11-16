@@ -146,7 +146,7 @@ class FoundationMiddleware:
                 )
                 await reject(
                     "ERR_DEPENDENCY",
-                    "Request admission is temporarily unavailable. Try again shortly.",
+                    "LedgerPilot is temporarily unavailable. Wait a moment and try again.",
                     503,
                 )
                 return

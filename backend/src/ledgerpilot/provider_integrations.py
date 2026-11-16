@@ -661,6 +661,46 @@ def cancel_subscription(
         return {"status": res.get("status", "active"), "cancel_at_period_end": True}
 
 
+def fetch_qb_pages(
+    provider_fn: Any,
+    realm_id: str,
+    access_token: str,
+    entity: str,
+    where_clause: str = "",
+    page_size: int = 500,
+    max_records: int = 5000,
+) -> list[dict[str, Any]]:
+    records: list[dict[str, Any]] = []
+    start = 1
+    while True:
+        where = f" {where_clause}" if where_clause else ""
+        query = (
+            f"SELECT * FROM {entity}{where} ORDERBY Id STARTPOSITION {start} "
+            f"MAXRESULTS {page_size}"
+        )
+        res = provider_fn(
+            "GET",
+            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
+            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+            params={"query": query},
+        )
+        batch = res.get("QueryResponse", {}).get(entity, [])
+        if not batch:
+            break
+        records.extend(batch)
+        if len(records) > max_records:
+            raise DomainError(
+                "ERR_IMPORT_OVERSIZED",
+                f"QuickBooks {entity} records ({len(records)}) exceed the supported limit "
+                f"({max_records}). Narrow cutover date to prevent partial import.",
+                422,
+            )
+        if len(batch) < page_size:
+            break
+        start += len(batch)
+    return records
+
+
 @router.post("/businesses/{business_id}/quickbooks/import")
 def import_quickbooks(
     business_id: UUID,
@@ -690,7 +730,9 @@ def import_quickbooks(
         "invoice",
         "bill",
         "payment",
+        "billpayment",
         "creditmemo",
+        "vendorcredit",
     ]
     norm_entities = {e.lower() for e in (entities or default_entities)}
 
@@ -700,7 +742,9 @@ def import_quickbooks(
     imported_invoices = 0
     imported_bills = 0
     imported_payments = 0
+    imported_bill_payments = 0
     imported_credits = 0
+    imported_vendor_credits = 0
     skipped_duplicates = 0
     unmapped_accounts: list[dict[str, str]] = []
     total_debit = Decimal("0")
@@ -708,13 +752,9 @@ def import_quickbooks(
 
     # 1. Accounts mapping & import
     if norm_entities & {"account", "accounts"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Account WHERE Active=true ORDERBY Id MAXRESULTS 1000"},
+        qb_accounts = fetch_qb_pages(
+            provider, realm_id, access_token, "Account", where_clause="WHERE Active=true"
         )
-        qb_accounts = res.get("QueryResponse", {}).get("Account", [])
         for qb_acc in qb_accounts:
             code = str(qb_acc.get("AcctNum") or qb_acc.get("Id") or "").strip()
             name = str(qb_acc.get("Name") or f"QB Account {code}").strip()
@@ -755,13 +795,9 @@ def import_quickbooks(
 
     # 2. Customers mapping & import
     if norm_entities & {"customer", "customers"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Customer WHERE Active=true MAXRESULTS 1000"},
+        qb_customers = fetch_qb_pages(
+            provider, realm_id, access_token, "Customer", where_clause="WHERE Active=true"
         )
-        qb_customers = res.get("QueryResponse", {}).get("Customer", [])
         for qb_cust in qb_customers:
             raw_c_name = (
                 qb_cust.get("DisplayName")
@@ -790,13 +826,9 @@ def import_quickbooks(
 
     # 3. Vendors mapping & import
     if norm_entities & {"vendor", "vendors", "supplier", "suppliers"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Vendor WHERE Active=true MAXRESULTS 1000"},
+        qb_vendors = fetch_qb_pages(
+            provider, realm_id, access_token, "Vendor", where_clause="WHERE Active=true"
         )
-        qb_vendors = res.get("QueryResponse", {}).get("Vendor", [])
         for qb_vend in qb_vendors:
             raw_v_name = (
                 qb_vend.get("DisplayName")
@@ -825,13 +857,7 @@ def import_quickbooks(
 
     # 4. JournalEntry mapping & import
     if norm_entities & {"journalentry", "journalentries", "journal", "journals"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM JournalEntry ORDERBY Id MAXRESULTS 500"},
-        )
-        qb_journals = res.get("QueryResponse", {}).get("JournalEntry", [])
+        qb_journals = fetch_qb_pages(provider, realm_id, access_token, "JournalEntry")
         for entry in qb_journals:
             qb_id = entry.get("Id")
             idempotency_key = f"qb:{realm_id}:journal:{qb_id}"
@@ -928,13 +954,7 @@ def import_quickbooks(
 
     # 5. Invoices mapping & import
     if norm_entities & {"invoice", "invoices"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Invoice ORDERBY Id MAXRESULTS 500"},
-        )
-        qb_invoices = res.get("QueryResponse", {}).get("Invoice", [])
+        qb_invoices = fetch_qb_pages(provider, realm_id, access_token, "Invoice")
         for inv in qb_invoices:
             qb_id = inv.get("Id")
             idempotency_key = f"qb:{realm_id}:invoice:{qb_id}"
@@ -1072,13 +1092,7 @@ def import_quickbooks(
 
     # 6. Bills mapping & import
     if norm_entities & {"bill", "bills"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Bill ORDERBY Id MAXRESULTS 500"},
-        )
-        qb_bills = res.get("QueryResponse", {}).get("Bill", [])
+        qb_bills = fetch_qb_pages(provider, realm_id, access_token, "Bill")
         for b_entry in qb_bills:
             qb_id = b_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:bill:{qb_id}"
@@ -1216,13 +1230,7 @@ def import_quickbooks(
 
     # 7. Payments mapping & import
     if norm_entities & {"payment", "payments"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM Payment ORDERBY Id MAXRESULTS 500"},
-        )
-        qb_payments = res.get("QueryResponse", {}).get("Payment", [])
+        qb_payments = fetch_qb_pages(provider, realm_id, access_token, "Payment")
         for p_entry in qb_payments:
             qb_id = p_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:payment:{qb_id}"
@@ -1359,13 +1367,7 @@ def import_quickbooks(
 
     # 8. CreditMemo mapping & import
     if norm_entities & {"creditmemo", "creditmemos", "credit_memo", "credit_memos"}:
-        res = provider(
-            "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
-            headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
-            params={"query": "SELECT * FROM CreditMemo ORDERBY Id MAXRESULTS 500"},
-        )
-        qb_credits = res.get("QueryResponse", {}).get("CreditMemo", [])
+        qb_credits = fetch_qb_pages(provider, realm_id, access_token, "CreditMemo")
         for c_entry in qb_credits:
             qb_id = c_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:credit:{qb_id}"
@@ -1476,7 +1478,6 @@ def import_quickbooks(
                     },
                 ).scalar_one()
                 doc_id = uuid4()
-                # Find an existing original invoice or create self-reference
                 orig_id = (
                     db.execute(
                         text("""
@@ -1513,6 +1514,289 @@ def import_quickbooks(
                 )
                 imported_credits += 1
 
+    # 9. BillPayment mapping & import (Supplier bill settlement)
+    if norm_entities & {"billpayment", "billpayments", "bill_payment", "bill_payments"}:
+        qb_bill_pmts = fetch_qb_pages(provider, realm_id, access_token, "BillPayment")
+        for bp in qb_bill_pmts:
+            qb_id = bp.get("Id")
+            idempotency_key = f"qb:{realm_id}:billpayment:{qb_id}"
+            already_posted = db.execute(
+                text("SELECT id FROM app.journals WHERE business_id=:b AND idempotency_key=:k"),
+                {"b": business_id, "k": idempotency_key},
+            ).scalar_one_or_none()
+            if already_posted:
+                skipped_duplicates += 1
+                continue
+
+            v_name = str((bp.get("VendorRef") or {}).get("name") or f"Vendor {qb_id}")[:160]
+            party_id = db.execute(
+                text("SELECT id FROM app.parties WHERE business_id=:b AND name=:n"),
+                {"b": business_id, "n": v_name},
+            ).scalar_one_or_none()
+            if not party_id and not dry_run:
+                party_id = uuid4()
+                db.execute(
+                    text("""
+                        INSERT INTO app.parties (
+                            id, business_id, name, email, roles, active, version
+                        )
+                        VALUES (:id, :b, :n, NULL, '["supplier"]'::jsonb, true, 0)
+                    """),
+                    {"id": party_id, "b": business_id, "n": v_name},
+                )
+            elif not party_id:
+                party_id = uuid4()
+
+            total_amt = Decimal(str(bp.get("TotalAmt", 0)))
+            txn_date = bp.get("TxnDate", str(effective_cutover))
+            doc_num = str(bp.get("DocNumber") or f"BP-QB-{qb_id}")[:80]
+
+            ap_acc = db.execute(
+                text("""
+                    SELECT id FROM app.accounts
+                    WHERE business_id=:b AND control='payable' LIMIT 1
+                """),
+                {"b": business_id},
+            ).scalar_one_or_none()
+            bank_acc = db.execute(
+                text("SELECT id FROM app.accounts WHERE business_id=:b AND control='bank' LIMIT 1"),
+                {"b": business_id},
+            ).scalar_one_or_none()
+            if not ap_acc or not bank_acc:
+                unmapped_accounts.append(
+                    {
+                        "code": "AP/Bank",
+                        "name": "Payable/Bank",
+                        "journal_id": str(qb_id),
+                    }
+                )
+                if not dry_run:
+                    err_msg = (
+                        f"Unmapped accounts payable or bank account for bill payment '{doc_num}'."
+                    )
+                    raise DomainError("ERR_UNMAPPED_ACCOUNT", err_msg, 422)
+
+            bp_lines = [
+                {
+                    "account_id": str(ap_acc),
+                    "position": 1,
+                    "debit": f"{total_amt:.2f}",
+                    "credit": "0.00",
+                },
+                {
+                    "account_id": str(bank_acc),
+                    "position": 2,
+                    "debit": "0.00",
+                    "credit": f"{total_amt:.2f}",
+                },
+            ]
+            total_debit += total_amt
+            total_credit += total_amt
+
+            if not dry_run and ap_acc and bank_acc:
+                b_row = (
+                    db.execute(
+                        text("SELECT version, currency FROM app.businesses WHERE id=:b FOR UPDATE"),
+                        {"b": business_id},
+                    )
+                    .mappings()
+                    .one()
+                )
+                fingerprint = hashlib.sha256(
+                    f"{idempotency_key}:{txn_date}:{total_amt}".encode()
+                ).hexdigest()
+                journal_id = db.execute(
+                    text("""
+                        SELECT app.post_journal(
+                            :b, :date, :memo, :currency, :key, :hash, :version,
+                            CAST(:lines AS jsonb), NULL
+                        )
+                    """),
+                    {
+                        "b": business_id,
+                        "date": txn_date,
+                        "memo": f"QuickBooks bill payment {doc_num}",
+                        "currency": b_row["currency"],
+                        "key": idempotency_key,
+                        "hash": fingerprint,
+                        "version": b_row["version"],
+                        "lines": json.dumps(bp_lines),
+                    },
+                ).scalar_one()
+                pmt_id = uuid4()
+                db.execute(
+                    text("""
+                        INSERT INTO app.payments (
+                            id, business_id, kind, party_id, accounting_date,
+                            bank_account_id, control_account_id, total, fee_amount,
+                            journal_id, allocations
+                        )
+                        VALUES (
+                            :id, :b, 'payment', :pid, :date,
+                            :bank, :ctrl, :tot, 0,
+                            :jid, '[]'::jsonb
+                        )
+                    """),
+                    {
+                        "id": pmt_id,
+                        "b": business_id,
+                        "pid": party_id,
+                        "date": txn_date,
+                        "bank": bank_acc,
+                        "ctrl": ap_acc,
+                        "tot": total_amt,
+                        "jid": journal_id,
+                    },
+                )
+                imported_bill_payments += 1
+
+    # 10. VendorCredit mapping & import (Applied vendor credits)
+    if norm_entities & {"vendorcredit", "vendorcredits", "vendor_credit", "vendor_credits"}:
+        qb_vendor_credits = fetch_qb_pages(provider, realm_id, access_token, "VendorCredit")
+        for vc in qb_vendor_credits:
+            qb_id = vc.get("Id")
+            idempotency_key = f"qb:{realm_id}:vendorcredit:{qb_id}"
+            already_posted = db.execute(
+                text("SELECT id FROM app.journals WHERE business_id=:b AND idempotency_key=:k"),
+                {"b": business_id, "k": idempotency_key},
+            ).scalar_one_or_none()
+            if already_posted:
+                skipped_duplicates += 1
+                continue
+
+            v_name = str((vc.get("VendorRef") or {}).get("name") or f"Vendor {qb_id}")[:160]
+            party_id = db.execute(
+                text("SELECT id FROM app.parties WHERE business_id=:b AND name=:n"),
+                {"b": business_id, "n": v_name},
+            ).scalar_one_or_none()
+            if not party_id and not dry_run:
+                party_id = uuid4()
+                db.execute(
+                    text("""
+                        INSERT INTO app.parties (
+                            id, business_id, name, email, roles, active, version
+                        )
+                        VALUES (:id, :b, :n, NULL, '["supplier"]'::jsonb, true, 0)
+                    """),
+                    {"id": party_id, "b": business_id, "n": v_name},
+                )
+            elif not party_id:
+                party_id = uuid4()
+
+            total_amt = Decimal(str(vc.get("TotalAmt", 0)))
+            txn_date = vc.get("TxnDate", str(effective_cutover))
+            doc_num = str(vc.get("DocNumber") or f"VC-QB-{qb_id}")[:80]
+
+            ap_acc = db.execute(
+                text("""
+                    SELECT id FROM app.accounts
+                    WHERE business_id=:b AND control='payable' LIMIT 1
+                """),
+                {"b": business_id},
+            ).scalar_one_or_none()
+            exp_acc = db.execute(
+                text("SELECT id FROM app.accounts WHERE business_id=:b AND kind='expense' LIMIT 1"),
+                {"b": business_id},
+            ).scalar_one_or_none()
+            if not ap_acc or not exp_acc:
+                unmapped_accounts.append(
+                    {
+                        "code": "AP/Expense",
+                        "name": "Payable/Expense",
+                        "journal_id": str(qb_id),
+                    }
+                )
+                if not dry_run:
+                    err_msg = (
+                        "Unmapped accounts payable or expense account for vendor credit "
+                        f"'{doc_num}'."
+                    )
+                    raise DomainError("ERR_UNMAPPED_ACCOUNT", err_msg, 422)
+
+            vc_lines = [
+                {
+                    "account_id": str(ap_acc),
+                    "position": 1,
+                    "debit": f"{total_amt:.2f}",
+                    "credit": "0.00",
+                },
+                {
+                    "account_id": str(exp_acc),
+                    "position": 2,
+                    "debit": "0.00",
+                    "credit": f"{total_amt:.2f}",
+                },
+            ]
+            total_debit += total_amt
+            total_credit += total_amt
+
+            if not dry_run and ap_acc and exp_acc:
+                b_row = (
+                    db.execute(
+                        text("SELECT version, currency FROM app.businesses WHERE id=:b FOR UPDATE"),
+                        {"b": business_id},
+                    )
+                    .mappings()
+                    .one()
+                )
+                fingerprint = hashlib.sha256(
+                    f"{idempotency_key}:{txn_date}:{total_amt}".encode()
+                ).hexdigest()
+                journal_id = db.execute(
+                    text("""
+                        SELECT app.post_journal(
+                            :b, :date, :memo, :currency, :key, :hash, :version,
+                            CAST(:lines AS jsonb), NULL
+                        )
+                    """),
+                    {
+                        "b": business_id,
+                        "date": txn_date,
+                        "memo": f"QuickBooks vendor credit {doc_num}",
+                        "currency": b_row["currency"],
+                        "key": idempotency_key,
+                        "hash": fingerprint,
+                        "version": b_row["version"],
+                        "lines": json.dumps(vc_lines),
+                    },
+                ).scalar_one()
+                doc_id = uuid4()
+                orig_id = (
+                    db.execute(
+                        text("""
+                            SELECT id FROM app.trade_documents
+                            WHERE business_id=:b AND party_id=:p LIMIT 1
+                        """),
+                        {"b": business_id, "p": party_id},
+                    ).scalar_one_or_none()
+                    or doc_id
+                )
+                db.execute(
+                    text("""
+                        INSERT INTO app.trade_documents (
+                            id, business_id, kind, number, party_id, accounting_date,
+                            due_date, control_account_id, journal_id, total, tax,
+                            lines, original_id, version
+                        )
+                        VALUES (
+                            :id, :b, 'vendor_credit', :num, :pid, :date,
+                            :date, :ctrl, :jid, :tot, 0, '[]'::jsonb, :orig, 0
+                        )
+                    """),
+                    {
+                        "id": doc_id,
+                        "b": business_id,
+                        "num": doc_num,
+                        "pid": party_id,
+                        "date": txn_date,
+                        "ctrl": ap_acc,
+                        "jid": journal_id,
+                        "tot": total_amt,
+                        "orig": orig_id,
+                    },
+                )
+                imported_vendor_credits += 1
+
     total_imported_entities = (
         imported_accounts
         + imported_parties
@@ -1521,6 +1805,8 @@ def import_quickbooks(
         + imported_bills
         + imported_payments
         + imported_credits
+        + imported_bill_payments
+        + imported_vendor_credits
     )
     if not dry_run and total_imported_entities > 0:
         batch_id = uuid4()
@@ -1552,6 +1838,8 @@ def import_quickbooks(
                         "imported_bills": imported_bills,
                         "imported_payments": imported_payments,
                         "imported_credits": imported_credits,
+                        "imported_bill_payments": imported_bill_payments,
+                        "imported_vendor_credits": imported_vendor_credits,
                         "skipped_duplicates": skipped_duplicates,
                     }
                 ),
@@ -1578,6 +1866,8 @@ def import_quickbooks(
         "imported_bills": imported_bills,
         "imported_payments": imported_payments,
         "imported_credits": imported_credits,
+        "imported_bill_payments": imported_bill_payments,
+        "imported_vendor_credits": imported_vendor_credits,
         "skipped_duplicates": skipped_duplicates,
         "unmapped_accounts": unmapped_accounts,
         "total_debit": str(total_debit),

@@ -344,6 +344,42 @@ def shadow_evaluation(
     return shadow.evaluate(db, business_id, rule(db, business_id, rule_id), start, end, max_amount)
 
 
+@router.get(
+    "/bank-rules/controlled-posting/control",
+    response_model=dict[str, Any],
+)
+def get_controlled_posting_control(
+    business_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner", "accountant"})
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
+    return shadow.get_workspace_posting_control(db, business_id)
+
+
+@router.post(
+    "/bank-rules/controlled-posting/pause",
+    response_model=dict[str, Any],
+)
+def set_controlled_posting_pause(
+    business_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    paused: bool = True,
+    reason: str | None = None,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner", "accountant"})
+    if not request.app.state.settings.allows_p2_insights(business_id):
+        raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
+    return shadow.set_workspace_posting_control(
+        db, business_id, identity.user.id, paused=paused, reason=reason
+    )
+
+
 @router.post(
     "/bank-rules/{rule_id}/controlled-posting",
     response_model=dict[str, Any],
@@ -354,6 +390,9 @@ def rule_controlled_posting(
     request: Request,
     identity: Identity,
     db: DB,
+    expected_rule_version: int | None = None,
+    start: date | None = None,
+    end: date | None = None,
     max_amount: Annotated[
         Decimal, Query(gt=0, le=1000000, max_digits=13, decimal_places=6)
     ] = Decimal(500),
@@ -370,6 +409,9 @@ def rule_controlled_posting(
         identity.user.id,
         rule(db, business_id, rule_id),
         max_amount,
+        expected_rule_version=expected_rule_version,
+        start=start,
+        end=end,
         exclusions=exclusions,
         paused=paused,
         dry_run=dry_run,

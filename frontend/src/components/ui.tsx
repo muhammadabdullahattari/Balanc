@@ -133,16 +133,24 @@ export function ErrorNotice({
         {error instanceof Error ? error.message : "Something went wrong."}
         {error instanceof ApiError && error.fields?.length ? (
           <ul>
-            {error.fields.map((field, i) => (
-              <li key={i}>
-                Check{" "}
-                {field.location
-                  .filter((p) => p !== "body" && p !== "query")
-                  .join(" / ")
-                  .replaceAll("_", " ")}
-                : {validationMessage(field.type)}
-              </li>
-            ))}
+            {error.fields.map((field, i) => {
+              const path = field.location
+                .filter(
+                  (part) =>
+                    part !== "body" && part !== "query" && part !== "path",
+                )
+                .join(" / ");
+              const label =
+                path === "control"
+                  ? "Control account purpose"
+                  : path.replaceAll("_", " ");
+              return (
+                <li key={i}>
+                  {label && <strong>{label}: </strong>}
+                  {validationMessage(field.type)}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
         {error instanceof ApiError && error.requestId && (
@@ -409,7 +417,9 @@ function validationMessage(type: string) {
     string_too_short: "This value is too short.",
     string_too_long: "This value is too long.",
     string_pattern_mismatch: "Use the requested format.",
-    value_error: "Check this value.",
+    account_control_kind:
+      "Choose a control purpose that matches the classification, or select Ordinary account.",
+    value_error: "Review the values entered together and try again.",
     extra_forbidden: "Refresh this form and try again.",
     int_parsing: "Enter a whole number.",
   };

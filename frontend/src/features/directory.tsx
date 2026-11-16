@@ -19,10 +19,30 @@ import {
 import { useBusiness, today } from "./context";
 import type { components } from "../api/generated/schema";
 
+type AccountKind = components["schemas"]["AccountCreate"]["kind"];
+
+const accountControls: Record<AccountKind, readonly string[]> = {
+  asset: ["ar", "loan_receivable", "tax", "clearing"],
+  liability: ["ap", "loan_payable", "tax"],
+  equity: [],
+  income: [],
+  expense: [],
+};
+const controlLabels: Record<string, string> = {
+  ar: "Accounts receivable",
+  ap: "Accounts payable",
+  loan_receivable: "Loans receivable",
+  loan_payable: "Loans payable",
+  tax: "Tax",
+  clearing: "Clearing",
+};
+
 export function Accounts() {
   const b = useBusiness();
   const [cursor, setCursor] = useState<string | undefined>();
   const [open, setOpen] = useState(false);
+  const [kind, setKind] = useState<AccountKind>("asset");
+  const [control, setControl] = useState("");
   const accounts = useQuery({
     queryKey: [...keys.business(b.id), "accounts", cursor],
     queryFn: ({ signal }) =>
@@ -62,7 +82,14 @@ export function Accounts() {
         eyebrow="CHART OF ACCOUNTS"
         description="Give your books a structure that makes sense for your business."
         actions={
-          <Button onClick={() => setOpen(true)}>
+          <Button
+            onClick={() => {
+              create.reset();
+              setKind("asset");
+              setControl("");
+              setOpen(true);
+            }}
+          >
             <Plus size={16} />
             New account
           </Button>
@@ -140,26 +167,45 @@ export function Accounts() {
             </Field>
           </div>
           <Field label="Classification">
-            <select name="kind">
-              {["asset", "liability", "equity", "income", "expense"].map(
-                (k) => (
-                  <option key={k}>{k}</option>
-                ),
-              )}
+            <select
+              name="kind"
+              value={kind}
+              onChange={(event) => {
+                const next = event.currentTarget.value as AccountKind;
+                setKind(next);
+                if (!accountControls[next].includes(control)) setControl("");
+                create.reset();
+              }}
+            >
+              {(Object.keys(accountControls) as AccountKind[]).map((value) => (
+                <option key={value} value={value}>
+                  {value[0].toUpperCase() + value.slice(1)}
+                </option>
+              ))}
             </select>
           </Field>
-          <Field label="Control account purpose">
-            <select name="control">
+          <Field
+            label="Control account purpose"
+            hint={
+              accountControls[kind].length
+                ? "Choose a purpose only if this account tracks a specific balance."
+                : "This classification uses an ordinary account."
+            }
+          >
+            <select
+              name="control"
+              value={control}
+              disabled={!accountControls[kind].length}
+              onChange={(event) => {
+                setControl(event.currentTarget.value);
+                create.reset();
+              }}
+            >
               <option value="">Ordinary account</option>
-              {[
-                "ar",
-                "ap",
-                "loan_receivable",
-                "loan_payable",
-                "tax",
-                "clearing",
-              ].map((k) => (
-                <option key={k}>{k}</option>
+              {accountControls[kind].map((value) => (
+                <option key={value} value={value}>
+                  {controlLabels[value]}
+                </option>
               ))}
             </select>
           </Field>
