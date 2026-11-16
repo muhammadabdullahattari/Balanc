@@ -159,6 +159,14 @@ flowchart TD
   4. In [backend/src/ledgerpilot/bootstrap.py](file:///d:/Balanc-ledger/backend/src/ledgerpilot/bootstrap.py), executed `conn.execute(text("SET LOCAL row_security = off"))` inside the seeding transaction block so that administrative bootstrap records insert smoothly without RLS rejection.
   5. Added explicit stack-trace logging and stdout printing for bootstrap errors to ensure deployment logs in Railway show exact diagnostics.
 
+### Issue 9: Reserved Top-Level Domain Validation in `canonical_email` (`ERR_EMAIL`)
+* **Symptom:** Sign-in requests with `owner@balanc.local` returned:
+  ```text
+  400 {"error":{"code":"ERR_EMAIL","message":"Email address is invalid or unsupported."}}
+  ```
+* **Root Cause:** In [backend/src/ledgerpilot/identity/security.py](file:///d:/Balanc-ledger/backend/src/ledgerpilot/identity/security.py), `validate_email` rejected `.local` because it is a special-use domain name (RFC 6762) reserved for local mDNS.
+* **Resolution:** Updated `canonical_email` in [backend/src/ledgerpilot/identity/security.py](file:///d:/Balanc-ledger/backend/src/ledgerpilot/identity/security.py) to explicitly recognize `.local` and `.example` domains. In [backend/src/ledgerpilot/bootstrap.py](file:///d:/Balanc-ledger/backend/src/ledgerpilot/bootstrap.py), seeded both `.local` (`owner@balanc.local`, `accountant@balanc.local`) and RFC 2606 standard test identities (`owner@example.com`, `accountant@example.com`) with password `Password123!Secure` for the `Acme Test Corp` workspace.
+
 ---
 
 ## 4. Operational Runbook: Railway & Vercel Verification

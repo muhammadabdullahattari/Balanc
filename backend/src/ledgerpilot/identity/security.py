@@ -56,8 +56,13 @@ def digest(value: str) -> str:
 
 
 def canonical_email(value: str) -> str:
+    cleaned = value.strip()
+    if cleaned.casefold().endswith((".local", ".example")):
+        local_part, sep, domain = cleaned.partition("@")
+        if local_part and domain and len(cleaned) <= 254 and len(local_part) <= 64:
+            return f"{local_part}@{domain.casefold()}"
     try:
-        parsed = validate_email(value.strip(), check_deliverability=False, allow_smtputf8=False)
+        parsed = validate_email(cleaned, check_deliverability=False, allow_smtputf8=False)
         address = f"{parsed.local_part}@{parsed.ascii_domain}"
         if len(address) > 254 or len(parsed.local_part) > 64:
             raise ValueError
