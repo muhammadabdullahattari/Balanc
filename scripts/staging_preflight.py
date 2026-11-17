@@ -458,7 +458,7 @@ def run_all_preflights(args: argparse.Namespace) -> list[CheckResult]:
     cache_redis = args.report_cache_redis_url or (
         settings.report_cache_redis_url.get_secret_value() if settings.report_cache_redis_url else None
     )
-    s3_bucket = args.s3_bucket or settings.s3_bucket_name
+    s3_bucket = args.s3_bucket or settings.s3_bucket
     s3_endpoint = args.s3_endpoint or settings.s3_endpoint_url
     prom_url = args.prom_url or os.environ.get("PROMETHEUS_URL")
     am_url = args.am_url or os.environ.get("ALERTMANAGER_URL")
