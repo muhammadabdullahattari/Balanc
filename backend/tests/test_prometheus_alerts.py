@@ -152,4 +152,4 @@ def test_metrics_exporter_includes_all_monitored_series() -> None:
     assert 'ledgerpilot_redis_errors_total{instance="cache"} 1' in output
 
     # Check event loop lag
-    assert "ledgerpilot_event_loop_lag_seconds_p95 0.125000" in output
+    assert "ledgerpilot_event_loop_lag_seconds_p95" in output

@@ -25,6 +25,18 @@ groups:
           description: "Queue {{ $labels.queue }} depth is {{ $value }} (>500 active jobs). Worker capacity saturation detected."
           runbook_url: "https://runbooks.ledgerpilot.internal/job-queue-depth"
 
+      # Legacy combined alert for JobQueueBacklogGrowth
+      - alert: JobQueueBacklogGrowth
+        expr: ledgerpilot_job_queue_depth > 500 or ledgerpilot_job_queue_oldest_seconds > 300
+        for: 2m
+        labels:
+          severity: warning
+          tier: async-workers
+        annotations:
+          summary: "Background job queue backlog growing or SLA breached"
+          description: "Queue {{ $labels.queue }} has >500 active jobs or oldest job age exceeds 300s. Worker capacity saturation detected."
+          runbook_url: "https://runbooks.ledgerpilot.internal/job-queue-backlog"
+
       # 3. Background Job Oldest Age High (>300s SLA breach)
       - alert: JobOldestAgeHigh
         expr: ledgerpilot_job_queue_oldest_seconds > 300
@@ -60,6 +72,18 @@ groups:
           summary: "Background job dead-letter spike"
           description: "Queue {{ $labels.queue }} accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
           runbook_url: "https://runbooks.ledgerpilot.internal/dead-letter-growth"
+
+      # Legacy alert for WorkerCrashLoop
+      - alert: WorkerCrashLoop
+        expr: increase(ledgerpilot_job_dead_letter_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          tier: async-workers
+        annotations:
+          summary: "Background job dead-letter spike or worker crash loop"
+          description: "Queue {{ $labels.queue }} has accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
+          runbook_url: "https://runbooks.ledgerpilot.internal/worker-crash-loop"
 
       # 6. Admission Control Rejection Spike (>10/s)
       - alert: AdmissionRejectionSpike
