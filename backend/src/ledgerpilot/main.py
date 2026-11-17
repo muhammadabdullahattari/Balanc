@@ -23,6 +23,7 @@ from ledgerpilot.database import build_engine
 from ledgerpilot.documents.router import router as evidence_router
 from ledgerpilot.identity.router import router as identity_router
 from ledgerpilot.jobs.router import router as jobs_router
+from ledgerpilot.observability.router import router as observability_router
 from ledgerpilot.provider_integrations import router as provider_router
 from ledgerpilot.reports.router import router as reports_router
 from ledgerpilot.shared.errors import DomainError
@@ -325,6 +326,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(audit_access_router, prefix=configured.api_v1_prefix)
     application.include_router(provider_router, prefix=configured.api_v1_prefix)
     application.include_router(evidence_router, prefix=configured.api_v1_prefix)
+    application.include_router(observability_router)
     return application
 
 

@@ -107,8 +107,10 @@ def handle_report_export(
 def register_default_handlers() -> None:
     """Register all standard background job handlers."""
     from ledgerpilot.jobs.worker import register_handler
+    from ledgerpilot.observability.janitor import handle_rate_limit_janitor
 
     register_handler("stripe_webhook", handle_stripe_webhook)
     register_handler("identity_smtp", handle_identity_smtp)
     register_handler("quickbooks_import", handle_quickbooks_import)
     register_handler("report_export", handle_report_export)
+    register_handler("rate_limit_janitor", handle_rate_limit_janitor)

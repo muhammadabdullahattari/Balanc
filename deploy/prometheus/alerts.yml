@@ -1,0 +1,57 @@
+groups:
+  - name: ledgerpilot-traffic-spike-alerts
+    rules:
+      # 1. Connection Pool Exhaustion (>80% checked out for >30s)
+      - alert: DatabasePoolNearExhaustion
+        expr: (ledgerpilot_db_pool_checked_out / ledgerpilot_db_pool_size) > 0.80
+        for: 30s
+        labels:
+          severity: critical
+          tier: database
+        annotations:
+          summary: "Database connection pool near exhaustion (>80%)"
+          description: "Database connection pool has had >80% checked out connections for >30s. Risk of connection starvation and 503 gateway drops."
+
+      # 2. Background Job Queue Backlog Growth
+      - alert: JobQueueBacklogGrowth
+        expr: ledgerpilot_job_queue_depth > 500 or ledgerpilot_job_queue_oldest_seconds > 300
+        for: 2m
+        labels:
+          severity: warning
+          tier: async-workers
+        annotations:
+          summary: "Background job queue backlog growing or SLA breached"
+          description: "Queue {{ $labels.queue }} has >500 active jobs or oldest job age exceeds 300s. Worker capacity saturation detected."
+
+      # 3. Worker Crash Loop / Dead Letter Spike
+      - alert: WorkerCrashLoop
+        expr: increase(ledgerpilot_job_dead_letter_total[5m]) > 5
+        for: 1m
+        labels:
+          severity: critical
+          tier: async-workers
+        annotations:
+          summary: "Background job dead-letter spike or worker crash loop"
+          description: "Queue {{ $labels.queue }} has accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
+
+      # 4. Admission Rejection Spike (>5% of traffic)
+      - alert: AdmissionRejectionSpike
+        expr: rate(ledgerpilot_admission_rejections_total[2m]) > 10
+        for: 1m
+        labels:
+          severity: warning
+          tier: api-edge
+        annotations:
+          summary: "Admission control load shedding active (>5% rejected)"
+          description: "Redis admission control is rejecting requests with 503 Overloaded. Pod capacity or database latency is triggering proactive load shedding."
+
+      # 5. Workspace Lock Contention (>5ms critical section hold time)
+      - alert: WorkspaceLockContentionSpike
+        expr: ledgerpilot_workspace_lock_hold_seconds_p95 > 0.005
+        for: 1m
+        labels:
+          severity: warning
+          tier: ledger-concurrency
+        annotations:
+          summary: "Workspace row lock hold time exceeded 5ms"
+          description: "Critical section lock hold time is {{ $value }}s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
