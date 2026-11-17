@@ -7,7 +7,11 @@ from ledgerpilot.observability.metrics import format_prometheus_metrics
 router = APIRouter(tags=["observability"])
 
 
-@router.get("/metrics", response_class=Response)
+@router.get(
+    "/metrics",
+    response_class=Response,
+    responses={200: {"content": {"text/plain": {"schema": {"type": "string"}}}}},
+)
 def metrics(request: Request) -> Response:
     engine = getattr(request.app.state, "engine", None)
     content = format_prometheus_metrics(engine)

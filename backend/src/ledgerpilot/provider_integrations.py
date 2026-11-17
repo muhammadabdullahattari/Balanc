@@ -406,9 +406,9 @@ def receive_stripe_event(db: Session, settings: Settings, event: dict[str, Any])
         ).scalar_one()
 
     if inserted:
-        if settings.stripe_webhook_async:
-            from ledgerpilot.jobs import service as job_service
+        from ledgerpilot.jobs import service as job_service
 
+        with contextlib.suppress(Exception):
             job_service.enqueue(
                 db,
                 business_id=None,
@@ -420,21 +420,20 @@ def receive_stripe_event(db: Session, settings: Settings, event: dict[str, Any])
                 max_attempts=settings.jobs_default_max_attempts,
                 timeout_seconds=settings.jobs_default_timeout_seconds,
             )
-        else:
-            try:
-                process_stripe_event(db, settings, event)
-                with contextlib.suppress(Exception):
-                    db.execute(
-                        text("SELECT app.stripe_record_event_result(:id, 'processed')"),
-                        {"id": event["id"]},
-                    )
-            except Exception as exc:
-                with contextlib.suppress(Exception):
-                    db.execute(
-                        text("SELECT app.stripe_record_event_result(:id, 'failed', :err)"),
-                        {"id": event["id"], "err": str(exc)},
-                    )
-                raise
+        try:
+            process_stripe_event(db, settings, event)
+            with contextlib.suppress(Exception):
+                db.execute(
+                    text("SELECT app.stripe_record_event_result(:id, 'processed')"),
+                    {"id": event["id"]},
+                )
+        except Exception as exc:
+            with contextlib.suppress(Exception):
+                db.execute(
+                    text("SELECT app.stripe_record_event_result(:id, 'failed', :err)"),
+                    {"id": event["id"], "err": str(exc)},
+                )
+            raise
 
 
 @router.post("/billing/stripe/webhook")

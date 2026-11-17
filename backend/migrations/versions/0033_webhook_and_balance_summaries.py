@@ -20,6 +20,11 @@ def upgrade() -> None:
         ALTER TABLE app.background_jobs ALTER COLUMN business_id DROP NOT NULL;
         ALTER TABLE app.background_jobs ALTER COLUMN created_by DROP NOT NULL;
 
+        DROP POLICY IF EXISTS background_jobs_tenant ON app.background_jobs;
+        CREATE POLICY background_jobs_tenant ON app.background_jobs
+            USING (business_id IS NULL OR (business_id = app.scope() AND app.has_access(business_id)))
+            WITH CHECK (business_id IS NULL OR (business_id = app.scope() AND app.has_access(business_id)));
+
         ALTER TABLE app.stripe_event_inbox ADD COLUMN IF NOT EXISTS payload jsonb;
         ALTER TABLE app.stripe_event_inbox ADD COLUMN IF NOT EXISTS status text NOT NULL DEFAULT 'received';
         ALTER TABLE app.stripe_event_inbox ADD COLUMN IF NOT EXISTS processed_at timestamptz;

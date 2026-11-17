@@ -265,7 +265,18 @@ def export_report(
     )
 
 
-@router.get("/reports/export/{job_id}/download")
+@router.get(
+    "/reports/export/{job_id}/download",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/octet-stream": {"schema": {"type": "string", "format": "binary"}}
+            }
+        },
+        202: {"content": {"application/json": {"schema": {"type": "object"}}}},
+    },
+)
 def download_report_export(
     business_id: UUID,
     job_id: UUID,

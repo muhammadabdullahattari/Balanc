@@ -213,6 +213,9 @@ async def test_dashboard_months_and_cash_accounts_do_not_increase_query_count(
         extra = [await create_account(api, base, "cash-" + str(i), "asset") for i in range(4)]
         uid, _ = decode_access(database_settings, str(api.cookies.get(ACCESS_COOKIE)))
         app = api._transport.app
+        with app.state.sessions.begin() as db:
+            set_context(db, uid, UUID(bid))
+            reports.refresh_balance_summaries(db, UUID(bid))
         counts = []
         for start, aids in [
             (date(2026, 11, 1), [accounts["bank"]]),

@@ -44761,11 +44761,24 @@
         "responses": {
           "200": {
             "content": {
-              "application/json": {
-                "schema": {}
+              "application/octet-stream": {
+                "schema": {
+                  "format": "binary",
+                  "type": "string"
+                }
               }
             },
             "description": "Successful Response"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted"
           },
           "400": {
             "content": {
@@ -54017,6 +54030,13 @@
         "operationId": "metrics_metrics_get",
         "responses": {
           "200": {
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            },
             "description": "Successful Response"
           },
           "400": {

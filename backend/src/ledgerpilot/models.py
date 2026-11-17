@@ -14,11 +14,17 @@ from ledgerpilot.identity.models import (
     ActionToken,
     AuthRateBucket,
     AuthSession,
+    GoogleChallenge,
+    GoogleIdentity,
     MFAFactor,
     RecoveryCode,
     RefreshToken,
     User,
 )
+from ledgerpilot.jobs.models import BackgroundJob
+from ledgerpilot.notifications.email_operations import SupportGrant
+from ledgerpilot.notifications.email_outbox import BusinessEmailJob, EmailFeedback
+from ledgerpilot.reports.models import BalanceSummary
 from ledgerpilot.tenancy.models import Business, Invitation, Membership, PolicyHistory
 from ledgerpilot.trade.models import (
     Allocation,
@@ -29,6 +35,13 @@ from ledgerpilot.trade.models import (
     Payment,
     SourceDraft,
     TradeDocument,
+)
+from ledgerpilot.workspace.audit_access import AuditGrant
+from ledgerpilot.workspace.cleanup_models import (
+    CleanupEvent,
+    CleanupPolicy,
+    CleanupRequest,
+    DisposalIntent,
 )
 from ledgerpilot.workspace.models import (
     Advance,
@@ -53,6 +66,7 @@ from ledgerpilot.workspace.models import (
     ReportRun,
     TrialEntitlement,
 )
+from ledgerpilot.workspace.retention import LegalHold, RetentionPolicy
 
 __all__ = [
     "DocumentIdentity",
@@ -106,4 +120,18 @@ __all__ = [
     "TradeDocument",
     "TrialEntitlement",
     "User",
+    "AuditGrant",
+    "BackgroundJob",
+    "BalanceSummary",
+    "BusinessEmailJob",
+    "CleanupEvent",
+    "CleanupPolicy",
+    "CleanupRequest",
+    "DisposalIntent",
+    "EmailFeedback",
+    "GoogleChallenge",
+    "GoogleIdentity",
+    "LegalHold",
+    "RetentionPolicy",
+    "SupportGrant",
 ]

@@ -27,13 +27,35 @@ if existing_conn is not None and not getattr(existing_conn, "closed", False):
     config.attributes["runtime_role"] = runtime_role
 
     existing_conn.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
+    existing_conn.execute(text("SET search_path TO public, pg_catalog"))
     existing_conn.commit()
+    existing_conn.dialect.default_schema_name = "public"
+
+    def include_name(name, type_, parent_names):
+        if type_ == "schema":
+            return name == "app"
+        return True
+
+    def include_object(object, name, type_, reflected, compare_to):
+        if type_ == "table":
+            if getattr(object, "schema", None) != "app":
+                return False
+            if reflected and compare_to is None:
+                return False
+            return True
+        elif type_ in ("index", "foreign_key_constraint", "unique_constraint"):
+            return False
+        return True
 
     context.configure(
         connection=existing_conn,
         target_metadata=Base.metadata,
         version_table_schema="app",
         include_schemas=True,
+        include_name=include_name,
+        include_object=include_object,
+        compare_type=False,
+        compare_server_default=False,
     )
     with context.begin_transaction():
         context.run_migrations()
@@ -111,11 +133,35 @@ else:
             if not safe:
                 raise RuntimeError("Migrations require the restricted owner of the app schema")
             connection.commit()
+        connection.execute(text("SET search_path TO public, pg_catalog"))
+        connection.commit()
+        connection.dialect.default_schema_name = "public"
+
+        def include_name(name, type_, parent_names):
+            if type_ == "schema":
+                return name == "app"
+            return True
+
+        def include_object(object, name, type_, reflected, compare_to):
+            if type_ == "table":
+                if getattr(object, "schema", None) != "app":
+                    return False
+                if reflected and compare_to is None:
+                    return False
+                return True
+            elif type_ in ("index", "foreign_key_constraint", "unique_constraint"):
+                return False
+            return True
+
         context.configure(
             connection=connection,
             target_metadata=Base.metadata,
             version_table_schema="app",
             include_schemas=True,
+            include_name=include_name,
+            include_object=include_object,
+            compare_type=False,
+            compare_server_default=False,
         )
         with context.begin_transaction():
             context.run_migrations()

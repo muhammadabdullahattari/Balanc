@@ -16,7 +16,11 @@ def upgrade() -> None:
     connection = op.get_bind()
     role = op.get_context().config.attributes["runtime_role"]
     quoted = connection.dialect.identifier_preparer.quote(role)
-    connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
+    has_schema = connection.execute(
+        text("SELECT 1 FROM pg_namespace WHERE nspname = 'app'")
+    ).scalar()
+    if not has_schema:
+        connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
     connection.exec_driver_sql((directory / "0001_tables.sql").read_text("utf-8"))
     sql = (directory / "0001_guards.sql").read_text("utf-8").replace("__RUNTIME__", quoted)
     connection.execute(text(sql))
