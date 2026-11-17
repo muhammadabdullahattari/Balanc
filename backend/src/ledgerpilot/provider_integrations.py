@@ -141,6 +141,7 @@ def checkout(
             "line_items[0][quantity]": "1",
             "success_url": destination,
             "cancel_url": destination,
+            "managed_payments[enabled]": "false",
         },
     )
     save(db, business_id, "stripe", {"customer": customer, "checkout": session["id"], "plan": plan})

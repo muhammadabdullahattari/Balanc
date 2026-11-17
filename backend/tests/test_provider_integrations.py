@@ -706,6 +706,59 @@ def test_quickbooks_pagination_and_oversized_rejection() -> None:
     assert exc_info.value.code == "ERR_IMPORT_OVERSIZED"
 
 
+def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
+    from unittest.mock import patch
+    from pydantic import SecretStr
+    from ledgerpilot.provider_integrations import checkout
+
+    db = MagicMock()
+    business_id = uuid4()
+    identity = MagicMock()
+    request = MagicMock()
+
+    settings = MagicMock(spec=Settings)
+    settings.stripe_secret_key = SecretStr("sk_test_12345")
+    settings.stripe_growth_price_id = "price_growth_test_123"
+    settings.stripe_starter_price_id = "price_starter_test_123"
+    settings.stripe_enterprise_price_id = "price_enterprise_test_123"
+    settings.billing_return_url = "https://balanc-amber.vercel.app/settings/billing"
+    request.app.state.settings = settings
+
+    def fake_stripe(settings: Any, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "customers":
+            return {"id": "cus_test_999"}
+        if path == "checkout/sessions":
+            assert kwargs["data"]["mode"] == "subscription"
+            assert kwargs["data"]["customer"] == "cus_test_999"
+            assert kwargs["data"]["line_items[0][price]"] == "price_growth_test_123"
+            assert kwargs["data"]["managed_payments[enabled]"] == "false"
+            return {
+                "id": "cs_test_session_888",
+                "url": "https://checkout.stripe.com/c/pay/cs_test_session_888",
+            }
+        return {}
+
+    with patch("ledgerpilot.provider_integrations.load", return_value={}), \
+         patch("ledgerpilot.provider_integrations.stripe", side_effect=fake_stripe), \
+         patch("ledgerpilot.provider_integrations.authorize"):
+        res = checkout(
+            business_id=business_id,
+            plan="growth",
+            request=request,
+            identity=identity,
+            db=db,
+        )
+        assert res["url"] == "https://checkout.stripe.com/c/pay/cs_test_session_888"
+
+        saved = False
+        for call in db.execute.call_args_list:
+            args, _ = call
+            if "INSERT INTO app.provider_connections" in str(args[0]):
+                saved = True
+        assert saved, "Expected pending checkout session to be saved in provider_connections"
+
+
+
 
 
 
