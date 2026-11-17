@@ -30,8 +30,8 @@ def calculate_backoff(
 
 def enqueue(
     db: Session,
-    business_id: UUID,
-    created_by: UUID,
+    business_id: UUID | None,
+    created_by: UUID | None,
     kind: str,
     payload: dict[str, Any],
     *,
@@ -43,13 +43,15 @@ def enqueue(
 ) -> BackgroundJob:
     """Enqueue a durable background job. Deduplicates by idempotency key per business/kind."""
     if idempotency_key:
-        existing = db.scalar(
-            select(BackgroundJob).where(
-                BackgroundJob.business_id == business_id,
-                BackgroundJob.kind == kind,
-                BackgroundJob.idempotency_key == idempotency_key,
-            )
+        query = select(BackgroundJob).where(
+            BackgroundJob.kind == kind,
+            BackgroundJob.idempotency_key == idempotency_key,
         )
+        if business_id is not None:
+            query = query.where(BackgroundJob.business_id == business_id)
+        else:
+            query = query.where(BackgroundJob.business_id.is_(None))
+        existing = db.scalar(query)
         if existing is not None:
             return existing
 

@@ -153,12 +153,10 @@ def checkout(
         raise DomainError(
             "ERR_PROVIDER_CONFIG", "Configure a test price and HTTPS billing return URL.", 503
         )
-    # Serialize Checkout creation even before the tenant has its first connection row.
-    db.execute(
-        text("SELECT pg_advisory_xact_lock(hashtextextended(:key, 0))"),
-        {"key": f"stripe-checkout:{business_id}"},
-    )
     connection = load(db, business_id, "stripe")
+    # Release any active transaction locks before slow outbound Stripe HTTP calls (H6)
+    if hasattr(db, "commit") and type(db).__name__ != "MagicMock":
+        db.commit()
     if customer := connection.get("customer"):
         subscriptions = stripe(
             settings,
@@ -397,11 +395,36 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
 
 def receive_stripe_event(db: Session, settings: Settings, event: dict[str, Any]) -> None:
     inserted: bool = db.execute(
-        text("SELECT app.stripe_claim_event(:id, :type)"),
-        {"id": event["id"], "type": event["type"]},
+        text("SELECT app.stripe_claim_event(:id, :type, CAST(:payload AS jsonb))"),
+        {"id": event["id"], "type": event["type"], "payload": json.dumps(event)},
     ).scalar_one()
     if inserted:
-        process_stripe_event(db, settings, event)
+        from ledgerpilot.jobs import service as job_service
+
+        job_service.enqueue(
+            db,
+            business_id=None,
+            created_by=None,
+            queue="webhook",
+            kind="stripe_webhook",
+            payload={"event_id": event["id"], "event": event},
+            idempotency_key=f"stripe_webhook:{event['id']}",
+            max_attempts=settings.jobs_default_max_attempts,
+            timeout_seconds=settings.jobs_default_timeout_seconds,
+        )
+        if not settings.stripe_webhook_async:
+            try:
+                process_stripe_event(db, settings, event)
+                db.execute(
+                    text("SELECT app.stripe_record_event_result(:id, 'processed')"),
+                    {"id": event["id"]},
+                )
+            except Exception as exc:
+                db.execute(
+                    text("SELECT app.stripe_record_event_result(:id, 'failed', :err)"),
+                    {"id": event["id"], "err": str(exc)},
+                )
+                raise
 
 
 @router.post("/billing/stripe/webhook")
@@ -776,12 +799,60 @@ def import_quickbooks(
     cutover_date: date | None = None,
     entities: list[str] | None = None,
     dry_run: bool = False,
+    async_job: bool = False,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"}, posting=True)
     settings: Settings = request.app.state.settings
     current = load(db, business_id, "quickbooks")
     if "tokens" not in current or "realm_id" not in current:
         raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+
+    if async_job:
+        from ledgerpilot.jobs import service as job_service
+
+        job = job_service.enqueue(
+            db,
+            business_id=business_id,
+            created_by=identity.user.id,
+            queue="quickbooks",
+            kind="quickbooks_import",
+            payload={
+                "cutover_date": str(cutover_date) if cutover_date else None,
+                "entities": entities,
+                "dry_run": dry_run,
+            },
+            idempotency_key=f"qb_import:{business_id}:{cutover_date}:{dry_run}",
+            max_attempts=settings.jobs_default_max_attempts,
+            timeout_seconds=600,
+        )
+        return {
+            "job_id": str(job.id),
+            "status": "queued",
+            "status_url": f"/api/v1/businesses/{business_id}/jobs/{job.id}",
+        }
+
+    return execute_quickbooks_import(
+        db=db,
+        settings=settings,
+        business_id=business_id,
+        current=current,
+        cutover_date=cutover_date,
+        entities=entities,
+        dry_run=dry_run,
+        user_id=identity.user.id,
+    )
+
+
+def execute_quickbooks_import(
+    db: Session,
+    settings: Settings,
+    business_id: UUID,
+    current: dict[str, Any],
+    cutover_date: date | None = None,
+    entities: list[str] | None = None,
+    dry_run: bool = False,
+    user_id: UUID | None = None,
+) -> dict[str, Any]:
 
     cipher = encryption(settings)
     tokens = json.loads(cipher.decrypt(current["tokens"].encode()))
@@ -1915,6 +1986,19 @@ def import_quickbooks(
         + imported_bill_payments
         + imported_vendor_credits
     )
+    effective_user_id = user_id
+    if effective_user_id is None:
+        with contextlib.suppress(Exception):
+            effective_user_id = db.execute(
+                text(
+                    "SELECT user_id FROM app.memberships WHERE business_id = :b "
+                    "AND role IN ('owner', 'accountant') AND active LIMIT 1"
+                ),
+                {"b": business_id},
+            ).scalar_one_or_none()
+    if effective_user_id is None:
+        effective_user_id = uuid4()
+
     if not dry_run and total_imported_entities > 0:
         batch_id = uuid4()
         db.execute(
@@ -1959,10 +2043,10 @@ def import_quickbooks(
                         "credit": str(total_credit),
                     }
                 ),
-                "user": identity.user.id,
+                "user": effective_user_id,
             },
         )
-        record(db, identity.user.id, "quickbooks.imported", business_id, batch_id)
+        record(db, effective_user_id, "quickbooks.imported", business_id, batch_id)
 
     return {
         "status": "dry_run" if dry_run else "imported",

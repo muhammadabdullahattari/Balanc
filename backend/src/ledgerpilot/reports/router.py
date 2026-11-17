@@ -4,10 +4,13 @@ from datetime import date
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Query, Request, Response
+from fastapi.responses import JSONResponse
 
+from ledgerpilot.config import Settings
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.reports import cache, service
+from ledgerpilot.reports.schemas import ReportExportRequest, ReportExportResponse
 from ledgerpilot.reports.uncertainty import CashInterval, interval
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
@@ -211,3 +214,106 @@ def forecast(
     return save_report(
         db, identity, business_id, service.forecast(db, business_id, as_of, bank_ids, scenario)
     )
+
+
+@router.post(
+    "/reports/export",
+    response_model=ReportExportResponse,
+    status_code=202,
+)
+def export_report(
+    business_id: UUID,
+    body: ReportExportRequest,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> ReportExportResponse:
+    authorize(db, identity, business_id)
+    settings: Settings = request.app.state.settings
+    from ledgerpilot.jobs import service as job_service
+
+    job = job_service.enqueue(
+        db,
+        business_id=business_id,
+        created_by=identity.user.id,
+        queue="reports",
+        kind="report_export",
+        payload={
+            "report_type": body.report_type,
+            "format": body.format,
+            "parameters": {
+                "start": str(body.start) if body.start else None,
+                "end": str(body.end) if body.end else None,
+                "as_of": str(body.as_of) if body.as_of else None,
+                "basis": body.basis,
+                "kind": body.kind,
+                "bank_ids": [str(x) for x in body.bank_ids],
+            },
+        },
+        idempotency_key=(
+            f"report_export:{business_id}:{body.report_type}:{body.format}:"
+            f"{body.start}:{body.end}:{body.as_of}"
+        ),
+        max_attempts=settings.jobs_default_max_attempts,
+        timeout_seconds=settings.jobs_default_timeout_seconds,
+    )
+    return ReportExportResponse(
+        job_id=job.id,
+        status="queued",
+        status_url=f"/api/v1/businesses/{business_id}/jobs/{job.id}",
+        download_url=f"/api/v1/businesses/{business_id}/reports/export/{job.id}/download",
+    )
+
+
+@router.get("/reports/export/{job_id}/download")
+def download_report_export(
+    business_id: UUID,
+    job_id: UUID,
+    identity: Identity,
+    db: DB,
+) -> Response:
+    authorize(db, identity, business_id)
+    from ledgerpilot.jobs import service as job_service
+
+    job = job_service.get_job(db, business_id, job_id)
+    if job is None:
+        raise DomainError("ERR_NOT_FOUND", "Export job not found.", 404)
+
+    if job.state in ("queued", "running"):
+        return JSONResponse(
+            status_code=202,
+            content={
+                "job_id": str(job.id),
+                "state": job.state,
+                "message": "Export job is still processing.",
+            },
+        )
+    if job.state in ("failed", "dead_letter"):
+        err = job.error_detail or {}
+        raise DomainError(
+            "ERR_EXPORT_FAILED",
+            f"Export failed: {err.get('error', 'unknown error')}",
+            500,
+        )
+
+    result = job.result or {}
+    content = result.get("content", "")
+    content_type = result.get("content_type", "application/octet-stream")
+    filename = result.get("filename", "export.dat")
+    return Response(
+        content=content,
+        media_type=content_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/reports/balances")
+def materialized_balances(
+    business_id: UUID,
+    identity: Identity,
+    db: DB,
+) -> dict[str, str]:
+    """Return latest materialized balance summaries per account for the workspace."""
+    authorize(db, identity, business_id)
+    balances_map = service.get_materialized_balances(db, business_id)
+    return {str(aid): str(amount) for aid, amount in balances_map.items()}

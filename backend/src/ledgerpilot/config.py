@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     jobs_default_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     jobs_poll_interval_seconds: float = Field(default=1.0, ge=0.05, le=60.0)
     jobs_worker_concurrency: int = Field(default=4, ge=1, le=32)
+    stripe_webhook_async: bool = True
     db_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
     db_statement_timeout_ms: int = Field(default=15000, ge=100, le=60000)
     db_idle_transaction_timeout_ms: int = Field(default=15000, ge=5000, le=60000)

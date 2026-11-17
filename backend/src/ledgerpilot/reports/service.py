@@ -8,12 +8,13 @@ from typing import Any
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Account, Journal, JournalLine
 from ledgerpilot.accounting.money import allocate
 from ledgerpilot.identity.security import now
+from ledgerpilot.reports.models import BalanceSummary
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.query_limits import bounded_rows, bounded_scalars
 from ledgerpilot.tenancy.models import Business
@@ -39,9 +40,56 @@ def context(
     }
 
 
+def refresh_balance_summaries(db: Session, bid: UUID, current_version: int | None = None) -> int:
+    """Refresh materialized balance summaries for a workspace from posted journal lines."""
+    if current_version is None:
+        current_version = db.execute(
+            text("SELECT version FROM app.businesses WHERE id = :b"),
+            {"b": bid},
+        ).scalar_one()
+
+    row_count: int = db.execute(
+        text("SELECT app.refresh_balance_summaries(:b, :v)"),
+        {"b": bid, "v": current_version},
+    ).scalar_one()
+    return row_count
+
+
+def get_materialized_balances(
+    db: Session, bid: UUID, account_ids: list[UUID] | None = None
+) -> dict[UUID, Decimal]:
+    """Retrieve or refresh materialized balance summaries tied to workspace ledger version."""
+    b_version: int = db.execute(
+        text("SELECT version FROM app.businesses WHERE id = :b"),
+        {"b": bid},
+    ).scalar_one()
+
+    summary_version = db.execute(
+        text("SELECT ledger_version FROM app.balance_summaries WHERE business_id = :b LIMIT 1"),
+        {"b": bid},
+    ).scalar_one_or_none()
+
+    if summary_version is None or summary_version != b_version:
+        refresh_balance_summaries(db, bid, b_version)
+
+    query = select(BalanceSummary.account_id, BalanceSummary.net_balance).where(
+        BalanceSummary.business_id == bid
+    )
+    if account_ids is not None:
+        query = query.where(BalanceSummary.account_id.in_(account_ids))
+
+    return {aid: net for aid, net in db.execute(query).tuples().all()}
+
+
 def balances(
     db: Session, bid: UUID, as_of: date, account_ids: list[UUID] | None = None
 ) -> dict[UUID, Decimal]:
+    if as_of >= date.today():
+        try:
+            return get_materialized_balances(db, bid, account_ids)
+        except Exception:
+            pass
+
     account_filter = () if account_ids is None else (JournalLine.account_id.in_(account_ids),)
     return {
         aid: amount
@@ -807,4 +855,132 @@ def dashboard(
         "receivables": aging(db, bid, end, "invoice", outstanding=outstanding),
         "payables": aging(db, bid, end, "bill", outstanding=outstanding),
         "controls": controls(db, bid, end, outstanding=outstanding),
+    }
+
+
+def generate_report_export(
+    db: Session, bid: UUID, report_type: str, parameters: dict[str, Any], fmt: str = "json"
+) -> dict[str, Any]:
+    """Generate exported report data for queued asynchronous export jobs."""
+    import csv
+    import io
+    import json
+
+    data: Any = None
+    if report_type == "profit-loss":
+        start_date = (
+            date.fromisoformat(parameters["start"])
+            if parameters.get("start")
+            else date.today() - timedelta(days=30)
+        )
+        end_date = (
+            date.fromisoformat(parameters["end"])
+            if parameters.get("end")
+            else date.today()
+        )
+        basis = parameters.get("basis", "accrual")
+        data = financial(db, bid, start_date, end_date, basis, "profit-loss")
+    elif report_type == "balance-sheet":
+        as_of_date = (
+            date.fromisoformat(parameters["as_of"])
+            if parameters.get("as_of")
+            else date.today()
+        )
+        basis = parameters.get("basis", "accrual")
+        data = financial(db, bid, date(1900, 1, 1), as_of_date, basis, "balance-sheet")
+    elif report_type == "aging":
+        as_of_date = (
+            date.fromisoformat(parameters["as_of"])
+            if parameters.get("as_of")
+            else date.today()
+        )
+        kind = parameters.get("kind", "invoice")
+        data = aging(db, bid, as_of_date, kind)
+    elif report_type == "controls":
+        as_of_date = (
+            date.fromisoformat(parameters["as_of"])
+            if parameters.get("as_of")
+            else date.today()
+        )
+        data = controls(db, bid, as_of_date)
+    elif report_type == "dashboard":
+        start_date = (
+            date.fromisoformat(parameters["start"])
+            if parameters.get("start")
+            else date.today() - timedelta(days=30)
+        )
+        end_date = (
+            date.fromisoformat(parameters["end"])
+            if parameters.get("end")
+            else date.today()
+        )
+        basis = parameters.get("basis", "accrual")
+        bank_ids = [UUID(str(x)) for x in parameters.get("bank_ids", [])]
+        data = dashboard(db, bid, start_date, end_date, basis, bank_ids)
+    elif report_type == "tax-support":
+        start_date = (
+            date.fromisoformat(parameters["start"])
+            if parameters.get("start")
+            else date.today() - timedelta(days=30)
+        )
+        end_date = (
+            date.fromisoformat(parameters["end"])
+            if parameters.get("end")
+            else date.today()
+        )
+        data = tax_support(db, bid, start_date, end_date)
+    elif report_type == "journals":
+        from ledgerpilot.workspace.service import journal_csv
+        start_date = (
+            date.fromisoformat(parameters["start"])
+            if parameters.get("start")
+            else date(1900, 1, 1)
+        )
+        end_date = (
+            date.fromisoformat(parameters["end"])
+            if parameters.get("end")
+            else date.today()
+        )
+        content = journal_csv(db, bid, start_date, end_date)
+        return {
+            "content": content,
+            "content_type": "text/csv",
+            "filename": f"journals-{bid}.csv",
+            "size_bytes": len(content.encode("utf-8")),
+        }
+    else:
+        raise DomainError("ERR_INVALID_REPORT", f"Unsupported report type '{report_type}'", 400)
+
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["Section", "Key", "Value"])
+
+        def _flatten(prefix: str, d: Any) -> None:
+            if isinstance(d, dict):
+                for k, v in d.items():
+                    _flatten(f"{prefix}.{k}" if prefix else str(k), v)
+            elif isinstance(d, list):
+                for idx, v in enumerate(d):
+                    _flatten(f"{prefix}[{idx}]", v)
+            else:
+                writer.writerow(
+                    [prefix.rsplit(".", 1)[0] if "." in prefix else "main", prefix, str(d)]
+                )
+
+        _flatten("", data)
+        content_str = output.getvalue()
+        return {
+            "content": content_str,
+            "content_type": "text/csv",
+            "filename": f"{report_type}-{bid}.csv",
+            "size_bytes": len(content_str.encode("utf-8")),
+        }
+
+    content_str = json.dumps(data, default=str, indent=2)
+    return {
+        "content": content_str,
+        "content_type": "application/json",
+        "filename": f"{report_type}-{bid}.json",
+        "size_bytes": len(content_str.encode("utf-8")),
     }

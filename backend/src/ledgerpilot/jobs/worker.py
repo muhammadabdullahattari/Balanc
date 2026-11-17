@@ -17,7 +17,7 @@ from ledgerpilot.jobs import service
 
 logger = logging.getLogger("ledgerpilot.jobs.worker")
 
-JobHandler = Callable[[Session, UUID, UUID, dict[str, Any]], dict[str, Any] | None]
+JobHandler = Callable[[Session, UUID | None, UUID | None, dict[str, Any]], dict[str, Any] | None]
 _REGISTRY: dict[str, JobHandler] = {}
 
 
@@ -51,6 +51,8 @@ class BackgroundWorker:
         self.engine = engine if engine is not None else build_engine(settings)
         self.running = True
         self._executor = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="JobWorker")
+        from ledgerpilot.jobs.handlers import register_default_handlers
+        register_default_handlers()
 
     def stop(self) -> None:
         """Signal the worker to shut down gracefully."""
@@ -95,7 +97,10 @@ class BackgroundWorker:
 
         def _execute() -> dict[str, Any] | None:
             with Session(self.engine) as exec_db:
-                set_context(exec_db, created_by, business_id)
+                if business_id is not None and created_by is not None:
+                    set_context(exec_db, created_by, business_id)
+                elif created_by is not None:
+                    set_context(exec_db, created_by)
                 res = handler(exec_db, business_id, created_by, payload)
                 service.finish_job(exec_db, job_id, self.worker_token, res)
                 exec_db.commit()

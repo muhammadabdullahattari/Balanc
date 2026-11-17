@@ -17,8 +17,12 @@ class BackgroundJob(Base):
     __table_args__ = {"schema": "app"}
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
-    business_id: Mapped[UUID] = mapped_column(ForeignKey("app.businesses.id"), index=True)
-    created_by: Mapped[UUID] = mapped_column(ForeignKey("app.users.id"))
+    business_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app.businesses.id"), index=True, nullable=True
+    )
+    created_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("app.users.id"), nullable=True
+    )
     queue: Mapped[str] = mapped_column(String(64), default="default")
     kind: Mapped[str] = mapped_column(String(64))
     idempotency_key: Mapped[str | None] = mapped_column(String(255), nullable=True)

@@ -15,7 +15,7 @@ from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings
 from ledgerpilot.database import set_context
 from ledgerpilot.identity.dependencies import Principal
-from ledgerpilot.identity.mail import deliver
+from ledgerpilot.identity.mail import enqueue_mail
 from ledgerpilot.identity.security import canonical_email, digest, now, opaque
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.telemetry import bind_identity
@@ -187,7 +187,9 @@ def invite(
             expires_at=now() + timedelta(hours=48),
         )
     )
-    deliver(settings, email, "business invitation", token)
+    enqueue_mail(
+        db, settings, email, "business invitation", token, user_id=identity.user.id, business_id=bid
+    )
     record(db, identity.user.id, "business.invited", bid)
 
 
