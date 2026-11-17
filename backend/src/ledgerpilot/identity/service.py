@@ -13,8 +13,7 @@ from sqlalchemy.orm import Session
 from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings
 from ledgerpilot.database import set_context
-from ledgerpilot.identity import repository
-from ledgerpilot.identity.mail import enqueue_mail
+from ledgerpilot.identity import mail, repository
 from ledgerpilot.identity.models import (
     ActionToken,
     AuthSession,
@@ -159,7 +158,7 @@ def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purp
             expires_at=now() + timedelta(minutes=15),
         )
     )
-    enqueue_mail(db, settings, email, purpose, token, user_id=user_id)
+    mail.deliver(settings, email, purpose, token)
 
 
 def request_action(db: Session, settings: Settings, email: str, purpose: str, csrf: str) -> None:
