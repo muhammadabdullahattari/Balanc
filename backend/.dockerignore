@@ -5,6 +5,7 @@
 !uv.lock
 !README.md
 !alembic.ini
+!docker-entrypoint.sh
 !migrations/
 !migrations/**
 !src/
