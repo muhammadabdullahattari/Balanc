@@ -45,6 +45,11 @@ class Settings(BaseSettings):
     db_pool_size: int = Field(default=5, ge=1, le=20)
     db_max_overflow: int = Field(default=5, ge=0, le=20)
     db_pool_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    api_replicas: int = Field(default=2, ge=1, le=100)
+    worker_replicas: int = Field(default=2, ge=1, le=50)
+    worker_pool_size: int = Field(default=5, ge=1, le=20)
+    admin_db_headroom: int = Field(default=10, ge=2, le=50)
+    enforce_connection_budget: bool = True
     provider_concurrency: int = Field(default=4, ge=1, le=32)
     provider_breaker_failures: int = Field(default=5, ge=1, le=100)
     provider_breaker_cooldown_seconds: int = Field(default=30, ge=1, le=600)
@@ -338,6 +343,16 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return self.frontend_origins.split(",")
+
+    @property
+    def total_db_connection_budget(self) -> int:
+        """Global connection budget across API replicas, worker replicas, and admin headroom."""
+        per_api_replica = self.db_pool_size + self.db_max_overflow + self.rate_db_pool_size
+        return (
+            (self.api_replicas * per_api_replica)
+            + (self.worker_replicas * self.worker_pool_size)
+            + self.admin_db_headroom
+        )
 
 
 @lru_cache

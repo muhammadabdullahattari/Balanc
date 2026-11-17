@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import text
+from sqlalchemy import Engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException
@@ -41,6 +41,36 @@ from ledgerpilot.workspace.retention import router as retention_router
 from ledgerpilot.workspace.router import router as workspace_router
 
 
+def validate_connection_budget(settings: Settings, engine: Engine) -> None:
+    if not settings.enforce_connection_budget:
+        return
+    try:
+        with engine.connect() as conn:
+            if conn.dialect.name != "postgresql":
+                return
+            max_conn_str = conn.execute(text("SHOW max_connections")).scalar()
+            if not max_conn_str:
+                return
+            max_connections = int(max_conn_str)
+            reserved_str = conn.execute(text("SHOW superuser_reserved_connections")).scalar()
+            reserved = int(reserved_str) if reserved_str else 3
+            available = max_connections - reserved
+            required = settings.total_db_connection_budget
+
+            if required > available:
+                raise RuntimeError(
+                    f"FATAL: Database connection budget check failed. "
+                    f"Configured deployment budget requires {required} connections, "
+                    f"but PostgreSQL has only {available} available "
+                    f"({max_connections} max - {reserved} superuser reserved). "
+                    f"Increase PostgreSQL max_connections or reduce pod pool sizes."
+                )
+    except RuntimeError:
+        raise
+    except Exception:
+        pass
+
+
 def create_app(settings: Settings | None = None) -> FastAPI:
 
     configured = settings or get_settings()
@@ -59,6 +89,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         engine = build_engine(configured)
+        validate_connection_budget(configured, engine)
         from ledgerpilot.shared.admission import RedisAdmission
 
         admission = None

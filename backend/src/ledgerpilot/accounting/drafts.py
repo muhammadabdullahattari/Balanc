@@ -82,7 +82,9 @@ def update(db: Session, identity: Principal, bid: UUID, jid: UUID, data: DraftUp
 
 def publish(db: Session, identity: Principal, bid: UUID, jid: UUID, data: DraftPublish) -> UUID:
     authorize(db, identity, bid, posting=True)
-    get_business(db, bid, lock=True)
+    # Narrow serialization scope: do not hold workspace lock while querying draft lines.
+    # The atomic critical section lock is taken strictly inside app.post_draft_journal.
+    get_business(db, bid, lock=False)
     item = repository.journal(db, bid, jid)
     if not item:
         raise DomainError("ERR_NOT_FOUND", "Record not found.", 404)

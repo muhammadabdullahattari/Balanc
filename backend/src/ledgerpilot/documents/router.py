@@ -221,7 +221,8 @@ async def upload(
     filename: str = Query(min_length=1, max_length=160, pattern=r"^[^/\\\r\n]+$"),
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
-    get_business(db, business_id, lock=True)
+    # Do not hold exclusive workspace row lock across incoming network upload stream
+    get_business(db, business_id, lock=False)
     settings = request.app.state.settings
     from ledgerpilot.workspace.models import TrialEntitlement
 
