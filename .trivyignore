@@ -1,0 +1,6 @@
+# Documented vulnerability exceptions for container scan
+# Requirement: document any accepted exception with a reason and an expiry.
+
+# Base OS zlib1g vulnerability fixed in Debian testing/unstable; pending backport to Debian 12 slim
+# Expiry: 2026-12-31
+CVE-2026-85091

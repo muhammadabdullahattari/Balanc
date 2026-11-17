@@ -332,6 +332,7 @@ jobs:
           ignore-unfixed: true
           vuln-type: os,library
           severity: CRITICAL,HIGH
+          trivyignores: .trivyignore
       - name: Verify deployment failure and rollback control flow
         run: |
           docker run --rm --user 0 --entrypoint python --mount type=bind,source=${{ github.workspace }},target=/source,readonly ledgerpilot-api:${{ github.sha }} /source/backend/tests/deploy_shell_harness.py

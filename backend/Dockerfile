@@ -8,6 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 WORKDIR /app
 
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install --no-install-recommends -y zlib1g \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY --from=uv /uv /uvx /bin/
 COPY pyproject.toml uv.lock README.md ./
 RUN uv sync --locked --no-dev --no-install-project
