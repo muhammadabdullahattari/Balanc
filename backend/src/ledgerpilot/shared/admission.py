@@ -48,13 +48,19 @@ class RedisAdmission:
 
     def check(self, keys: list[tuple[str, int]], window: int, cooldown: int) -> int:
         try:
-            return int(
+            res = int(
                 self._script(
                     keys=[f"ledgerpilot:v1:admission:{{rate}}:{key}" for key, _ in keys],
                     args=[window * 1000, cooldown * 1000, *[limit for _, limit in keys]],
                 )
             )
+            from ledgerpilot.observability.metrics import record_redis_status
+            record_redis_status("admission", True)
+            return res
         except RedisError:
+            from ledgerpilot.observability.metrics import record_redis_error, record_redis_status
+            record_redis_status("admission", False)
+            record_redis_error("admission")
             emit("rate_limiter.unavailable", code="ERR_DEPENDENCY")
             raise DomainError(
                 "ERR_DEPENDENCY", "Request protection is temporarily unavailable.", 503

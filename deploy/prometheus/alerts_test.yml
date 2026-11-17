@@ -1,0 +1,176 @@
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  # Test 1: DatabasePoolNearExhaustion fires when pool usage > 80% for >30s
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_db_pool_checked_out'
+        values: '5 6 9 9 9'
+      - series: 'ledgerpilot_db_pool_size'
+        values: '10 10 10 10 10'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: DatabasePoolNearExhaustion
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: DatabasePoolNearExhaustion
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              tier: database
+            exp_annotations:
+              summary: "Database connection pool near exhaustion (>80%)"
+              description: "Database connection pool utilization has exceeded 80% for >30s. Risk of connection starvation and 503 gateway drops."
+              runbook_url: "https://runbooks.ledgerpilot.internal/db-pool-exhaustion"
+
+  # Test 2: JobQueueDepthHigh fires when queue depth > 500 for >2m
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_job_queue_depth{queue="reports"}'
+        values: '100 200 600 650 700'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: JobQueueDepthHigh
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: JobQueueDepthHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: async-workers
+              queue: reports
+            exp_annotations:
+              summary: "Background job queue depth exceeds 500"
+              description: "Queue reports depth is 700 (>500 active jobs). Worker capacity saturation detected."
+              runbook_url: "https://runbooks.ledgerpilot.internal/job-queue-depth"
+
+  # Test 3: JobOldestAgeHigh fires when oldest job > 300s for >2m
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_job_queue_oldest_seconds{queue="webhook"}'
+        values: '50 150 350 400 450'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: JobOldestAgeHigh
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: JobOldestAgeHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: async-workers
+              queue: webhook
+            exp_annotations:
+              summary: "Background job queue SLA breach (>300s wait)"
+              description: "Oldest job in queue webhook has been waiting for 450s (>300s). Processing backlog building up."
+              runbook_url: "https://runbooks.ledgerpilot.internal/job-oldest-age"
+
+  # Test 4: DeadLetterGrowth fires when dead letters increase > 5 in 5m
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_job_dead_letter_total{queue="default"}'
+        values: '0 0 2 6 8 10'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: DeadLetterGrowth
+        exp_alerts: []
+      - eval_time: 5m
+        alertname: DeadLetterGrowth
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              tier: async-workers
+              queue: default
+            exp_annotations:
+              summary: "Background job dead-letter spike"
+              description: "Queue default accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
+              runbook_url: "https://runbooks.ledgerpilot.internal/dead-letter-growth"
+
+  # Test 5: AdmissionRejectionSpike fires when rate > 10/s
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_admission_rejections_total'
+        values: '0 0 1200 2400 3600'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: AdmissionRejectionSpike
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: AdmissionRejectionSpike
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: api-edge
+            exp_annotations:
+              summary: "Admission control load shedding active (>10/s rejected)"
+              description: "Redis admission control is shedding load at 20/s. Pod capacity or database latency is triggering proactive load shedding."
+              runbook_url: "https://runbooks.ledgerpilot.internal/admission-rejection-spike"
+
+  # Test 6: WorkspaceLockContentionSpike fires when p95 hold > 0.005s
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_workspace_lock_hold_seconds_p95'
+        values: '0.001 0.002 0.008 0.009 0.010'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: WorkspaceLockContentionSpike
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: WorkspaceLockContentionSpike
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: ledger-concurrency
+            exp_annotations:
+              summary: "Workspace row lock hold time exceeded 5ms"
+              description: "Critical section lock hold time p95 is 0.009s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
+              runbook_url: "https://runbooks.ledgerpilot.internal/workspace-lock-contention"
+
+  # Test 7: RedisDown fires when min(ledgerpilot_redis_up) == 0
+  - interval: 30s
+    input_series:
+      - series: 'ledgerpilot_redis_up{instance="admission"}'
+        values: '1 1 0 0 0'
+      - series: 'ledgerpilot_redis_up{instance="cache"}'
+        values: '1 1 1 1 1'
+      - series: 'ledgerpilot_redis_errors_total{instance="admission"}'
+        values: '0 0 0 0 0'
+      - series: 'ledgerpilot_redis_errors_total{instance="cache"}'
+        values: '0 0 0 0 0'
+    alert_rule_test:
+      - eval_time: 30s
+        alertname: RedisDown
+        exp_alerts: []
+      - eval_time: 2m
+        alertname: RedisDown
+        exp_alerts:
+          - exp_labels:
+              severity: critical
+              tier: caching-admission
+            exp_annotations:
+              summary: "Redis admission or cache instance down or erroring"
+              description: "Redis instance is unreachable (status 0) or error rate exceeds 5/s for >30s. Admission may fail closed and dashboard cache falls back to DB."
+              runbook_url: "https://runbooks.ledgerpilot.internal/redis-down"
+
+  # Test 8: EventLoopLagHigh fires when p95 lag > 0.1s
+  - interval: 1m
+    input_series:
+      - series: 'ledgerpilot_event_loop_lag_seconds_p95'
+        values: '0.01 0.02 0.15 0.18 0.20'
+    alert_rule_test:
+      - eval_time: 1m
+        alertname: EventLoopLagHigh
+        exp_alerts: []
+      - eval_time: 4m
+        alertname: EventLoopLagHigh
+        exp_alerts:
+          - exp_labels:
+              severity: warning
+              tier: api-edge
+            exp_annotations:
+              summary: "Event loop lag exceeded 100ms"
+              description: "FastAPI event loop lag p95 is 0.18s (>0.1s). Synchronous blocking operations may be blocking request handling."
+              runbook_url: "https://runbooks.ledgerpilot.internal/event-loop-lag"

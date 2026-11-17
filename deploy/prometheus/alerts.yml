@@ -1,7 +1,7 @@
 groups:
   - name: ledgerpilot-traffic-spike-alerts
     rules:
-      # 1. Connection Pool Exhaustion (>80% checked out for >30s)
+      # 1. Database Connection Pool Exhaustion (>80% checked out for >30s)
       - alert: DatabasePoolNearExhaustion
         expr: (ledgerpilot_db_pool_checked_out / ledgerpilot_db_pool_size) > 0.80
         for: 30s
@@ -10,31 +10,58 @@ groups:
           tier: database
         annotations:
           summary: "Database connection pool near exhaustion (>80%)"
-          description: "Database connection pool has had >80% checked out connections for >30s. Risk of connection starvation and 503 gateway drops."
+          description: "Database connection pool utilization has exceeded 80% for >30s. Risk of connection starvation and 503 gateway drops."
+          runbook_url: "https://runbooks.ledgerpilot.internal/db-pool-exhaustion"
 
-      # 2. Background Job Queue Backlog Growth
-      - alert: JobQueueBacklogGrowth
-        expr: ledgerpilot_job_queue_depth > 500 or ledgerpilot_job_queue_oldest_seconds > 300
+      # 2. Background Job Queue Depth High (>500 active jobs)
+      - alert: JobQueueDepthHigh
+        expr: ledgerpilot_job_queue_depth > 500
         for: 2m
         labels:
           severity: warning
           tier: async-workers
         annotations:
-          summary: "Background job queue backlog growing or SLA breached"
-          description: "Queue {{ $labels.queue }} has >500 active jobs or oldest job age exceeds 300s. Worker capacity saturation detected."
+          summary: "Background job queue depth exceeds 500"
+          description: "Queue {{ $labels.queue }} depth is {{ $value }} (>500 active jobs). Worker capacity saturation detected."
+          runbook_url: "https://runbooks.ledgerpilot.internal/job-queue-depth"
 
-      # 3. Worker Crash Loop / Dead Letter Spike
-      - alert: WorkerCrashLoop
+      # 3. Background Job Oldest Age High (>300s SLA breach)
+      - alert: JobOldestAgeHigh
+        expr: ledgerpilot_job_queue_oldest_seconds > 300
+        for: 2m
+        labels:
+          severity: warning
+          tier: async-workers
+        annotations:
+          summary: "Background job queue SLA breach (>300s wait)"
+          description: "Oldest job in queue {{ $labels.queue }} has been waiting for {{ $value }}s (>300s). Processing backlog building up."
+          runbook_url: "https://runbooks.ledgerpilot.internal/job-oldest-age"
+
+      # 4. Background Worker Down (no heartbeat for >3m)
+      - alert: WorkerDown
+        expr: (time() - max(ledgerpilot_worker_last_heartbeat_seconds)) > 180
+        for: 1m
+        labels:
+          severity: critical
+          tier: async-workers
+        annotations:
+          summary: "Background worker heartbeat missed (>3m)"
+          description: "No background worker heartbeat detected for >180s. Worker instances may be crashed, deadlocked, or stopped."
+          runbook_url: "https://runbooks.ledgerpilot.internal/worker-down"
+
+      # 5. Background Job Dead Letter Growth (>5 failed in 5m)
+      - alert: DeadLetterGrowth
         expr: increase(ledgerpilot_job_dead_letter_total[5m]) > 5
         for: 1m
         labels:
           severity: critical
           tier: async-workers
         annotations:
-          summary: "Background job dead-letter spike or worker crash loop"
-          description: "Queue {{ $labels.queue }} has accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
+          summary: "Background job dead-letter spike"
+          description: "Queue {{ $labels.queue }} accumulated >5 dead-lettered jobs in the last 5 minutes. Inspect worker logs and exceptions."
+          runbook_url: "https://runbooks.ledgerpilot.internal/dead-letter-growth"
 
-      # 4. Admission Rejection Spike (>5% of traffic)
+      # 6. Admission Control Rejection Spike (>10/s)
       - alert: AdmissionRejectionSpike
         expr: rate(ledgerpilot_admission_rejections_total[2m]) > 10
         for: 1m
@@ -42,10 +69,11 @@ groups:
           severity: warning
           tier: api-edge
         annotations:
-          summary: "Admission control load shedding active (>5% rejected)"
-          description: "Redis admission control is rejecting requests with 503 Overloaded. Pod capacity or database latency is triggering proactive load shedding."
+          summary: "Admission control load shedding active (>10/s rejected)"
+          description: "Redis admission control is shedding load at {{ $value }}/s. Pod capacity or database latency is triggering proactive load shedding."
+          runbook_url: "https://runbooks.ledgerpilot.internal/admission-rejection-spike"
 
-      # 5. Workspace Lock Contention (>5ms critical section hold time)
+      # 7. Workspace Lock Contention Spike (>5ms hold time)
       - alert: WorkspaceLockContentionSpike
         expr: ledgerpilot_workspace_lock_hold_seconds_p95 > 0.005
         for: 1m
@@ -54,4 +82,29 @@ groups:
           tier: ledger-concurrency
         annotations:
           summary: "Workspace row lock hold time exceeded 5ms"
-          description: "Critical section lock hold time is {{ $value }}s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
+          description: "Critical section lock hold time p95 is {{ $value }}s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
+          runbook_url: "https://runbooks.ledgerpilot.internal/workspace-lock-contention"
+
+      # 8. Redis Instance Down or Error Rate High
+      - alert: RedisDown
+        expr: min(ledgerpilot_redis_up) == 0 or rate(ledgerpilot_redis_errors_total[2m]) > 5
+        for: 30s
+        labels:
+          severity: critical
+          tier: caching-admission
+        annotations:
+          summary: "Redis admission or cache instance down or erroring"
+          description: "Redis instance is unreachable (status 0) or error rate exceeds 5/s for >30s. Admission may fail closed and dashboard cache falls back to DB."
+          runbook_url: "https://runbooks.ledgerpilot.internal/redis-down"
+
+      # 9. FastAPI Event Loop Lag High (>100ms)
+      - alert: EventLoopLagHigh
+        expr: ledgerpilot_event_loop_lag_seconds_p95 > 0.1
+        for: 1m
+        labels:
+          severity: warning
+          tier: api-edge
+        annotations:
+          summary: "Event loop lag exceeded 100ms"
+          description: "FastAPI event loop lag p95 is {{ $value }}s (>0.1s). Synchronous blocking operations may be blocking request handling."
+          runbook_url: "https://runbooks.ledgerpilot.internal/event-loop-lag"

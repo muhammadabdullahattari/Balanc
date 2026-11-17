@@ -1,6 +1,7 @@
 """Prometheus-compatible metrics collection and text exposition for SRE visibility."""
 
 import threading
+import time
 
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
@@ -16,6 +17,12 @@ _report_cache_misses: int = 0
 _report_cache_evictions: int = 0
 _workspace_lock_wait_samples: list[float] = []
 _workspace_lock_hold_samples: list[float] = []
+
+# SRE additions for Phase 0 alerts
+_worker_heartbeats: dict[str, float] = {}
+_redis_up: dict[str, int] = {"admission": 1, "cache": 1}
+_redis_errors_total: dict[str, int] = {"admission": 0, "cache": 0}
+_event_loop_lag_samples: list[float] = []
 
 
 def record_http_request(method: str, status: int) -> None:
@@ -60,6 +67,32 @@ def record_lock_timing(wait_ms: float, hold_ms: float) -> None:
         if len(_workspace_lock_wait_samples) > 1000:
             del _workspace_lock_wait_samples[:500]
             del _workspace_lock_hold_samples[:500]
+
+
+def record_worker_heartbeat(worker_id: str, timestamp: float | None = None) -> None:
+    """Record heartbeat timestamp for background worker monitoring."""
+    with _lock:
+        _worker_heartbeats[worker_id] = timestamp or time.time()
+
+
+def record_redis_status(instance: str, is_up: bool) -> None:
+    """Record reachability status for Redis instance (admission or cache)."""
+    with _lock:
+        _redis_up[instance] = 1 if is_up else 0
+
+
+def record_redis_error(instance: str) -> None:
+    """Increment operational error count for Redis instance."""
+    with _lock:
+        _redis_errors_total[instance] = _redis_errors_total.get(instance, 0) + 1
+
+
+def record_event_loop_lag(lag_seconds: float) -> None:
+    """Record event loop lag measurement in seconds."""
+    with _lock:
+        _event_loop_lag_samples.append(lag_seconds)
+        if len(_event_loop_lag_samples) > 1000:
+            del _event_loop_lag_samples[:500]
 
 
 def format_prometheus_metrics(engine: Engine | None = None) -> str:
@@ -217,6 +250,54 @@ def format_prometheus_metrics(engine: Engine | None = None) -> str:
     )
     for tier, count in tier_rejections.items():
         lines.append(f'ledgerpilot_rate_limit_rejections_total{{tier="{tier}"}} {count}')
+
+    # 6. Background worker heartbeat metrics
+    with _lock:
+        heartbeats = dict(_worker_heartbeats)
+        redis_states = dict(_redis_up)
+        redis_errs = dict(_redis_errors_total)
+        lag_samples = list(_event_loop_lag_samples)
+
+    if heartbeats:
+        add_comment(
+            "ledgerpilot_worker_last_heartbeat_seconds",
+            "gauge",
+            "Timestamp of most recent background worker heartbeat",
+        )
+        for w_id, ts in heartbeats.items():
+            lines.append(
+                f'ledgerpilot_worker_last_heartbeat_seconds{{worker_id="{w_id}"}} {ts:.1f}'
+            )
+
+    # 7. Redis status and operational error metrics
+    add_comment(
+        "ledgerpilot_redis_up",
+        "gauge",
+        "Redis instance reachability status (1=up, 0=down)",
+    )
+    for inst, state in redis_states.items():
+        lines.append(f'ledgerpilot_redis_up{{instance="{inst}"}} {state}')
+
+    add_comment(
+        "ledgerpilot_redis_errors_total",
+        "counter",
+        "Total operational errors encountered communicating with Redis",
+    )
+    for inst, err_count in redis_errs.items():
+        lines.append(f'ledgerpilot_redis_errors_total{{instance="{inst}"}} {err_count}')
+
+    # 8. Event loop lag metrics
+    p95_lag = 0.0
+    if lag_samples:
+        lag_sorted = sorted(lag_samples)
+        p95_lag = lag_sorted[int(len(lag_sorted) * 0.95)]
+
+    add_comment(
+        "ledgerpilot_event_loop_lag_seconds_p95",
+        "gauge",
+        "95th percentile FastAPI event loop lag in seconds (<0.1s target)",
+    )
+    lines.append(f"ledgerpilot_event_loop_lag_seconds_p95 {p95_lag:.6f}")
 
     lines.append("")  # Trailing newline required by Prometheus
     return "\n".join(lines)

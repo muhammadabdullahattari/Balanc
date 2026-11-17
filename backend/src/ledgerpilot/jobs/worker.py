@@ -153,7 +153,10 @@ class BackgroundWorker:
         signal.signal(signal.SIGTERM, _handle_signal)
 
         try:
+            from ledgerpilot.observability.metrics import record_worker_heartbeat
+
             while self.running:
+                record_worker_heartbeat(str(self.worker_token))
                 acted = False
                 for q in self.queues:
                     if not self.running:

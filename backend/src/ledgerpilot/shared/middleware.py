@@ -30,6 +30,17 @@ class FoundationMiddleware:
         self._heavy = 0
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] == "http":
+            try:
+                import asyncio
+
+                from ledgerpilot.observability.metrics import record_event_loop_lag
+                loop = asyncio.get_running_loop()
+                t0 = loop.time()
+                loop.call_soon(lambda: record_event_loop_lag(loop.time() - t0))
+            except (RuntimeError, ImportError):
+                pass
+
         if scope["type"] != "http" or scope["path"].startswith("/health/"):
             await self._handle(scope, receive, send)
             return
