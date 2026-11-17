@@ -335,6 +335,8 @@ class Settings(BaseSettings):
                 )
             )
         )
+        if is_railway and self.cookie_samesite == "lax":
+            object.__setattr__(self, "cookie_samesite", "none")
         if url.username == "postgres" and (self.app_db_user == "postgres" or is_railway):
             pass
         elif url.username != self.app_db_user or self.app_db_user.lower() in {

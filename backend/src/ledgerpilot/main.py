@@ -203,10 +203,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"{configured.api_v1_prefix}/auth/csrf",
             )
 
+    is_railway = bool(
+        os.environ.get("RAILWAY_PROJECT_ID")
+        or os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("RAILWAY_SERVICE_ID")
+    )
     application.add_middleware(FoundationMiddleware)
     application.add_middleware(
         CORSMiddleware,
         allow_origins=configured.allowed_origins,
+        allow_origin_regex=r"^https://.*\.vercel\.app$" if is_railway else None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Range", "If-Match"],

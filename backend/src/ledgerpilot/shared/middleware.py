@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 import secrets
 import time
 from uuid import UUID, uuid4
@@ -115,8 +116,15 @@ class FoundationMiddleware:
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not signed_webhook:
             cookie = request.cookies.get(CSRF_COOKIE, "")
             csrf = request.headers.get("x-csrf-token", "")
+            origin = request.headers.get("origin")
+            is_railway = bool(
+                os.environ.get("RAILWAY_PROJECT_ID") or os.environ.get("RAILWAY_ENVIRONMENT")
+            )
+            origin_allowed = origin in settings.allowed_origins or (
+                is_railway and bool(origin and origin.endswith((".vercel.app", ".railway.app")))
+            )
             if (
-                request.headers.get("origin") not in settings.allowed_origins
+                not origin_allowed
                 or not cookie
                 or not cookie.isascii()
                 or not csrf.isascii()
