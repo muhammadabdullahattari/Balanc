@@ -221,3 +221,64 @@ If a regression is discovered after deployment:
 2. Select **Target Environment**: `staging` or `production`.
 3. Provide **Target Image Digest**: the SHA of the last known-good image (e.g., `ghcr.io/muhammadabdullahattari/balanc/api@sha256:...`).
 4. Click **Run workflow**. The pipeline promotes the tested digest directly without rebuilding, validates `/health/ready`, and restores service immediately.
+
+---
+
+## 6. CI/CD Verification Record & Evidence
+
+The release pipeline was proven on GitHub Actions against live services with zero skipped tests and strict gates.
+
+### Consecutive Green Pipeline Runs (Stability Evidence)
+
+| Run ID | Commit SHA | Branch | Duration | Result | Evidence URL |
+| :---: | :---: | :---: | :---: | :---: | :--- |
+| `44143710251` | `53ba477` | `ci/robust-release-pipeline` | 4m 32s | **SUCCESS (10/10 jobs)** | [Run 44143710251](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44143710251) |
+| `44146340299` | `5bc23fa` | `ci/robust-release-pipeline` | 4m 21s | **SUCCESS (10/10 jobs)** | [Run 44146340299](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44146340299) |
+| `44149068351` | `03c7876` | `ci/robust-release-pipeline` | 4m 35s | **SUCCESS (10/10 jobs)** | [Run 44149068351](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44149068351) |
+| `44156052989` | `03c7876` | `main` | 5m 12s | **SUCCESS (10/10 jobs)** | [Run 44156052989](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44156052989) |
+
+### Deliberate-Failure Gate Verification (Security & Quality Assertion)
+
+To guarantee that the pipeline acts as an uncompromised release gate rather than a cosmetic pass, four deliberate failure scenarios were tested on throwaway branches:
+
+| Test Gate | Branch Tested | Injected Fault | Expected Gate Failure | Actual CI Result | Run Evidence URL |
+| :--- | :--- | :--- | :--- | :---: | :--- |
+| **Lint / Format Gate** | `ci/test-gate-lint` | Unused import in `main.py` | `backend-quality` fails, halts pipeline | **FAILED as expected** (Job 134282480473 failed, all downstream skipped) | [Run 44151981656](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44151981656) |
+| **Regression Test Gate** | `ci/test-gate-failing-test` | `assert actual == expected` regression | `backend-tests` fails, halts container build | **FAILED as expected** (Job 134286800405 failed, all downstream skipped) | [Run 44153145964](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44153145964) |
+| **Schema Drift Gate** | `ci/test-gate-drift` | Unmigrated column on `AuthSession` model | `migrations` fails on `alembic check` | **FAILED as expected** (Job 134293446782 Step 9 failed, halts deploy) | [Run 44155005096](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44155005096) |
+| **Contract Drift Gate** | `ci/test-gate-contract` | Undocumented API endpoint in FastAPI | `contract-checks` fails on `export_openapi --check` | **FAILED as expected** (Job 134295411064 Step 5 failed, halts deploy) | [Run 44155609785](https://github.com/muhammadabdullahattari/Balanc/actions/runs/44155609785) |
+
+### Test Counts & Coverage Summary
+- **Total Backend Integration Tests**: 250 passed, 0 failed, 0 skipped.
+- **Skip Allowlist**: Strict `0` allowed. Pipeline actively asserts `allowlist = 0`.
+- **OpenAPI Schema Check**: 187 paths validated with 0 drift.
+- **Traceability Verification**: 104 requirement references cross-verified.
+- **Frontend Contract Call Sites**: 191 call sites verified in sync.
+- **k6 Smoke Test**: 5 VUs, 30s load, 0 failed requests, p95 latency < 500ms.
+
+---
+
+## 7. Recommended Branch Protection Rules for `main`
+
+To maintain pipeline integrity in GitHub, configure the following Branch Protection Rules under **Repository Settings -> Branches -> Add Classic Rule** (Target: `main`):
+
+1. **Require a pull request before merging**:
+   - Require approvals: minimum 1 review.
+   - Dismiss stale pull request approvals when new commits are pushed.
+   - Require review from Code Owners.
+2. **Require status checks to pass before merging**:
+   - Require branches to be up to date before merging.
+   - Required status checks:
+     - `checks / Backend Quality (Lint, Format, Mypy)`
+     - `checks / Contract Checks (OpenAPI, Traceability, API Sync)`
+     - `checks / Frontend Quality and Production Build`
+     - `checks / Infrastructure and Configuration Checks`
+     - `checks / Security and Dependency Audits`
+     - `checks / Database Migrations and Drift Check`
+     - `checks / Backend Integration Suite with Live Services`
+     - `checks / Build API Container and Verify Control Flow`
+     - `checks / k6 Smoke Test Against Stack`
+3. **Require signed commits**: Enabled.
+4. **Require linear history**: Enabled (enforces clean rebase or squash merges).
+5. **Do not allow bypassing the above settings**: Enabled (enforced on administrators).
+
