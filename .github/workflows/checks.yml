@@ -7,66 +7,233 @@ permissions:
   contents: read
 
 jobs:
-  backend:
-    name: Backend checks and tests
+  backend-quality:
+    name: Backend Quality (Lint, Format, Mypy)
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     defaults:
       run:
         working-directory: backend
     steps:
-      - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
+        with:
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Verify locked dependencies
+        run: uv sync --locked --all-groups
+      - name: Ruff Lint Check
+        run: uv run ruff check src tests
+      - name: Ruff Format Check
+        run: uv run ruff format --check src tests
+      - name: Mypy Type Check
+        run: uv run mypy
+
+  contract-checks:
+    name: Contract Checks (OpenAPI, Traceability, API Sync)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
+        with:
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked --all-groups
+      - name: Verify OpenAPI contract and requirement traceability
+        working-directory: backend
+        run: |
+          uv run python -m ledgerpilot.export_openapi --check
+          uv run python -m ledgerpilot.verify_traceability
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Verify frontend API types and call sites match contract
+        working-directory: frontend
+        run: |
+          npm run api:check
+          npm run integration:check
+
+  frontend:
+    name: Frontend Quality and Production Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Prettier Code Style Check
+        run: npm run format:check
+      - name: Run API client and contract unit tests
+        run: npm run test:api
+      - name: Run frontend UI test suite
+        run: npm run test:ui
+      - name: Build production web bundle
+        run: npm run build
+      - name: Upload production web bundle artifact
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
+        with:
+          name: ledgerpilot-web-${{ github.sha }}
+          path: frontend/dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  infra-checks:
+    name: Infrastructure and Configuration Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate Docker Compose configurations
+        run: |
+          docker compose -f docker-compose.yml config --quiet
+          docker compose -f docker-compose.auth.yml config --quiet
+          docker compose -f docker-compose.documents.yml config --quiet
+          docker compose -f docker-compose.performance.yml config --quiet
+      - name: Check Prometheus alert rules syntax
+        run: |
+          docker run --rm -v "${{ github.workspace }}/deploy/prometheus:/etc/prometheus" --entrypoint promtool prom/prometheus:v2.54.1 check rules /etc/prometheus/alerts.yml
+      - name: Run Prometheus alert rules unit tests
+        run: |
+          docker run --rm -v "${{ github.workspace }}/deploy/prometheus:/etc/prometheus" -w /etc/prometheus --entrypoint promtool prom/prometheus:v2.54.1 test rules alerts_test.yml
+      - name: Lint Dockerfiles with Hadolint
+        run: |
+          docker run --rm -i hadolint/hadolint:latest hadolint - < backend/Dockerfile
+          docker run --rm -i hadolint/hadolint:latest hadolint - < backend/Dockerfile.ocr
+
+  security-audit:
+    name: Security and Dependency Audits
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
+        with:
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked --all-groups
+      - name: Audit Python dependencies (pip-audit)
+        working-directory: backend
+        run: uv run pip-audit --skip-editable --format json --output dependency-audit.json
+      - name: Setup Node.js
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+      - name: Audit frontend production dependencies
+        working-directory: frontend
+        run: npm audit --omit=dev --audit-level=high
+      - name: Scan repository for secrets (gitleaks)
+        uses: gitleaks/gitleaks-action@3d5291244e8e4a9e52d3a6d459a93077e68cf0cf # v2.3.8
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  backend-tests:
+    name: Backend Integration Suite with Live Services
+    needs: [backend-quality]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
         with:
           version: 0.12.7
           enable-cache: true
           cache-dependency-glob: backend/uv.lock
       - name: Install locked dependencies
+        working-directory: backend
         run: uv sync --locked --all-groups
-      - name: Lint
-        run: uv run ruff check src tests
-      - name: Type check
-        run: uv run mypy
-      - name: Audit Python dependencies
-        run: uv run pip-audit --skip-editable --format json --output dependency-audit.json
-      - name: Check reviewed OpenAPI contract
-        run: |
-          uv run python -m ledgerpilot.export_openapi --check
-          uv run python -m ledgerpilot.verify_traceability
-      - name: Run tests with coverage
-        run: uv run coverage run -m pytest -q && uv run coverage report
       - name: Compile Python sources
+        working-directory: backend
         run: uv run python -m compileall -q src
       - name: Prepare isolated local database credentials
+        working-directory: backend
         run: uv run python -m ledgerpilot.local_setup prepare
       - name: Start PostgreSQL with restricted roles
-        working-directory: .
         run: docker compose up -d --wait --wait-timeout 90 postgres
       - name: Verify database grants and password rotation
+        working-directory: backend
         run: uv run python -m ledgerpilot.local_setup verify --check-rotation
-      - name: Verify unsafe bootstrap configurations fail without mutation
-        env:
-          RUN_DB_BOOTSTRAP_TESTS: '1'
-        run: uv run pytest tests/test_bootstrap_integration.py -q
-      - name: Start local SMTP mailbox
+      - name: Start Mailpit SMTP and web mailbox
         timeout-minutes: 2
-        working-directory: .
         run: |
           docker compose -f docker-compose.auth.yml up -d
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --retry-max-time 60 --connect-timeout 2 --max-time 5 --output /dev/null http://127.0.0.1:8025/api/v1/messages
-      - name: Start bounded local malware scanner
-        working-directory: .
+      - name: Start Redis rate limiter and report cache
+        run: docker compose -f docker-compose.performance.yml up -d
+      - name: Start ClamAV and OCR scanner services
         run: docker compose -f docker-compose.documents.yml up -d --build --wait --wait-timeout 300
-      - name: Verify backend on isolated PostgreSQL, SMTP and ClamAV
+      - name: Run full backend integration test suite with coverage
+        working-directory: backend
         env:
           RUN_PHASE2_INTEGRATION: '1'
           RUN_DOCUMENT_SCANNER_TESTS: '1'
           RUN_LOCAL_OCR_TESTS: '1'
           RUN_DB_BOOTSTRAP_TESTS: '1'
+          LEDGERPILOT_TEST_REDIS_URL: 'redis://127.0.0.1:16379/0'
         run: |
-          uv run coverage run -m pytest tests -q --junitxml=phase4-results.xml
-          uv run coverage json -o phase4-coverage.json
+          uv run coverage run -m pytest tests -q --junitxml=backend-results.xml
+          uv run coverage json -o backend-coverage.json
           uv run coverage report
-      - uses: actions/setup-node@v7
+      - name: Enforce zero skipped tests allowlist
+        working-directory: backend
+        run: |
+          python -c "
+          import xml.etree.ElementTree as ET, sys
+          tree = ET.parse('backend-results.xml')
+          root = tree.getroot()
+          tests = int(root.attrib.get('tests', 0))
+          failures = int(root.attrib.get('failures', 0))
+          errors = int(root.attrib.get('errors', 0))
+          skipped = int(root.attrib.get('skipped', 0))
+          passed = tests - failures - errors - skipped
+          print(f'Test Summary: {passed} passed, {failures + errors} failed, {skipped} skipped out of {tests} total')
+          if skipped > 0:
+              print(f'ERROR: Found {skipped} skipped tests! CI allowlist requires 0 skipped.')
+              sys.exit(1)
+          if failures > 0 or errors > 0:
+              sys.exit(1)
+          "
+      - name: Setup Node.js for live acceptance checks
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: 22
           cache: npm
@@ -79,122 +246,151 @@ jobs:
         env:
           LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
         run: npm run test:live
-      - name: Verify production browser with real API and PostgreSQL
-        working-directory: frontend
-        env:
-          LEDGERPILOT_TEST_PYTHON: ${{ github.workspace }}/backend/.venv/bin/python
-        run: |
-          npm run build
-          npx playwright install --with-deps chromium || npx playwright install chromium
-          npm run test:browser:types
-          npm run test:browser:live
-      - name: Save frontend integration evidence
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ledgerpilot-web-live-${{ github.sha }}
-          path: |
-            tmp/phase5/live-results.json
-            tmp/phase8/browser-results.json
-            tmp/phase8/browser-artifacts/
-            frontend/test-results/
-          if-no-files-found: warn
-          retention-days: 7
       - name: Save backend verification evidence
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: ledgerpilot-backend-verification-${{ github.sha }}
           path: |
-            backend/phase4-results.xml
-            backend/phase4-coverage.json
-            backend/dependency-audit.json
+            backend/backend-results.xml
+            backend/backend-coverage.json
           if-no-files-found: warn
           retention-days: 7
-      - name: Stop local malware scanner
+      - name: Teardown Compose service stack
         if: always()
-        working-directory: .
-        run: docker compose -f docker-compose.documents.yml down --volumes
-      - name: Stop local SMTP mailbox
-        if: always()
-        working-directory: .
-        run: docker compose -f docker-compose.auth.yml down
-      - name: Stop disposable CI database
-        if: always()
-        working-directory: .
-        run: docker compose down --volumes
+        run: |
+          docker compose -f docker-compose.documents.yml down --volumes || true
+          docker compose -f docker-compose.performance.yml down --volumes || true
+          docker compose -f docker-compose.auth.yml down --volumes || true
+          docker compose down --volumes || true
 
-  frontend:
-    name: Frontend checks and production build
+  migrations:
+    name: Database Migrations and Drift Check
+    needs: [backend-quality]
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
         with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - name: Audit web runtime and high-severity tooling dependencies
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install backend dependencies
+        working-directory: backend
+        run: uv sync --locked --all-groups
+      - name: Prepare isolated local database credentials
+        working-directory: backend
+        run: uv run python -m ledgerpilot.local_setup prepare
+      - name: Start PostgreSQL with restricted roles
+        run: docker compose up -d --wait --wait-timeout 90 postgres
+      - name: Run Alembic upgrade through 0034 on fresh database
+        working-directory: backend
+        run: uv run alembic upgrade head
+      - name: Assert exactly one Alembic head
+        working-directory: backend
         run: |
-          npm audit --omit=dev --audit-level=low
-          npm audit --audit-level=high --json > frontend-dependency-audit.json
-      - name: Check generated API types and browser transport
+          HEADS=$(uv run alembic heads)
+          echo "Current heads: $HEADS"
+          HEAD_COUNT=$(echo "$HEADS" | grep -c "head" || true)
+          if [ "$HEAD_COUNT" -ne 1 ]; then
+            echo "ERROR: Expected exactly 1 Alembic head, but found $HEAD_COUNT"
+            exit 1
+          fi
+      - name: Verify model and migration drift (alembic check)
+        working-directory: backend
+        run: uv run alembic check
+      - name: Verify migration downgrade and upgrade reversibility
+        working-directory: backend
         run: |
-          npm run integration:check
-          npm run api:check
-          npm run test:api
-          npm run test:ui
-          npm run format:check
-      - name: Build production web application
-        run: npm run build
-      - name: Install Chromium for UI acceptance
-        run: npx playwright install --with-deps chromium || npx playwright install chromium
-      - name: Run isolated browser UI journeys
-        run: |
-          npm run test:browser:types
-          npm run test:browser
-      - name: Save browser acceptance evidence
+          uv run alembic downgrade -1
+          uv run alembic upgrade head
+      - name: Teardown database
         if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: ledgerpilot-phase6-browser-${{ github.sha }}
-          path: |
-            tmp/phase6/
-            frontend/test-results/
-            frontend/frontend-dependency-audit.json
-          if-no-files-found: warn
-          retention-days: 7
-      - name: Save production bundle
-        uses: actions/upload-artifact@v7
-        with:
-          name: ledgerpilot-web-${{ github.sha }}
-          path: frontend/dist/
-          if-no-files-found: error
-          retention-days: 7
+        run: docker compose down --volumes || true
 
   container:
-    name: Build API container
+    name: Build API Container and Verify Control Flow
+    needs: [backend-tests, frontend, migrations]
     runs-on: ubuntu-latest
-    needs: [backend]
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v7
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2 # v3.10.0
       - name: Build API image
         run: docker build --file backend/Dockerfile --tag ledgerpilot-api:${{ github.sha }} backend
+      - name: Scan container image with Trivy (Fail on Critical/High)
+        uses: aquasecurity/trivy-action@18f2510ee396bbf400402947b394f2dd8c87dbb0 # 0.29.0
+        with:
+          image-ref: ledgerpilot-api:${{ github.sha }}
+          format: table
+          exit-code: 1
+          ignore-unfixed: true
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
       - name: Verify deployment failure and rollback control flow
-        run: docker run --rm --user 0 --entrypoint python --mount type=bind,source=${{ github.workspace }},target=/source,readonly ledgerpilot-api:${{ github.sha }} /source/backend/tests/deploy_shell_harness.py
+        run: |
+          docker run --rm --user 0 --entrypoint python --mount type=bind,source=${{ github.workspace }},target=/source,readonly ledgerpilot-api:${{ github.sha }} /source/backend/tests/deploy_shell_harness.py
       - name: Verify persistent originals and invalid-database readiness
         run: python scripts/check-deployment-container.py ledgerpilot-api:${{ github.sha }}
       - name: Save checked API image
         run: docker save ledgerpilot-api:${{ github.sha }} --output /tmp/api-image.tar
       - name: Upload checked API image
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4.6.1
         with:
           name: ledgerpilot-api-image-${{ github.sha }}
           path: /tmp/api-image.tar
           compression-level: 0
           retention-days: 1
           if-no-files-found: error
+
+  smoke-test:
+    name: k6 Smoke Test Against Stack
+    needs: [container]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Download API image
+        uses: actions/download-artifact@cc203385981b70ca67e1cc392babf9cc229d5806 # v4.1.9
+        with:
+          name: ledgerpilot-api-image-${{ github.sha }}
+          path: /tmp/image
+      - name: Load API image into Docker
+        run: docker load --input /tmp/image/api-image.tar
+      - name: Setup uv
+        uses: astral-sh/setup-uv@f94ec6bed567a21f333e551d6e66e60b0945607d # v5.3.0
+        with:
+          version: 0.12.7
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Start Compose database and cache dependencies
+        run: |
+          uv run --directory backend python -m ledgerpilot.local_setup prepare
+          docker compose up -d --wait --wait-timeout 90 postgres
+          docker compose -f docker-compose.auth.yml up -d
+          docker compose -f docker-compose.performance.yml up -d
+      - name: Run API container
+        run: |
+          APP_PASS=$(grep APP_DB_PASSWORD backend/.env | head -n1 | cut -d= -f2 | tr -d "'\"")
+          docker run -d --name ledgerpilot-smoke-api --network host \
+            -e DATABASE_URL="postgresql+psycopg://ledgerpilot_app:${APP_PASS}@127.0.0.1:5432/ledgerpilot" \
+            -e SESSION_SIGNING_KEY="smoke-test-signing-key-minimum-32-bytes-long" \
+            -e APP_ENV="local" \
+            ledgerpilot-api:${{ github.sha }}
+          sleep 5
+      - name: Execute k6 smoke test
+        run: |
+          docker run --rm --network host -v "${{ github.workspace }}/scripts/load:/load" grafana/k6:latest run /load/smoke.js
+      - name: Teardown smoke stack
+        if: always()
+        run: |
+          docker rm -f ledgerpilot-smoke-api || true
+          docker compose -f docker-compose.performance.yml down --volumes || true
+          docker compose -f docker-compose.auth.yml down --volumes || true
+          docker compose down --volumes || true
