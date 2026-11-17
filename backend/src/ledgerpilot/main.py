@@ -87,6 +87,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         readiness_engine = build_engine(configured, rate_limits=True)
         application.state.readiness_engine = readiness_engine
         try:
+            with application.state.sessions() as startup_db:
+                from ledgerpilot.workspace.cleanup import reconcile_disposals
+
+                reconcile_disposals(startup_db, configured)
+        except Exception:
+            logger.warning("Startup disposal reconciliation skipped.")
+        try:
             yield
         finally:
             if admission is not None:
@@ -266,7 +273,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one_or_none()
-                if version != "0033":
+                if version != "0034":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):

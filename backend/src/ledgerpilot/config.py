@@ -81,6 +81,13 @@ class Settings(BaseSettings):
     evidence_encryption_key: SecretStr | None = None
     export_signing_private_key: SecretStr | None = None
     evidence_storage_root: Path = Path(__file__).resolve().parents[3] / "tmp" / "private-evidence"
+    evidence_storage_backend: Literal["filesystem", "s3"] = "filesystem"
+    s3_endpoint_url: str | None = None
+    s3_bucket: str = "ledgerpilot-evidence"
+    s3_region: str = "us-east-1"
+    s3_access_key_id: SecretStr | None = None
+    s3_secret_access_key: SecretStr | None = None
+    s3_use_ssl: bool = True
     evidence_max_bytes: int = Field(default=26214400, ge=1, le=26214400)
     clamav_host: str = "127.0.0.1"
     clamav_port: int = Field(default=3310, ge=1, le=65535)

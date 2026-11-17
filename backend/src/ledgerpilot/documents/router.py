@@ -1,11 +1,12 @@
 """Private scanned evidence with explicit manual/unsupported extraction outcomes."""
 
 import re
+from collections.abc import AsyncIterator
 from datetime import date
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Body, Query, Request, Response
+from fastapi import APIRouter, Query, Request, Response
 from pydantic import Field, model_validator
 from sqlalchemy import event, func, select
 
@@ -197,14 +198,27 @@ class LinkCreate(Schema):
     status_code=201,
     response_model=contracts.responses["documents.upload"],
     response_model_exclude_unset=True,
+    openapi_extra={
+        "requestBody": {
+            "content": {
+                "application/octet-stream": {
+                    "schema": {
+                        "type": "string",
+                        "contentMediaType": "application/octet-stream",
+                        "title": "Content",
+                    }
+                }
+            },
+            "required": True,
+        }
+    },
 )
-def upload(
+async def upload(
     business_id: UUID,
     request: Request,
     identity: Identity,
     db: DB,
     filename: str = Query(min_length=1, max_length=160, pattern=r"^[^/\\\r\n]+$"),
-    content: bytes = Body(media_type="application/octet-stream"),
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
     get_business(db, business_id, lock=True)
@@ -213,6 +227,23 @@ def upload(
 
     trial = db.scalar(select(TrialEntitlement).where(TrialEntitlement.business_id == business_id))
     maximum = min(settings.evidence_max_bytes, trial.document_byte_limit if trial else 26214400)
+
+    # Reverse proxy / boundary check: fast reject based on Content-Length header
+    content_length_header = request.headers.get("content-length")
+    if content_length_header is not None:
+        try:
+            cl = int(content_length_header)
+            if cl > maximum:
+                raise DomainError(
+                    "ERR_FILE_SIZE", "Upload is empty or exceeds the configured cap.", 413
+                )
+            if cl == 0:
+                raise DomainError(
+                    "ERR_FILE_SIZE", "Upload is empty or exceeds the configured cap.", 413
+                )
+        except ValueError:
+            pass
+
     count = (
         db.scalar(
             select(func.count()).select_from(Evidence).where(Evidence.business_id == business_id)
@@ -231,17 +262,48 @@ def upload(
         )
         or 0
     )
-    if stored + len(content) > 100 * 1024 * 1024:
-        raise DomainError("ERR_QUOTA", "The pilot evidence quota is 100 MiB per business.", 413)
-    if not content or len(content) > maximum:
-        raise DomainError("ERR_FILE_SIZE", "Upload is empty or exceeds the configured cap.", 413)
+    if content_length_header is not None:
+        try:
+            cl = int(content_length_header)
+            if stored + cl > 100 * 1024 * 1024:
+                raise DomainError(
+                    "ERR_QUOTA", "The pilot evidence quota is 100 MiB per business.", 413
+                )
+        except ValueError:
+            pass
+
     storage.cipher(settings)  # Refuse before scan/storage if key configuration is incomplete.
-    media_type = storage.detect(content, filename)
+
+    # Read first chunk to detect file type without buffering entire file in memory
+    stream = request.stream()
+    first_chunk = b""
+    async for chunk in stream:
+        if chunk:
+            first_chunk = chunk
+            break
+
+    if not first_chunk:
+        raise DomainError("ERR_FILE_SIZE", "Upload is empty or exceeds the configured cap.", 413)
+
+    media_type = storage.detect(first_chunk, filename)
     eid = uuid4()
-    key, digest = storage.put(settings, business_id, eid, content)
+
+    async def combined_stream() -> AsyncIterator[bytes]:
+        yield first_chunk
+        async for next_chunk in stream:
+            if next_chunk:
+                yield next_chunk
+
+    key, digest, size = await storage.put_stream_async(
+        settings, business_id, eid, combined_stream(), max_bytes=maximum
+    )
+
+    if stored + size > 100 * 1024 * 1024:
+        storage.delete(settings, key)
+        raise DomainError("ERR_QUOTA", "The pilot evidence quota is 100 MiB per business.", 413)
 
     def cleanup(*_: object) -> None:
-        storage.path(settings, key).unlink(missing_ok=True)
+        storage.delete(settings, key)
 
     event.listen(db, "after_rollback", cleanup, once=True)
     duplicates = list(
@@ -260,7 +322,7 @@ def upload(
         filename=filename,
         content_hash=digest,
         media_type=media_type,
-        size=len(content),
+        size=size,
         status="quarantined",
         scan_version=None,
         object_key=key,
@@ -289,6 +351,7 @@ def upload(
         "manual_review_available": False,
         "posted": False,
     }
+
 
 
 @router.get(

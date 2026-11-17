@@ -50,3 +50,18 @@ class CleanupEvent(TenantRecord, Base):
     action: Mapped[str]
     detail: Mapped[dict[str, str]] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class DisposalIntent(TenantRecord, Base):
+    __tablename__ = "disposal_intents"
+    __table_args__ = {"schema": "app"}
+    cleanup_request_id: Mapped[UUID]
+    resource_id: Mapped[UUID]
+    location: Mapped[str]
+    object_key: Mapped[str]
+    state: Mapped[str] = mapped_column(default="intent_recorded")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+

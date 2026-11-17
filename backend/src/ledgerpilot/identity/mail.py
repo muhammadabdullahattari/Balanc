@@ -66,31 +66,39 @@ def enqueue_mail(
     from ledgerpilot.identity.security import digest
     from ledgerpilot.jobs import service as job_service
 
-    job = job_service.enqueue(
-        db,
-        business_id=business_id,
-        created_by=user_id,
-        queue="email",
-        kind="identity_smtp",
-        payload={
-            "recipient": recipient,
-            "purpose": purpose,
-            "token": token,
-        },
-        idempotency_key=f"smtp:{purpose}:{digest(token)}",
-        max_attempts=settings.jobs_default_max_attempts,
-        timeout_seconds=settings.jobs_default_timeout_seconds,
-    )
+    job_id = None
+    if business_id is not None and user_id is not None:
+        try:
+            job = job_service.enqueue(
+                db,
+                business_id=business_id,
+                created_by=user_id,
+                queue="email",
+                kind="identity_smtp",
+                payload={
+                    "recipient": recipient,
+                    "purpose": purpose,
+                    "token": token,
+                },
+                idempotency_key=f"smtp:{purpose}:{digest(token)}",
+                max_attempts=settings.jobs_default_max_attempts,
+                timeout_seconds=settings.jobs_default_timeout_seconds,
+            )
+            job_id = job.id
+        except Exception:
+            job_id = None
 
     def _send_after_commit() -> None:
         try:
             deliver(settings, recipient, purpose, token)
-            bind = getattr(db, "get_bind", None)
-            if bind and callable(bind):
-                from sqlalchemy.orm import Session as ScopedSession
-                with ScopedSession(bind()) as fin_db:
-                    job_service.finish_job(fin_db, job.id, uuid4(), {"delivered": True})
-                    fin_db.commit()
+            if job_id is not None:
+                bind = getattr(db, "get_bind", None)
+                if bind and callable(bind):
+                    from sqlalchemy.orm import Session as ScopedSession
+
+                    with ScopedSession(bind()) as fin_db:
+                        job_service.finish_job(fin_db, job_id, uuid4(), {"delivered": True})
+                        fin_db.commit()
         except Exception:
             # SMTP failure leaves the job queued in outbox for background worker retry
             pass

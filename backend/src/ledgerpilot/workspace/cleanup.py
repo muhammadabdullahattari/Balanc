@@ -5,7 +5,7 @@ administrator's evidence of removal; they are never presented as machine-verifie
 """
 
 from datetime import date, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
@@ -13,12 +13,18 @@ from pydantic import Field
 from sqlalchemy import delete, func, select
 
 from ledgerpilot.audit.service import record
+from ledgerpilot.config import Settings
 from ledgerpilot.documents import storage
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
 from ledgerpilot.tenancy.service import authorize, get_business
-from ledgerpilot.workspace.cleanup_models import CleanupEvent, CleanupPolicy, CleanupRequest
+from ledgerpilot.workspace.cleanup_models import (
+    CleanupEvent,
+    CleanupPolicy,
+    CleanupRequest,
+    DisposalIntent,
+)
 from ledgerpilot.workspace.disposal import held
 from ledgerpilot.workspace.models import Evidence, EvidenceJob, ExportSnapshot
 from ledgerpilot.workspace.retention import gate
@@ -91,7 +97,7 @@ class EventView(Schema):
 def admit(db: DB, identity: Identity, business_id: UUID, request: Request) -> None:
     authorize(db, identity, business_id, {"owner", "accountant"})
     gate(request, business_id)
-    if request.method != "GET":
+    if request.method != "GET" and not request.url.path.endswith("/execute"):
         get_business(db, business_id, lock=True)
 
 
@@ -354,41 +360,262 @@ def execute_request(
     if policy.location in {"operator_backup", "external_storage"}:
         item.status = "awaiting_confirmation"
         item.outcome = "Operator must remove the exact copy and supply confirmation evidence."
-    else:
-        try:
-            if policy.location == "local_evidence":
-                evidence = db.scalar(
-                    select(Evidence).where(
-                        Evidence.business_id == business_id, Evidence.id == item.resource_id
+        event(db, identity, item, item.status, item.outcome)
+        db.flush()
+        return item
+
+    if policy.location == "local_evidence":
+        evidence = db.scalar(
+            select(Evidence).where(
+                Evidence.business_id == business_id, Evidence.id == item.resource_id
+            )
+        )
+        if evidence is None:
+            item.status = "failed"
+            item.outcome = "Document not found."
+            event(db, identity, item, item.status, item.outcome)
+            db.flush()
+            return item
+
+        expected_key = f"{business_id}/{item.resource_id}.bin"
+        if evidence.object_key != expected_key:
+            item.status = "failed"
+            item.outcome = "Unexpected managed object key."
+            event(db, identity, item, item.status, item.outcome)
+            db.flush()
+            return item
+
+        # STEP A: Record durable execution intent in PostgreSQL BEFORE unlinking any file
+        from uuid import uuid4
+
+        from sqlalchemy.orm import Session as ScopedSession
+
+        from ledgerpilot.database import set_context
+
+        intent_id = uuid4()
+        bind = getattr(db, "get_bind", None)
+        if bind and callable(bind):
+            with ScopedSession(bind()) as intent_db:
+                set_context(intent_db, identity.user.id, business_id)
+                existing = intent_db.scalar(
+                    select(DisposalIntent)
+                    .where(
+                        DisposalIntent.business_id == business_id,
+                        DisposalIntent.cleanup_request_id == item.id,
+                        DisposalIntent.state.in_(["intent_recorded", "unlinked"]),
                     )
+                    .order_by(DisposalIntent.created_at.desc())
+                    .limit(1)
                 )
-                assert evidence is not None
-                expected_key = f"{business_id}/{item.resource_id}.bin"
-                if evidence.object_key != expected_key:
-                    raise OSError("Unexpected managed object key")
-                target = storage.path(request.app.state.settings, expected_key)
-                target.unlink(missing_ok=True)
-                try:
-                    target.lstat()
-                except FileNotFoundError:
-                    pass
+                if existing is None:
+                    intent_record = DisposalIntent(
+                        id=intent_id,
+                        business_id=business_id,
+                        cleanup_request_id=item.id,
+                        resource_id=item.resource_id,
+                        location=policy.location,
+                        object_key=expected_key,
+                        state="intent_recorded",
+                    )
+                    intent_db.add(intent_record)
+                    intent_db.commit()
                 else:
-                    raise OSError("Deletion verification failed")
-            else:
-                db.execute(
-                    delete(ExportSnapshot).where(
-                        ExportSnapshot.business_id == business_id,
-                        ExportSnapshot.id == item.resource_id,
+                    intent_id = existing.id
+
+        item.status = "disposing"
+        item.outcome = "Disposal intent recorded; verifying holds before unlinking."
+        db.flush()
+
+        # Pre-unlink check: If a legal hold is placed while disposal is in-flight, catch it
+        if held(db, business_id):
+            if bind and callable(bind):
+                with ScopedSession(bind()) as intent_db:
+                    set_context(intent_db, identity.user.id, business_id)
+                    intent_row = intent_db.scalar(
+                        select(DisposalIntent).where(DisposalIntent.id == intent_id)
                     )
-                )
-            item.status = "verified"
-            item.outcome = "Managed payload absent; accounting metadata retained."
+                    if intent_row is not None:
+                        intent_row.state = "rolled_back"
+                        intent_db.commit()
+            item.status = "approved"
+            item.outcome = "Disposal blocked by active legal hold prior to unlinking."
+            event(db, identity, item, "held", item.outcome)
+            db.flush()
+            raise DomainError("ERR_LEGAL_HOLD", "An active hold blocks disposal.", 409)
+
+        # STEP B: Unlink from storage
+        try:
+            storage.delete(request.app.state.settings, expected_key)
+            if storage.exists(request.app.state.settings, expected_key):
+                raise OSError("Deletion verification failed")
+            if bind and callable(bind):
+                with ScopedSession(bind()) as intent_db:
+                    set_context(intent_db, identity.user.id, business_id)
+                    intent_row = intent_db.scalar(
+                        select(DisposalIntent).where(DisposalIntent.id == intent_id)
+                    )
+                    if intent_row is not None:
+                        intent_row.state = "unlinked"
+                        intent_db.commit()
         except (OSError, DomainError):
             item.status = "failed"
             item.outcome = "Storage operation failed; retry after resolving storage access."
-    event(db, identity, item, item.status, item.outcome)
-    db.flush()
+            event(db, identity, item, item.status, item.outcome)
+            db.flush()
+            return item
+
+        # STEP C: Finalize verified disposal
+        if bind and callable(bind):
+            with ScopedSession(bind()) as intent_db:
+                set_context(intent_db, identity.user.id, business_id)
+                intent_row = intent_db.scalar(
+                    select(DisposalIntent).where(DisposalIntent.id == intent_id)
+                )
+                if intent_row is not None:
+                    intent_row.state = "completed"
+                    intent_db.commit()
+
+        item.status = "verified"
+        item.outcome = "Managed payload absent; accounting metadata retained."
+        event(db, identity, item, item.status, item.outcome)
+        db.flush()
+        return item
+
+    elif policy.location == "database_exports":
+        from uuid import uuid4
+
+        intent = DisposalIntent(
+            id=uuid4(),
+            business_id=business_id,
+            cleanup_request_id=item.id,
+            resource_id=item.resource_id,
+            location=policy.location,
+            object_key=f"export:{item.resource_id}",
+            state="intent_recorded",
+        )
+        db.add(intent)
+        item.status = "disposing"
+        db.flush()
+
+        if held(db, business_id):
+            intent.state = "rolled_back"
+            item.status = "approved"
+            item.outcome = "Disposal blocked by active legal hold."
+            event(db, identity, item, "held", item.outcome)
+            db.flush()
+            raise DomainError("ERR_LEGAL_HOLD", "An active hold blocks disposal.", 409)
+
+        db.execute(
+            delete(ExportSnapshot).where(
+                ExportSnapshot.business_id == business_id,
+                ExportSnapshot.id == item.resource_id,
+            )
+        )
+        intent.state = "completed"
+        item.status = "verified"
+        item.outcome = "Managed payload absent; accounting metadata retained."
+        event(db, identity, item, item.status, item.outcome)
+        db.flush()
+        return item
+        event(db, identity, item, item.status, item.outcome)
+        db.commit()
+        return item
+
     return item
+
+
+def reconcile_disposals(
+    db: DB, settings: Settings, business_id: UUID | None = None
+) -> list[dict[str, Any]]:
+    """Detect interrupted or orphaned disposal intents and safely advance or roll back state."""
+    from typing import Any
+
+    query = select(DisposalIntent).where(
+        DisposalIntent.state.in_(["intent_recorded", "unlinked"])
+    )
+    if business_id is not None:
+        query = query.where(DisposalIntent.business_id == business_id)
+
+    pending_intents = list(db.scalars(query.order_by(DisposalIntent.created_at.asc())))
+    reconciled: list[dict[str, Any]] = []
+
+    for intent in pending_intents:
+        req = db.scalar(
+            select(CleanupRequest).where(
+                CleanupRequest.business_id == intent.business_id,
+                CleanupRequest.id == intent.cleanup_request_id,
+            )
+        )
+        is_held = held(db, intent.business_id)
+
+        if intent.state == "intent_recorded":
+            if is_held:
+                # Legal hold active: rollback intent, do NOT unlink file!
+                intent.state = "rolled_back"
+                if req is not None:
+                    req.status = "approved"
+                    req.outcome = "Disposal aborted during reconciliation due to active legal hold."
+                db.commit()
+                reconciled.append({
+                    "intent_id": str(intent.id),
+                    "action": "rolled_back",
+                    "reason": "active_legal_hold",
+                })
+            else:
+                # No hold: proceed to unlink and complete
+                if intent.location == "local_evidence":
+                    storage.delete(settings, intent.object_key)
+                elif intent.location == "database_exports":
+                    db.execute(
+                        delete(ExportSnapshot).where(
+                            ExportSnapshot.business_id == intent.business_id,
+                            ExportSnapshot.id == intent.resource_id,
+                        )
+                    )
+                intent.state = "completed"
+                if req is not None:
+                    req.status = "verified"
+                    req.outcome = "Managed payload absent; accounting metadata retained."
+                db.commit()
+                reconciled.append({
+                    "intent_id": str(intent.id),
+                    "action": "completed",
+                    "reason": "unlinked_and_verified",
+                })
+
+        elif intent.state == "unlinked":
+            # File was already unlinked from storage before crash/interruption.
+            # Even if a legal hold arrived afterwards, the record must NOT claim file is intact.
+            if intent.location == "local_evidence":
+                storage.delete(settings, intent.object_key)
+
+            intent.state = "completed"
+            if req is not None:
+                req.status = "verified"
+                if is_held:
+                    req.outcome = (
+                        "Payload unlinked prior to legal hold; accounting metadata retained."
+                    )
+                else:
+                    req.outcome = "Managed payload absent; accounting metadata retained."
+            db.commit()
+            reconciled.append({
+                "intent_id": str(intent.id),
+                "action": "completed",
+                "reason": "hold_after_unlink" if is_held else "restored_consistency",
+            })
+
+    return reconciled
+
+
+@router.post("/reconcile")
+def trigger_reconciliation(
+    business_id: UUID, request: Request, identity: Identity, db: DB
+) -> dict[str, Any]:
+    admit(db, identity, business_id, request)
+    reconciled = reconcile_disposals(db, request.app.state.settings, business_id)
+    return {"reconciled": reconciled}
+
 
 
 @router.post("/requests/{request_id}/confirm", response_model=RequestView)
