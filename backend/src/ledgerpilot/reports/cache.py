@@ -31,10 +31,12 @@ def report(
     try:
         cached = client.get(key)
         from ledgerpilot.observability.metrics import record_redis_status
+
         record_redis_status("cache", True)
     except RedisError:
         cached = None
         from ledgerpilot.observability.metrics import record_redis_error, record_redis_status
+
         record_redis_status("cache", False)
         record_redis_error("cache")
         emit("report_cache.unavailable")

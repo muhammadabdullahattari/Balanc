@@ -52,6 +52,7 @@ class BackgroundWorker:
         self.running = True
         self._executor = ThreadPoolExecutor(max_workers=concurrency, thread_name_prefix="JobWorker")
         from ledgerpilot.jobs.handlers import register_default_handlers
+
         register_default_handlers()
 
     def stop(self) -> None:

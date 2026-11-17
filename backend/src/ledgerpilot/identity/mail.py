@@ -104,11 +104,7 @@ def enqueue_mail(
             pass
 
     # For real database sessions, listen for after_commit; for mocks/unbound calls, send directly
-    if (
-        hasattr(db, "connection")
-        and hasattr(db, "get_bind")
-        and type(db).__name__ != "MagicMock"
-    ):
+    if hasattr(db, "connection") and hasattr(db, "get_bind") and type(db).__name__ != "MagicMock":
         try:
             from sqlalchemy import event
 

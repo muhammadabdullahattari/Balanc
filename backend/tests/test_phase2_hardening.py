@@ -340,9 +340,7 @@ def test_materialized_balance_summary_invalidation_tied_to_ledger_version() -> N
     # Initial state: business version 5, summary version 5 (fresh)
     db.execute.return_value.scalar_one.return_value = 5
     db.execute.return_value.scalar_one_or_none.return_value = 5
-    db.execute.return_value.tuples.return_value.all.return_value = [
-        (acc_id, Decimal("1500.00"))
-    ]
+    db.execute.return_value.tuples.return_value.all.return_value = [(acc_id, Decimal("1500.00"))]
 
     balances_res = get_materialized_balances(db, business_id)
     assert balances_res[acc_id] == Decimal("1500.00")

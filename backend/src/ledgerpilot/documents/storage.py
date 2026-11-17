@@ -86,6 +86,7 @@ def scan_stream(stream: Iterable[bytes], settings: Settings) -> str:
 
 def scan(content: bytes, settings: Settings) -> str:
     """Obtain version and positive INSTREAM verdict in one clamd IDSESSION."""
+
     def chunk_iter() -> Iterator[bytes]:
         for start in range(0, len(content), CHUNK_SIZE):
             yield content[start : start + CHUNK_SIZE]
@@ -325,6 +326,7 @@ async def put_stream_async(
 
 def put(settings: Settings, bid: UUID, eid: UUID, content: bytes) -> tuple[str, str]:
     """Compatibility put: writes full bytes in chunked format."""
+
     def chunk_iter() -> Iterator[bytes]:
         for start in range(0, len(content), CHUNK_SIZE):
             yield content[start : start + CHUNK_SIZE]

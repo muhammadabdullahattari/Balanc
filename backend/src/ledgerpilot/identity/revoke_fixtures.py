@@ -40,9 +40,7 @@ DEFAULT_FIXTURE_EMAILS = [
     "accountant@example.com",
 ]
 
-DEFAULT_AUDIT_REASON = (
-    "Production rollout: fixture account revocation per C2 hardening policy"
-)
+DEFAULT_AUDIT_REASON = "Production rollout: fixture account revocation per C2 hardening policy"
 
 
 @dataclass
@@ -70,9 +68,7 @@ class RevocationSummary:
     details: list[UserRevocationPlan] = field(default_factory=list)
 
 
-def inspect_fixture_account(
-    db: Session, user: User
-) -> UserRevocationPlan:
+def inspect_fixture_account(db: Session, user: User) -> UserRevocationPlan:
     """Collect all active artifacts for a user."""
     # Active sessions
     sessions = db.scalars(
@@ -198,30 +194,36 @@ def revoke_fixtures(
 
         # 2. Revoke Sessions
         sessions = db.scalars(
-            select(AuthSession).where(
+            select(AuthSession)
+            .where(
                 AuthSession.user_id == plan.user_id,
                 AuthSession.revoked_at.is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         ).all()
         for s in sessions:
             s.revoked_at = now
 
         # 3. Invalidate Refresh Tokens
         tokens = db.scalars(
-            select(RefreshToken).where(
+            select(RefreshToken)
+            .where(
                 RefreshToken.user_id == plan.user_id,
                 RefreshToken.used_at.is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         ).all()
         for t in tokens:
             t.used_at = now
 
         # 4. Invalidate Action Tokens (password resets, invites)
         action_tokens = db.scalars(
-            select(ActionToken).where(
+            select(ActionToken)
+            .where(
                 ActionToken.user_id == plan.user_id,
                 ActionToken.used_at.is_(None),
-            ).with_for_update()
+            )
+            .with_for_update()
         ).all()
         for at in action_tokens:
             at.used_at = now
@@ -246,10 +248,12 @@ def revoke_fixtures(
             audit_events_count += 1
 
             membership = db.scalar(
-                select(Membership).where(
+                select(Membership)
+                .where(
                     Membership.business_id == biz_id,
                     Membership.user_id == plan.user_id,
-                ).with_for_update()
+                )
+                .with_for_update()
             )
             if membership:
                 membership.active = False

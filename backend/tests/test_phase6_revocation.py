@@ -65,8 +65,8 @@ def test_inspect_fixture_account_counts_active_artifacts() -> None:
     # Configure db.scalars().all() return values sequentially
     db.scalars.return_value.all.side_effect = [
         [active_s1, active_s2],  # sessions
-        [active_t1],             # refresh tokens
-        [active_at1],            # action tokens
+        [active_t1],  # refresh tokens
+        [active_at1],  # action tokens
         [active_m1, active_m2],  # memberships
     ]
 

@@ -55,10 +55,12 @@ class RedisAdmission:
                 )
             )
             from ledgerpilot.observability.metrics import record_redis_status
+
             record_redis_status("admission", True)
             return res
         except RedisError:
             from ledgerpilot.observability.metrics import record_redis_error, record_redis_status
+
             record_redis_status("admission", False)
             record_redis_error("admission")
             emit("rate_limiter.unavailable", code="ERR_DEPENDENCY")

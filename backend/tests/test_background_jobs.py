@@ -161,7 +161,6 @@ def test_replay_dead_letter_job() -> None:
 
 def test_job_status_endpoint_and_workspace_authorization() -> None:
 
-
     from datetime import datetime
 
     bid = uuid4()
@@ -185,9 +184,12 @@ def test_job_status_endpoint_and_workspace_authorization() -> None:
     identity = MagicMock()
     identity.user.id = actor
 
-    with patch("ledgerpilot.jobs.router.authorize") as mock_auth, \
-         patch("ledgerpilot.jobs.service.get_job", return_value=mock_job):
+    with (
+        patch("ledgerpilot.jobs.router.authorize") as mock_auth,
+        patch("ledgerpilot.jobs.service.get_job", return_value=mock_job),
+    ):
         from ledgerpilot.jobs.router import get_job_status
+
         resp = get_job_status(bid, job_id, identity, db)
         assert resp.id == job_id
         assert resp.state == "succeeded"
@@ -202,8 +204,10 @@ def test_job_status_endpoint_and_workspace_authorization() -> None:
         assert exc_info.value.code == "ERR_FORBIDDEN"
 
     # Job not found in tenant's workspace
-    with patch("ledgerpilot.jobs.router.authorize"), \
-         patch("ledgerpilot.jobs.service.get_job", return_value=None):
+    with (
+        patch("ledgerpilot.jobs.router.authorize"),
+        patch("ledgerpilot.jobs.service.get_job", return_value=None),
+    ):
         with pytest.raises(DomainError) as exc_info:
             get_job_status(bid, job_id, identity, db)
         assert exc_info.value.code == "ERR_NOT_FOUND"
@@ -238,11 +242,12 @@ def test_worker_process_one_and_handler_execution() -> None:
         "timeout_seconds": 10,
     }
 
-    with patch("ledgerpilot.jobs.service.claim_job", return_value=claimed_job), \
-         patch("ledgerpilot.jobs.service.finish_job") as mock_finish, \
-         patch("ledgerpilot.jobs.worker.Session") as mock_session_cls, \
-         patch("ledgerpilot.jobs.worker.set_context") as mock_set_context:
-
+    with (
+        patch("ledgerpilot.jobs.service.claim_job", return_value=claimed_job),
+        patch("ledgerpilot.jobs.service.finish_job") as mock_finish,
+        patch("ledgerpilot.jobs.worker.Session") as mock_session_cls,
+        patch("ledgerpilot.jobs.worker.set_context") as mock_set_context,
+    ):
         mock_sess = MagicMock()
         mock_session_cls.return_value.__enter__.return_value = mock_sess
 

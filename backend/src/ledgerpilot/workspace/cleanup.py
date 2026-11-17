@@ -530,9 +530,7 @@ def reconcile_disposals(
     """Detect interrupted or orphaned disposal intents and safely advance or roll back state."""
     from typing import Any
 
-    query = select(DisposalIntent).where(
-        DisposalIntent.state.in_(["intent_recorded", "unlinked"])
-    )
+    query = select(DisposalIntent).where(DisposalIntent.state.in_(["intent_recorded", "unlinked"]))
     if business_id is not None:
         query = query.where(DisposalIntent.business_id == business_id)
 
@@ -556,11 +554,13 @@ def reconcile_disposals(
                     req.status = "approved"
                     req.outcome = "Disposal aborted during reconciliation due to active legal hold."
                 db.commit()
-                reconciled.append({
-                    "intent_id": str(intent.id),
-                    "action": "rolled_back",
-                    "reason": "active_legal_hold",
-                })
+                reconciled.append(
+                    {
+                        "intent_id": str(intent.id),
+                        "action": "rolled_back",
+                        "reason": "active_legal_hold",
+                    }
+                )
             else:
                 # No hold: proceed to unlink and complete
                 if intent.location == "local_evidence":
@@ -577,11 +577,13 @@ def reconcile_disposals(
                     req.status = "verified"
                     req.outcome = "Managed payload absent; accounting metadata retained."
                 db.commit()
-                reconciled.append({
-                    "intent_id": str(intent.id),
-                    "action": "completed",
-                    "reason": "unlinked_and_verified",
-                })
+                reconciled.append(
+                    {
+                        "intent_id": str(intent.id),
+                        "action": "completed",
+                        "reason": "unlinked_and_verified",
+                    }
+                )
 
         elif intent.state == "unlinked":
             # File was already unlinked from storage before crash/interruption.
@@ -599,11 +601,13 @@ def reconcile_disposals(
                 else:
                     req.outcome = "Managed payload absent; accounting metadata retained."
             db.commit()
-            reconciled.append({
-                "intent_id": str(intent.id),
-                "action": "completed",
-                "reason": "hold_after_unlink" if is_held else "restored_consistency",
-            })
+            reconciled.append(
+                {
+                    "intent_id": str(intent.id),
+                    "action": "completed",
+                    "reason": "hold_after_unlink" if is_held else "restored_consistency",
+                }
+            )
 
     return reconciled
 
@@ -615,7 +619,6 @@ def trigger_reconciliation(
     admit(db, identity, business_id, request)
     reconciled = reconcile_disposals(db, request.app.state.settings, business_id)
     return {"reconciled": reconciled}
-
 
 
 @router.post("/requests/{request_id}/confirm", response_model=RequestView)

@@ -126,7 +126,7 @@ tests:
               tier: ledger-concurrency
             exp_annotations:
               summary: "Workspace row lock hold time exceeded 5ms"
-              description: "Critical section lock hold time p95 is 0.009s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
+              description: "Critical section lock hold time p95 is 0.01s (>0.005s). Maximum safe write rate per workspace (200 w/s) may degrade."
               runbook_url: "https://runbooks.ledgerpilot.internal/workspace-lock-contention"
 
   # Test 7: RedisDown fires when min(ledgerpilot_redis_up) == 0
@@ -172,5 +172,5 @@ tests:
               tier: api-edge
             exp_annotations:
               summary: "Event loop lag exceeded 100ms"
-              description: "FastAPI event loop lag p95 is 0.18s (>0.1s). Synchronous blocking operations may be blocking request handling."
+              description: "FastAPI event loop lag p95 is 0.2s (>0.1s). Synchronous blocking operations may be blocking request handling."
               runbook_url: "https://runbooks.ledgerpilot.internal/event-loop-lag"

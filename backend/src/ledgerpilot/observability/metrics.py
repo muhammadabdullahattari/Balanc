@@ -135,8 +135,9 @@ def format_prometheus_metrics(engine: Engine | None = None) -> str:
         try:
             with engine.connect() as conn:
                 if conn.dialect.name == "postgresql":
-                    job_stats = conn.execute(
-                        text("""
+                    job_stats = (
+                        conn.execute(
+                            text("""
                         SELECT
                             queue,
                             count(*) FILTER (WHERE state IN ('queued', 'running')) AS active_depth,
@@ -148,7 +149,10 @@ def format_prometheus_metrics(engine: Engine | None = None) -> str:
                         FROM app.background_jobs
                         GROUP BY queue
                     """)
-                    ).mappings().all()
+                        )
+                        .mappings()
+                        .all()
+                    )
 
                     add_comment(
                         "ledgerpilot_job_queue_depth",

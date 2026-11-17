@@ -873,34 +873,24 @@ def generate_report_export(
             if parameters.get("start")
             else date.today() - timedelta(days=30)
         )
-        end_date = (
-            date.fromisoformat(parameters["end"])
-            if parameters.get("end")
-            else date.today()
-        )
+        end_date = date.fromisoformat(parameters["end"]) if parameters.get("end") else date.today()
         basis = parameters.get("basis", "accrual")
         data = financial(db, bid, start_date, end_date, basis, "profit-loss")
     elif report_type == "balance-sheet":
         as_of_date = (
-            date.fromisoformat(parameters["as_of"])
-            if parameters.get("as_of")
-            else date.today()
+            date.fromisoformat(parameters["as_of"]) if parameters.get("as_of") else date.today()
         )
         basis = parameters.get("basis", "accrual")
         data = financial(db, bid, date(1900, 1, 1), as_of_date, basis, "balance-sheet")
     elif report_type == "aging":
         as_of_date = (
-            date.fromisoformat(parameters["as_of"])
-            if parameters.get("as_of")
-            else date.today()
+            date.fromisoformat(parameters["as_of"]) if parameters.get("as_of") else date.today()
         )
         kind = parameters.get("kind", "invoice")
         data = aging(db, bid, as_of_date, kind)
     elif report_type == "controls":
         as_of_date = (
-            date.fromisoformat(parameters["as_of"])
-            if parameters.get("as_of")
-            else date.today()
+            date.fromisoformat(parameters["as_of"]) if parameters.get("as_of") else date.today()
         )
         data = controls(db, bid, as_of_date)
     elif report_type == "dashboard":
@@ -909,11 +899,7 @@ def generate_report_export(
             if parameters.get("start")
             else date.today() - timedelta(days=30)
         )
-        end_date = (
-            date.fromisoformat(parameters["end"])
-            if parameters.get("end")
-            else date.today()
-        )
+        end_date = date.fromisoformat(parameters["end"]) if parameters.get("end") else date.today()
         basis = parameters.get("basis", "accrual")
         bank_ids = [UUID(str(x)) for x in parameters.get("bank_ids", [])]
         data = dashboard(db, bid, start_date, end_date, basis, bank_ids)
@@ -923,24 +909,15 @@ def generate_report_export(
             if parameters.get("start")
             else date.today() - timedelta(days=30)
         )
-        end_date = (
-            date.fromisoformat(parameters["end"])
-            if parameters.get("end")
-            else date.today()
-        )
+        end_date = date.fromisoformat(parameters["end"]) if parameters.get("end") else date.today()
         data = tax_support(db, bid, start_date, end_date)
     elif report_type == "journals":
         from ledgerpilot.workspace.service import journal_csv
+
         start_date = (
-            date.fromisoformat(parameters["start"])
-            if parameters.get("start")
-            else date(1900, 1, 1)
+            date.fromisoformat(parameters["start"]) if parameters.get("start") else date(1900, 1, 1)
         )
-        end_date = (
-            date.fromisoformat(parameters["end"])
-            if parameters.get("end")
-            else date.today()
-        )
+        end_date = date.fromisoformat(parameters["end"]) if parameters.get("end") else date.today()
         content = journal_csv(db, bid, start_date, end_date)
         return {
             "content": content,

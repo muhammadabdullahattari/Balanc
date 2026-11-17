@@ -52,7 +52,7 @@ def test_h5_connection_budget_startup_validation_fails_loudly_when_exceeded() ->
         rate_db_pool_size=3,  # 20 * 18 = 360
         worker_replicas=10,
         worker_pool_size=10,  # 10 * 10 = 100
-        admin_db_headroom=20, # Total = 480 connections!
+        admin_db_headroom=20,  # Total = 480 connections!
         enforce_connection_budget=True,
     )
 
@@ -79,8 +79,8 @@ def test_h5_connection_budget_startup_validation_succeeds_when_within_budget() -
         db_max_overflow=2,
         rate_db_pool_size=2,  # 2 * 9 = 18
         worker_replicas=2,
-        worker_pool_size=5,   # 2 * 5 = 10
-        admin_db_headroom=10, # Total = 38
+        worker_pool_size=5,  # 2 * 5 = 10
+        admin_db_headroom=10,  # Total = 38
         enforce_connection_budget=True,
     )
 
@@ -127,11 +127,13 @@ def test_h1_workspace_write_serialization_lock_hold_time_under_5ms() -> None:
             lock_acquired = time.perf_counter()
             # Perform atomic balance check + insert + version increment
             current_workspace_version += 1
-            ledger_entries.append({
-                "id": uuid4(),
-                "version": current_workspace_version,
-                "worker": worker_idx,
-            })
+            ledger_entries.append(
+                {
+                    "id": uuid4(),
+                    "version": current_workspace_version,
+                    "worker": worker_idx,
+                }
+            )
             lock_released = time.perf_counter()
 
         hold_duration_ms = (lock_released - lock_acquired) * 1000.0

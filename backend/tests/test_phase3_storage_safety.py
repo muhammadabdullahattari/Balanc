@@ -175,7 +175,7 @@ def test_h7_crash_reconciliation_between_unlink_and_commit(temp_settings: Settin
     # When query runs for request and legal hold:
     mock_db.scalar.side_effect = [
         mock_request,  # request_for
-        None,          # held() -> No active legal hold
+        None,  # held() -> No active legal hold
     ]
 
     reconciled = reconcile_disposals(mock_db, temp_settings, business_id=bid)
@@ -230,8 +230,8 @@ def test_h7_legal_hold_arriving_during_disposal_prevents_file_loss(temp_settings
     # When query runs:
     mock_db.scalars.return_value = [mock_intent]
     mock_db.scalar.side_effect = [
-        mock_request,      # request_for
-        uuid4(),           # held() -> Active legal hold found!
+        mock_request,  # request_for
+        uuid4(),  # held() -> Active legal hold found!
     ]
 
     reconciled = reconcile_disposals(mock_db, temp_settings, business_id=bid)

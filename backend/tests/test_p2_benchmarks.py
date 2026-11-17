@@ -129,4 +129,3 @@ def test_scores_ocr_matching_and_anomalies_with_baseline_checks() -> None:
         {"metric": "matching_f1", "observed": "0.5", "target": "0.4", "status": "pass"},
         {"metric": "anomaly_precision", "observed": "0.5", "target": "0.4", "status": "pass"},
     ]
-

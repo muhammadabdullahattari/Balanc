@@ -271,4 +271,3 @@ async def test_upload_deletion_failure_and_retry_preserves_accounting_record(
 
             assert "Storage operation failed" in failed_event["detail"]["reason"]
             assert "Managed payload absent" in verified_event["detail"]["reason"]
-

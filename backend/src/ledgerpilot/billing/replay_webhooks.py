@@ -120,7 +120,9 @@ def replay_failed_events(db: Session, *, sync: bool = False) -> int:
                 "SELECT id FROM app.stripe_event_inbox "
                 "WHERE status = 'failed' ORDER BY received_at ASC"
             )
-        ).scalars().all()
+        )
+        .scalars()
+        .all()
     )
     count = 0
     for eid in rows:

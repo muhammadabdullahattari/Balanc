@@ -22,9 +22,7 @@ def calculate_backoff(
     """Calculate exponential backoff with jitter: base * 2^(attempts - 1) + jitter."""
     exp = base * (2.0 ** max(0, attempts - 1))
     capped = min(max_backoff, exp)
-    added_jitter = (
-        jitter if jitter is not None else random.uniform(0.1, min(base, 2.0))
-    )
+    added_jitter = jitter if jitter is not None else random.uniform(0.1, min(base, 2.0))
     return round(capped + added_jitter, 2)
 
 
@@ -93,19 +91,23 @@ def claim_job(
     concurrency_limit: int = 4,
 ) -> dict[str, Any] | None:
     """Claim next available job using atomic security definer function."""
-    row = db.execute(
-        text("""
+    row = (
+        db.execute(
+            text("""
         SELECT id, business_id, created_by, queue, kind, payload,
                attempts, max_attempts, timeout_seconds
         FROM app.claim_background_job(:q, :token, :lease, :limit)
     """),
-        {
-            "q": queue,
-            "token": worker_token,
-            "lease": lease_seconds,
-            "limit": concurrency_limit,
-        },
-    ).mappings().first()
+            {
+                "q": queue,
+                "token": worker_token,
+                "lease": lease_seconds,
+                "limit": concurrency_limit,
+            },
+        )
+        .mappings()
+        .first()
+    )
     if row is None:
         return None
     return dict(row)

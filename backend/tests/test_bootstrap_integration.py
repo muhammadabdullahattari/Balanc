@@ -26,7 +26,13 @@ pytestmark = pytest.mark.skipif(
 def test_bootstrap_rejects_unsafe_changes(override: str) -> None:
     result = subprocess.run(
         [
-            "docker", "compose", "exec", "--no-TTY", "postgres", "sh", "-c",
+            "docker",
+            "compose",
+            "exec",
+            "--no-TTY",
+            "postgres",
+            "sh",
+            "-c",
             override + '; psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" '
             '-d "$POSTGRES_DB" -f /docker-entrypoint-initdb.d/01-roles.sql',
         ],

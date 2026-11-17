@@ -22,8 +22,9 @@ from ledgerpilot.tenancy.service import get_business
 
 def get_workspace_posting_control(db: Session, bid: UUID) -> dict[str, Any]:
     try:
-        row = db.execute(
-            text("""
+        row = (
+            db.execute(
+                text("""
                 SELECT action, user_id, occurred_at, details
                 FROM app.audit_events
                 WHERE business_id = :b
@@ -31,8 +32,11 @@ def get_workspace_posting_control(db: Session, bid: UUID) -> dict[str, Any]:
                 ORDER BY occurred_at DESC, id DESC
                 LIMIT 1
             """),
-            {"b": bid},
-        ).mappings().first()
+                {"b": bid},
+            )
+            .mappings()
+            .first()
+        )
         if row is not None:
             details = row["details"] or {}
             is_paused = row["action"] == "workspace.auto_posting_paused"

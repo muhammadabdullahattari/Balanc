@@ -35,6 +35,7 @@ class FoundationMiddleware:
                 import asyncio
 
                 from ledgerpilot.observability.metrics import record_event_loop_lag
+
                 loop = asyncio.get_running_loop()
                 t0 = loop.time()
                 loop.call_soon(lambda: record_event_loop_lag(loop.time() - t0))
