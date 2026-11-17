@@ -46,7 +46,7 @@ def test_process_stripe_checkout_completed() -> None:
     saved = False
     for call in db.execute.call_args_list:
         args, kwargs = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             params = args[1] if len(args) > 1 else kwargs
             assert params["business"] == business_id
             snapshot = json.loads(params["details"])["snapshot"]
@@ -81,7 +81,7 @@ def test_process_stripe_past_due_grace_period() -> None:
     saved = False
     for call in db.execute.call_args_list:
         args, kwargs = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             params = args[1] if len(args) > 1 else kwargs
             snapshot = json.loads(params["details"])["snapshot"]
             assert snapshot["status"] == "past_due"
@@ -115,7 +115,7 @@ def test_process_stripe_subscription_deleted() -> None:
     saved = False
     for call in db.execute.call_args_list:
         args, kwargs = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             params = args[1] if len(args) > 1 else kwargs
             snapshot = json.loads(params["details"])["snapshot"]
             assert snapshot["status"] == "canceled"
@@ -156,7 +156,9 @@ def test_authorize_dynamic_grace_period_enforcement() -> None:
     db.scalar.side_effect = [membership, trial]
     future_grace = time.time() + 86400
     db.execute.return_value.scalar_one_or_none.return_value = {
-        "snapshot": {"status": "past_due", "grace_until": future_grace, "paid_access": True}
+        "status": "past_due",
+        "grace_until": future_grace,
+        "paid_access": True,
     }
     # Should succeed because grace is still active
     auth_mem = authorize(db, identity, business_id)
@@ -172,7 +174,9 @@ def test_authorize_dynamic_grace_period_enforcement() -> None:
     db.scalar.side_effect = [membership, trial]
     past_grace = time.time() - 3600
     db.execute.return_value.scalar_one_or_none.return_value = {
-        "snapshot": {"status": "past_due", "grace_until": past_grace, "paid_access": True}
+        "status": "past_due",
+        "grace_until": past_grace,
+        "paid_access": True,
     }
     with pytest.raises(DomainError) as exc_info:
         authorize(db, identity, business_id)
@@ -227,10 +231,11 @@ def test_quickbooks_unmapped_account_rejection() -> None:
         }
     }
 
-    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
-         patch("ledgerpilot.provider_integrations.provider", return_value=journal_response), \
-         patch("ledgerpilot.provider_integrations.authorize"):
-
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value=qb_connection),
+        patch("ledgerpilot.provider_integrations.provider", return_value=journal_response),
+        patch("ledgerpilot.provider_integrations.authorize"),
+    ):
         # 1. Live import mode: Account not found in app.accounts must raise ERR_UNMAPPED_ACCOUNT
         db.execute.return_value.scalar_one_or_none.return_value = None
         with pytest.raises(DomainError) as exc_info:
@@ -318,10 +323,11 @@ def test_quickbooks_customer_and_vendor_import() -> None:
             }
         return {"QueryResponse": {}}
 
-    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
-         patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider), \
-         patch("ledgerpilot.provider_integrations.authorize"):
-
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value=qb_connection),
+        patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider),
+        patch("ledgerpilot.provider_integrations.authorize"),
+    ):
         db.execute.return_value.scalar_one_or_none.return_value = None
         res = import_quickbooks(
             business_id=business_id,
@@ -361,7 +367,7 @@ def test_repeated_payment_failed_preserves_original_grace() -> None:
     first_saved_snapshot: dict[str, Any] = {}
     for call in db.execute.call_args_list:
         args, kwargs = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             params = args[1] if len(args) > 1 else kwargs
             first_saved_snapshot = json.loads(params["details"])["snapshot"]
     assert first_saved_snapshot["grace_until"] == expected_grace_until
@@ -390,7 +396,7 @@ def test_repeated_payment_failed_preserves_original_grace() -> None:
     second_saved_snapshot: dict[str, Any] = {}
     for call in db.execute.call_args_list:
         args, kwargs = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             params = args[1] if len(args) > 1 else kwargs
             second_saved_snapshot = json.loads(params["details"])["snapshot"]
     # The grace_until must remain the original deadline, not second_failure_time + 3*86400
@@ -431,7 +437,7 @@ def test_stale_stripe_webhook_rejected() -> None:
     saved = False
     for call in db.execute.call_args_list:
         args, _ = call
-        if "INSERT INTO app.provider_connections" in str(args[0]):
+        if "app.stripe_webhook_save" in str(args[0]):
             saved = True
     assert not saved, "Stale webhook event should not update provider connection"
 
@@ -524,10 +530,11 @@ def test_quickbooks_full_entity_scope_import() -> None:
             }
         return {"QueryResponse": {}}
 
-    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
-         patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider), \
-         patch("ledgerpilot.provider_integrations.authorize"):
-
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value=qb_connection),
+        patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider),
+        patch("ledgerpilot.provider_integrations.authorize"),
+    ):
         fake_acc_id = uuid4()
         fake_party_id = uuid4()
         fake_journal_id = uuid4()
@@ -540,11 +547,9 @@ def test_quickbooks_full_entity_scope_import() -> None:
             None,  # Invoice not posted
             None,  # Party not existing
             fake_acc_id,  # AR account
-            fake_acc_id,  # Rev account
             None,  # Bill not posted
             None,  # Vendor party not existing
             fake_acc_id,  # AP account
-            fake_acc_id,  # Exp account
             None,  # Payment not posted
             fake_party_id,  # Customer party
             fake_acc_id,  # Bank account
@@ -552,9 +557,9 @@ def test_quickbooks_full_entity_scope_import() -> None:
             None,  # Credit not posted
             fake_party_id,  # Customer party
             fake_acc_id,  # AR account
-            fake_acc_id,  # Rev account
             None,  # orig_id
         ]
+        db.execute.return_value.scalars.return_value.all.return_value = [fake_acc_id]
         db.execute.return_value.scalar_one.return_value = fake_journal_id
         db.execute.return_value.mappings.return_value.one.return_value = {
             "version": 1,
@@ -638,10 +643,11 @@ def test_quickbooks_supplier_settlement_and_pagination() -> None:
             }
         return {"QueryResponse": {}}
 
-    with patch("ledgerpilot.provider_integrations.load", return_value=qb_connection), \
-         patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider), \
-         patch("ledgerpilot.provider_integrations.authorize"):
-
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value=qb_connection),
+        patch("ledgerpilot.provider_integrations.provider", side_effect=fake_provider),
+        patch("ledgerpilot.provider_integrations.authorize"),
+    ):
         fake_acc_id = uuid4()
         fake_party_id = uuid4()
         fake_journal_id = uuid4()
@@ -654,9 +660,9 @@ def test_quickbooks_supplier_settlement_and_pagination() -> None:
             None,  # VendorCredit not posted
             fake_party_id,  # Vendor party exists
             fake_acc_id,  # AP account
-            fake_acc_id,  # Expense account
             None,  # orig_id
         ]
+        db.execute.return_value.scalars.return_value.all.return_value = [fake_acc_id]
         db.execute.return_value.scalar_one.return_value = fake_journal_id
         db.execute.return_value.mappings.return_value.one.return_value = {
             "version": 1,
@@ -708,7 +714,9 @@ def test_quickbooks_pagination_and_oversized_rejection() -> None:
 
 def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
     from unittest.mock import patch
+
     from pydantic import SecretStr
+
     from ledgerpilot.provider_integrations import checkout
 
     db = MagicMock()
@@ -738,9 +746,11 @@ def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
             }
         return {}
 
-    with patch("ledgerpilot.provider_integrations.load", return_value={}), \
-         patch("ledgerpilot.provider_integrations.stripe", side_effect=fake_stripe), \
-         patch("ledgerpilot.provider_integrations.authorize"):
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value={}),
+        patch("ledgerpilot.provider_integrations.stripe", side_effect=fake_stripe),
+        patch("ledgerpilot.provider_integrations.authorize"),
+    ):
         res = checkout(
             business_id=business_id,
             plan="growth",
@@ -756,10 +766,3 @@ def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
             if "INSERT INTO app.provider_connections" in str(args[0]):
                 saved = True
         assert saved, "Expected pending checkout session to be saved in provider_connections"
-
-
-
-
-
-
-

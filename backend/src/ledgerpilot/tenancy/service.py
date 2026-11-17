@@ -55,8 +55,11 @@ def authorize(
         delay = rate_limited(
             rate_factory,
             [
-                (digest(f"business:{business_id}"), 600),
-                (digest(f"business-user:{business_id}:{identity.user.id}"), 120),
+                (digest(f"business:{business_id}"), db.info.get("rate_workspace_budget", 600)),
+                (
+                    digest(f"business-user:{business_id}:{identity.user.id}"),
+                    db.info.get("rate_workspace_member_budget", 120),
+                ),
             ],
             window_seconds=db.info.get("rate_window_seconds", 60),
             cooldown_max_seconds=db.info.get("rate_cooldown_max_seconds", 60),
@@ -101,10 +104,7 @@ def authorize(
         # Check if customer has active paid Stripe subscription
         has_paid_access = False
         stripe_conn = db.execute(
-            text("""
-                SELECT details FROM app.provider_connections
-                WHERE business_id = :b AND provider = 'stripe'
-            """),
+            text("SELECT app.stripe_entitlement(:b)"),
             {"b": business_id},
         ).scalar_one_or_none()
         if stripe_conn:
@@ -112,7 +112,7 @@ def authorize(
                 with contextlib.suppress(Exception):
                     stripe_conn = json.loads(stripe_conn)
             if isinstance(stripe_conn, dict):
-                snapshot = stripe_conn.get("snapshot", {})
+                snapshot = stripe_conn
                 status = snapshot.get("status")
                 grace_until = snapshot.get("grace_until")
                 if status in {"active", "trialing"}:
@@ -126,12 +126,9 @@ def authorize(
                         grace_until is None or time.time() < float(grace_until)
                     )
 
-        trial_expired = (
-            trial is not None
-            and (
-                trial.status != "manual_trial"
-                or (trial.expires_at is not None and trial.expires_at <= now())
-            )
+        trial_expired = trial is not None and (
+            trial.status != "manual_trial"
+            or (trial.expires_at is not None and trial.expires_at <= now())
         )
         if trial_expired and not has_paid_access and not retained_action:
             raise DomainError(

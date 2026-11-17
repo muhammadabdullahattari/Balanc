@@ -6,6 +6,7 @@ import secrets
 import time
 from uuid import UUID, uuid4
 
+from anyio import fail_after
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -16,6 +17,7 @@ from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from ledgerpilot.identity.dependencies import CSRF_COOKIE
 from ledgerpilot.identity.security import digest
+from ledgerpilot.shared.admission import RedisAdmission
 from ledgerpilot.shared.telemetry import emit
 
 logger = logging.getLogger("ledgerpilot.requests")
@@ -24,8 +26,45 @@ logger = logging.getLogger("ledgerpilot.requests")
 class FoundationMiddleware:
     def __init__(self, app: ASGIApp) -> None:
         self.app = app
+        self._active = 0
+        self._heavy = 0
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http" or scope["path"].startswith("/health/"):
+            await self._handle(scope, receive, send)
+            return
+        settings = scope["app"].state.settings
+        heavy = scope["path"].endswith(
+            (
+                "/evidence/upload",
+                "/exports/snapshots",
+                "/exports/evidence-pack.zip",
+                "/quickbooks/import",
+            )
+        )
+        if self._active >= settings.api_max_in_flight or (
+            heavy and self._heavy >= settings.heavy_max_in_flight
+        ):
+            request_id = str(uuid4())
+            emit("request.over_capacity", status=503, request_id=request_id)
+            await JSONResponse(
+                {
+                    "error": {"code": "ERR_BUSY", "message": "Service busy. Retry shortly."},
+                    "request_id": request_id,
+                },
+                status_code=503,
+                headers={"Retry-After": "1", "X-Request-ID": request_id},
+            )(scope, receive, send)
+            return
+        self._active += 1
+        self._heavy += int(heavy)
+        try:
+            await self._handle(scope, receive, send)
+        finally:
+            self._active -= 1
+            self._heavy -= int(heavy)
+
+    async def _handle(self, scope: Scope, receive: Receive, send: Send) -> None:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
@@ -102,18 +141,25 @@ class FoundationMiddleware:
             except SQLAlchemyError:
                 await reject("ERR_DEPENDENCY", "Upload authorization is unavailable.", 503)
                 return
-        while True:
-            message = await receive()
-            if message["type"] == "http.disconnect":
-                return
-            body = message.get("body", b"")
-            size += len(body)
-            if size > maximum:
-                await reject("ERR_REQUEST_SIZE", "Request exceeds the configured size limit.", 413)
-                return
-            chunks.append(body)
-            if not message.get("more_body", False):
-                break
+        try:
+            with fail_after(settings.request_body_timeout_seconds):
+                while True:
+                    message = await receive()
+                    if message["type"] == "http.disconnect":
+                        return
+                    body = message.get("body", b"")
+                    size += len(body)
+                    if size > maximum:
+                        await reject(
+                            "ERR_REQUEST_SIZE", "Request exceeds the configured size limit.", 413
+                        )
+                        return
+                    chunks.append(body)
+                    if not message.get("more_body", False):
+                        break
+        except TimeoutError:
+            await reject("ERR_REQUEST_TIMEOUT", "The request body took too long to arrive.", 408)
+            return
         body = b"".join(chunks)
         if not upload and excessive_depth(body):
             await reject("ERR_JSON_DEPTH", "JSON nesting exceeds ten levels.", 422)
@@ -121,11 +167,16 @@ class FoundationMiddleware:
         if scope["path"].startswith(settings.api_v1_prefix + "/auth/") and request.method == "POST":
             # Counters commit independently so failed requests cannot roll them back.
             ip = request.client.host if request.client else "unknown"
-            keys = [(digest("ip:" + ip), 60)]
+            keys = [(digest("ip:" + ip), settings.rate_auth_ip_budget)]
             try:
                 data = json.loads(body)
                 if isinstance(data, dict) and isinstance(data.get("email"), str):
-                    keys.append((digest("identity:" + data["email"].strip().casefold()), 5))
+                    keys.append(
+                        (
+                            digest("identity:" + data["email"].strip().casefold()),
+                            settings.rate_auth_identity_budget,
+                        )
+                    )
             except (ValueError, TypeError, RecursionError):
                 pass
             limited = 0
@@ -194,7 +245,7 @@ class FoundationMiddleware:
 
 
 def rate_limited(
-    factory: sessionmaker[Session],
+    factory: sessionmaker[Session] | RedisAdmission,
     keys: list[tuple[str, int]],
     *,
     window_seconds: int = 60,
@@ -202,6 +253,8 @@ def rate_limited(
 ) -> int:
     if not 1 <= window_seconds <= 3600 or not 1 <= cooldown_max_seconds <= 3600:
         raise ValueError("Rate timing must be within the configured bounds")
+    if isinstance(factory, RedisAdmission):
+        return factory.check(keys, window_seconds, cooldown_max_seconds)
     delay = 0
     with factory.begin() as db:
         for key, limit in sorted(keys):

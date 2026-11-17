@@ -32,6 +32,7 @@ def hosted() -> Settings:
     return Settings(
         _env_file=None,
         app_env="production",
+        rate_redis_url="redis://localhost:6379",
         database_url="postgresql+psycopg://ledgerpilot_app:synthetic@localhost/ledgerpilot?sslmode=verify-full",
         session_signing_key="synthetic-checklist-key-at-least-32-bytes",
         frontend_origins="https://web.ledgerpilot.test",

@@ -7,11 +7,11 @@ from uuid import UUID
 from fastapi import APIRouter, Query, Request
 
 from ledgerpilot.identity.dependencies import DB, Identity
-from ledgerpilot.reports import service
+from ledgerpilot.reports import cache, service
 from ledgerpilot.reports.uncertainty import CashInterval, interval
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
-from ledgerpilot.tenancy.service import authorize
+from ledgerpilot.tenancy.service import authorize, get_business
 from ledgerpilot.workspace.service import save_report
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["reports"])
@@ -87,15 +87,32 @@ def dashboard(
     business_id: UUID,
     start: date,
     end: date,
+    request: Request,
     identity: Identity,
     db: DB,
     bank_ids: Annotated[list[UUID], Query(max_length=20)],
     basis: Literal["cash", "accrual"] = "accrual",
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    return save_report(
-        db, identity, business_id, service.dashboard(db, business_id, start, end, basis, bank_ids)
+    business = get_business(db, business_id)
+    calculated = cache.report(
+        db,
+        request.app.state.report_cache,
+        request.app.state.settings.report_cache_ttl_seconds,
+        [
+            "dashboard",
+            str(business_id),
+            str(identity.user.id),
+            str(business.version),
+            str(business.policy_version),
+            str(start),
+            str(end),
+            basis,
+            *map(str, bank_ids),
+        ],
+        lambda: service.dashboard(db, business_id, start, end, basis, bank_ids),
     )
+    return save_report(db, identity, business_id, calculated)
 
 
 @router.get(

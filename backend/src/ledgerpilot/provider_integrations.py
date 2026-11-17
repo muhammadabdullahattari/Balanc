@@ -7,6 +7,8 @@ import json
 import time
 from datetime import date
 from decimal import Decimal
+from functools import lru_cache
+from threading import BoundedSemaphore, Lock
 from typing import Any, Literal
 from urllib.parse import urlencode, urlsplit
 from uuid import UUID, uuid4
@@ -15,27 +17,85 @@ import jwt
 import requests
 from fastapi import APIRouter, Query, Request
 from sqlalchemy import text
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
 from ledgerpilot.audit.service import record
-from ledgerpilot.config import Settings
+from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.identity.security import encryption
 from ledgerpilot.shared.errors import DomainError
+from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.tenancy.service import authorize
 
 router = APIRouter(tags=["provider integrations"])
 
 
+class ProviderCircuit:
+    def __init__(self, concurrency: int, threshold: int, cooldown: int) -> None:
+        self.slots = BoundedSemaphore(concurrency)
+        self.lock = Lock()
+        self.threshold = threshold
+        self.cooldown = cooldown
+        self.failures = 0
+        self.retry_at = 0.0
+        self.probing = False
+
+    def admit(self) -> bool:
+        with self.lock:
+            probing = bool(self.retry_at)
+            if probing and (self.probing or time.monotonic() < self.retry_at):
+                raise DomainError("ERR_PROVIDER_BUSY", "Provider temporarily unavailable.", 503)
+            if not self.slots.acquire(blocking=False):
+                raise DomainError("ERR_PROVIDER_BUSY", "Provider temporarily busy.", 503)
+            if probing:
+                self.probing = True
+            return probing
+
+    def finish(self, transient_failure: bool, probing: bool) -> None:
+        with self.lock:
+            if probing or not self.retry_at:
+                self.failures = self.failures + 1 if transient_failure else 0
+                if transient_failure and (probing or self.failures >= self.threshold):
+                    self.retry_at = time.monotonic() + self.cooldown
+                elif not transient_failure:
+                    self.retry_at = 0
+            if probing:
+                self.probing = False
+            self.slots.release()
+
+
+@lru_cache(maxsize=8)
+def provider_circuit(host: str) -> ProviderCircuit:
+    settings = get_settings()
+    return ProviderCircuit(
+        settings.provider_concurrency,
+        settings.provider_breaker_failures,
+        settings.provider_breaker_cooldown_seconds,
+    )
+
+
 def provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
+    circuit = provider_circuit(urlsplit(url).hostname or "")
+    probing = circuit.admit()
+    started = time.monotonic()
+    transient = False
+    status = 502
     try:
         response = requests.request(method, url, timeout=(4, 15), allow_redirects=False, **kwargs)
-        if not response.ok or response.is_redirect:
-            raise ValueError
-        data = response.json()
-        if isinstance(data, dict):
-            return data
+        status = response.status_code
+        transient = response.status_code == 429 or response.status_code >= 500
+        if response.ok and not response.is_redirect:
+            data = response.json()
+            if isinstance(data, dict):
+                return data
     except (requests.RequestException, ValueError):
-        pass
+        transient = True
+    finally:
+        circuit.finish(transient, probing)
+        emit(
+            "provider.request", duration_ms=int((time.monotonic() - started) * 1000), status=status
+        )
     raise DomainError("ERR_PROVIDER", "The provider request could not be completed.", 502)
 
 
@@ -189,24 +249,28 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
         with contextlib.suppress(ValueError, TypeError):
             business_id = UUID(str(business_id_str))
 
-    # Bypass RLS to read and update provider_connections for webhook events
-    db.execute(text("SET LOCAL row_security = off"))
-
     if not business_id and customer_id:
-        row = db.execute(
-            text("""
-                SELECT business_id FROM app.provider_connections
-                WHERE provider = 'stripe' AND details->>'customer' = :cust
-            """),
-            {"cust": str(customer_id)},
-        ).scalar_one_or_none()
-        if row:
-            business_id = row if isinstance(row, UUID) else UUID(str(row))
-
+        business_id = db.execute(
+            text("SELECT app.stripe_webhook_customer(:customer)"),
+            {"customer": str(customer_id)},
+        ).scalar_one()
     if not business_id:
         return
 
-    current = load(db, business_id, "stripe")
+    current = db.execute(
+        text("SELECT app.stripe_webhook_load(:business)"), {"business": business_id}
+    ).scalar_one_or_none()
+    if current is None:
+        return
+    if current.get("customer") and current["customer"] != customer_id:
+        return
+
+    def persist() -> None:
+        db.execute(
+            text("SELECT app.stripe_webhook_save(:business, CAST(:details AS jsonb))"),
+            {"business": business_id, "details": json.dumps(current)},
+        )
+
     plan = current.get("plan", "starter")
     event_created = int(event.get("created", time.time()))
     last_event_created = int(current.get("last_event_created", 0))
@@ -233,7 +297,7 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
                 "snapshot": snapshot,
             }
         )
-        save(db, business_id, "stripe", current)
+        persist()
 
     elif event_type in {"customer.subscription.created", "customer.subscription.updated"}:
         status = data_object.get("status", "active")
@@ -274,7 +338,7 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
                 "snapshot": snapshot,
             }
         )
-        save(db, business_id, "stripe", current)
+        persist()
 
     elif event_type == "customer.subscription.deleted":
         snapshot = {
@@ -285,7 +349,7 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
             "subscription_id": data_object.get("id"),
         }
         current.update({"snapshot": snapshot})
-        save(db, business_id, "stripe", current)
+        persist()
 
     elif event_type == "invoice.payment_succeeded":
         sub_id = data_object.get("subscription")
@@ -300,7 +364,7 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
         if sub_id:
             snapshot["subscription_id"] = sub_id
         current["snapshot"] = snapshot
-        save(db, business_id, "stripe", current)
+        persist()
 
     elif event_type == "invoice.payment_failed":
         snapshot = current.get("snapshot") or {}
@@ -315,7 +379,7 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
             }
         )
         current["snapshot"] = snapshot
-        save(db, business_id, "stripe", current)
+        persist()
 
     elif event_type == "charge.refunded":
         refunds = current.get("refunds", [])
@@ -328,7 +392,16 @@ def process_stripe_event(db: DB, settings: Settings, event: dict[str, Any]) -> N
             }
         )
         current["refunds"] = refunds
-        save(db, business_id, "stripe", current)
+        persist()
+
+
+def receive_stripe_event(db: Session, settings: Settings, event: dict[str, Any]) -> None:
+    inserted: bool = db.execute(
+        text("SELECT app.stripe_claim_event(:id, :type)"),
+        {"id": event["id"], "type": event["type"]},
+    ).scalar_one()
+    if inserted:
+        process_stripe_event(db, settings, event)
 
 
 @router.post("/billing/stripe/webhook")
@@ -341,14 +414,7 @@ async def stripe_webhook(request: Request, db: DB) -> dict[str, bool]:
         request.headers.get("stripe-signature", ""),
         settings.stripe_webhook_secret.get_secret_value(),
     )
-    db.execute(
-        text("""
-        INSERT INTO app.stripe_event_inbox (id, event_type)
-        VALUES (:id, :type) ON CONFLICT (id) DO NOTHING
-    """),
-        {"id": event["id"], "type": event["type"]},
-    )
-    process_stripe_event(db, settings, event)
+    await run_in_threadpool(receive_stripe_event, db, settings, event)
     return {"received": True}
 
 
@@ -676,8 +742,7 @@ def fetch_qb_pages(
     while True:
         where = f" {where_clause}" if where_clause else ""
         query = (
-            f"SELECT * FROM {entity}{where} ORDERBY Id STARTPOSITION {start} "
-            f"MAXRESULTS {page_size}"
+            f"SELECT * FROM {entity}{where} ORDERBY Id STARTPOSITION {start} MAXRESULTS {page_size}"
         )
         res = provider_fn(
             "GET",
@@ -751,11 +816,36 @@ def import_quickbooks(
     total_debit = Decimal("0")
     total_credit = Decimal("0")
 
-    # 1. Accounts mapping & import
+    # Fetch every selected entity before taking financial write locks.
     if norm_entities & {"account", "accounts"}:
         qb_accounts = fetch_qb_pages(
             provider, realm_id, access_token, "Account", where_clause="WHERE Active=true"
         )
+    if norm_entities & {"customer", "customers"}:
+        qb_customers = fetch_qb_pages(
+            provider, realm_id, access_token, "Customer", where_clause="WHERE Active=true"
+        )
+    if norm_entities & {"vendor", "vendors", "supplier", "suppliers"}:
+        qb_vendors = fetch_qb_pages(
+            provider, realm_id, access_token, "Vendor", where_clause="WHERE Active=true"
+        )
+    if norm_entities & {"journalentry", "journalentries", "journal", "journals"}:
+        qb_journals = fetch_qb_pages(provider, realm_id, access_token, "JournalEntry")
+    if norm_entities & {"invoice", "invoices"}:
+        qb_invoices = fetch_qb_pages(provider, realm_id, access_token, "Invoice")
+    if norm_entities & {"bill", "bills"}:
+        qb_bills = fetch_qb_pages(provider, realm_id, access_token, "Bill")
+    if norm_entities & {"payment", "payments"}:
+        qb_payments = fetch_qb_pages(provider, realm_id, access_token, "Payment")
+    if norm_entities & {"creditmemo", "creditmemos", "credit_memo", "credit_memos"}:
+        qb_credits = fetch_qb_pages(provider, realm_id, access_token, "CreditMemo")
+    if norm_entities & {"billpayment", "billpayments", "bill_payment", "bill_payments"}:
+        qb_bill_pmts = fetch_qb_pages(provider, realm_id, access_token, "BillPayment")
+    if norm_entities & {"vendorcredit", "vendorcredits", "vendor_credit", "vendor_credits"}:
+        qb_vendor_credits = fetch_qb_pages(provider, realm_id, access_token, "VendorCredit")
+
+    # 1. Accounts mapping & import
+    if norm_entities & {"account", "accounts"}:
         for qb_acc in qb_accounts:
             code = str(qb_acc.get("AcctNum") or qb_acc.get("Id") or "").strip()
             name = str(qb_acc.get("Name") or f"QB Account {code}").strip()
@@ -796,9 +886,6 @@ def import_quickbooks(
 
     # 2. Customers mapping & import
     if norm_entities & {"customer", "customers"}:
-        qb_customers = fetch_qb_pages(
-            provider, realm_id, access_token, "Customer", where_clause="WHERE Active=true"
-        )
         for qb_cust in qb_customers:
             raw_c_name = (
                 qb_cust.get("DisplayName")
@@ -827,9 +914,6 @@ def import_quickbooks(
 
     # 3. Vendors mapping & import
     if norm_entities & {"vendor", "vendors", "supplier", "suppliers"}:
-        qb_vendors = fetch_qb_pages(
-            provider, realm_id, access_token, "Vendor", where_clause="WHERE Active=true"
-        )
         for qb_vend in qb_vendors:
             raw_v_name = (
                 qb_vend.get("DisplayName")
@@ -858,7 +942,6 @@ def import_quickbooks(
 
     # 4. JournalEntry mapping & import
     if norm_entities & {"journalentry", "journalentries", "journal", "journals"}:
-        qb_journals = fetch_qb_pages(provider, realm_id, access_token, "JournalEntry")
         for entry in qb_journals:
             qb_id = entry.get("Id")
             idempotency_key = f"qb:{realm_id}:journal:{qb_id}"
@@ -955,7 +1038,6 @@ def import_quickbooks(
 
     # 5. Invoices mapping & import
     if norm_entities & {"invoice", "invoices"}:
-        qb_invoices = fetch_qb_pages(provider, realm_id, access_token, "Invoice")
         for inv in qb_invoices:
             qb_id = inv.get("Id")
             idempotency_key = f"qb:{realm_id}:invoice:{qb_id}"
@@ -998,10 +1080,18 @@ def import_quickbooks(
                 """),
                 {"b": business_id},
             ).scalar_one_or_none()
-            rev_acc = db.execute(
-                text("SELECT id FROM app.accounts WHERE business_id=:b AND kind='income' LIMIT 1"),
-                {"b": business_id},
-            ).scalar_one_or_none()
+            rev_acc_candidates: list[UUID] = list(
+                db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id=:b "
+                        "AND kind='income' AND active ORDER BY id LIMIT 2"
+                    ),
+                    {"b": business_id},
+                )
+                .scalars()
+                .all()
+            )
+            rev_acc = rev_acc_candidates[0] if len(rev_acc_candidates) == 1 else None
             if not ar_acc or not rev_acc:
                 unmapped_accounts.append(
                     {
@@ -1093,7 +1183,6 @@ def import_quickbooks(
 
     # 6. Bills mapping & import
     if norm_entities & {"bill", "bills"}:
-        qb_bills = fetch_qb_pages(provider, realm_id, access_token, "Bill")
         for b_entry in qb_bills:
             qb_id = b_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:bill:{qb_id}"
@@ -1136,10 +1225,18 @@ def import_quickbooks(
                 """),
                 {"b": business_id},
             ).scalar_one_or_none()
-            exp_acc = db.execute(
-                text("SELECT id FROM app.accounts WHERE business_id=:b AND kind='expense' LIMIT 1"),
-                {"b": business_id},
-            ).scalar_one_or_none()
+            exp_acc_candidates: list[UUID] = list(
+                db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id=:b "
+                        "AND kind='expense' AND active ORDER BY id LIMIT 2"
+                    ),
+                    {"b": business_id},
+                )
+                .scalars()
+                .all()
+            )
+            exp_acc = exp_acc_candidates[0] if len(exp_acc_candidates) == 1 else None
             if not ap_acc or not exp_acc:
                 unmapped_accounts.append(
                     {
@@ -1231,7 +1328,6 @@ def import_quickbooks(
 
     # 7. Payments mapping & import
     if norm_entities & {"payment", "payments"}:
-        qb_payments = fetch_qb_pages(provider, realm_id, access_token, "Payment")
         for p_entry in qb_payments:
             qb_id = p_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:payment:{qb_id}"
@@ -1368,7 +1464,6 @@ def import_quickbooks(
 
     # 8. CreditMemo mapping & import
     if norm_entities & {"creditmemo", "creditmemos", "credit_memo", "credit_memos"}:
-        qb_credits = fetch_qb_pages(provider, realm_id, access_token, "CreditMemo")
         for c_entry in qb_credits:
             qb_id = c_entry.get("Id")
             idempotency_key = f"qb:{realm_id}:credit:{qb_id}"
@@ -1412,10 +1507,18 @@ def import_quickbooks(
                 """),
                 {"b": business_id},
             ).scalar_one_or_none()
-            rev_acc = db.execute(
-                text("SELECT id FROM app.accounts WHERE business_id=:b AND kind='income' LIMIT 1"),
-                {"b": business_id},
-            ).scalar_one_or_none()
+            rev_acc_candidates = list(
+                db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id=:b "
+                        "AND kind='income' AND active ORDER BY id LIMIT 2"
+                    ),
+                    {"b": business_id},
+                )
+                .scalars()
+                .all()
+            )
+            rev_acc = rev_acc_candidates[0] if len(rev_acc_candidates) == 1 else None
             if not ar_acc or not rev_acc:
                 unmapped_accounts.append(
                     {
@@ -1425,10 +1528,7 @@ def import_quickbooks(
                     }
                 )
                 if not dry_run:
-                    err_msg = (
-                        "Unmapped receivable or income account for credit memo "
-                        f"'{doc_num}'."
-                    )
+                    err_msg = f"Unmapped receivable or income account for credit memo '{doc_num}'."
                     raise DomainError("ERR_UNMAPPED_ACCOUNT", err_msg, 422)
 
             cr_lines = [
@@ -1517,7 +1617,6 @@ def import_quickbooks(
 
     # 9. BillPayment mapping & import (Supplier bill settlement)
     if norm_entities & {"billpayment", "billpayments", "bill_payment", "bill_payments"}:
-        qb_bill_pmts = fetch_qb_pages(provider, realm_id, access_token, "BillPayment")
         for bp in qb_bill_pmts:
             qb_id = bp.get("Id")
             idempotency_key = f"qb:{realm_id}:billpayment:{qb_id}"
@@ -1653,7 +1752,6 @@ def import_quickbooks(
 
     # 10. VendorCredit mapping & import (Applied vendor credits)
     if norm_entities & {"vendorcredit", "vendorcredits", "vendor_credit", "vendor_credits"}:
-        qb_vendor_credits = fetch_qb_pages(provider, realm_id, access_token, "VendorCredit")
         for vc in qb_vendor_credits:
             qb_id = vc.get("Id")
             idempotency_key = f"qb:{realm_id}:vendorcredit:{qb_id}"
@@ -1695,10 +1793,18 @@ def import_quickbooks(
                 """),
                 {"b": business_id},
             ).scalar_one_or_none()
-            exp_acc = db.execute(
-                text("SELECT id FROM app.accounts WHERE business_id=:b AND kind='expense' LIMIT 1"),
-                {"b": business_id},
-            ).scalar_one_or_none()
+            exp_acc_candidates = list(
+                db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id=:b "
+                        "AND kind='expense' AND active ORDER BY id LIMIT 2"
+                    ),
+                    {"b": business_id},
+                )
+                .scalars()
+                .all()
+            )
+            exp_acc = exp_acc_candidates[0] if len(exp_acc_candidates) == 1 else None
             if not ap_acc or not exp_acc:
                 unmapped_accounts.append(
                     {

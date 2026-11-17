@@ -73,11 +73,12 @@ def test_requires_explicit_valid_frontend_origins(origin: str) -> None:
 
 def test_hosted_configuration_requires_database_certificate_verification_and_https() -> None:
     with pytest.raises(ValidationError, match="sslmode"):
-        settings(app_env="production")
+        settings(app_env="production", rate_redis_url=SecretStr("redis://localhost:6379"))
     with pytest.raises(ValidationError, match="HTTPS"):
         settings(app_env="demo", database_url=SecretStr(URL + "?sslmode=verify-full"))
     configured = settings(
         app_env="production",
+        rate_redis_url=SecretStr("redis://localhost:6379"),
         frontend_origins="https://app.example.com",
         database_url=SecretStr(URL + "?sslmode=verify-full"),
     )

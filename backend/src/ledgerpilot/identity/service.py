@@ -241,8 +241,7 @@ def consume_mfa(
 ) -> bool:
     factor = db.scalar(select(MFAFactor).where(MFAFactor.user_id == user_id).with_for_update())
     if not factor or not factor.verified:
-        user = db.get(User, user_id)
-        return bool(user and user.email.endswith(".local"))
+        return False
     if recovery:
         item = db.scalar(
             select(RecoveryCode)
@@ -338,7 +337,7 @@ def valid_family(db: Session, family: AuthSession | None, *, touch: bool = True)
         raise DomainError(
             "ERR_SESSION_IDLE", "Your session expired through inactivity. Sign in again.", 401
         )
-    if touch:
+    if touch and family.last_seen_at <= now() - timedelta(seconds=60):
         family.last_seen_at = now()
     return user
 

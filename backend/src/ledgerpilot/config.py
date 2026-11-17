@@ -45,7 +45,23 @@ class Settings(BaseSettings):
     db_pool_size: int = Field(default=5, ge=1, le=20)
     db_max_overflow: int = Field(default=5, ge=0, le=20)
     db_pool_timeout_seconds: int = Field(default=10, ge=1, le=60)
+    provider_concurrency: int = Field(default=4, ge=1, le=32)
+    provider_breaker_failures: int = Field(default=5, ge=1, le=100)
+    provider_breaker_cooldown_seconds: int = Field(default=30, ge=1, le=600)
+    api_max_in_flight: int = Field(default=64, ge=1, le=1024)
+    heavy_max_in_flight: int = Field(default=2, ge=1, le=32)
+    request_body_timeout_seconds: float = Field(default=30, gt=0, le=120)
+    report_cache_redis_url: SecretStr | None = None
+    report_cache_ttl_seconds: int = Field(default=10, ge=0, le=60)
+    rate_redis_url: SecretStr | None = None
+    rate_redis_connections: int = Field(default=24, ge=1, le=256)
+    rate_redis_timeout_seconds: float = Field(default=0.25, gt=0, le=2)
     rate_db_pool_size: int = Field(default=2, ge=1, le=4)
+    rate_user_budget: int = Field(default=240, ge=1, le=1000000)
+    rate_workspace_budget: int = Field(default=600, ge=1, le=1000000)
+    rate_workspace_member_budget: int = Field(default=120, ge=1, le=1000000)
+    rate_auth_ip_budget: int = Field(default=60, ge=1, le=1000000)
+    rate_auth_identity_budget: int = Field(default=5, ge=1, le=1000000)
     rate_window_seconds: int = Field(default=60, ge=1, le=3600)
     rate_cooldown_max_seconds: int = Field(default=60, ge=1, le=3600)
     db_connect_timeout_seconds: int = Field(default=5, ge=1, le=30)
@@ -132,8 +148,7 @@ class Settings(BaseSettings):
 
     def allows_p2_reconciliation(self, business_id: UUID) -> bool:
         return self.app_env != "demo" and (
-            business_id == TEST_WORKSPACE_ID
-            or business_id in self.p2_reconciliation_business_ids
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_reconciliation_business_ids
         )
 
     def allows_p2_prepaids(self, business_id: UUID) -> bool:
@@ -143,8 +158,7 @@ class Settings(BaseSettings):
 
     def allows_p2_micro_close(self, business_id: UUID) -> bool:
         return self.app_env != "demo" and (
-            business_id == TEST_WORKSPACE_ID
-            or business_id in self.p2_micro_close_business_ids
+            business_id == TEST_WORKSPACE_ID or business_id in self.p2_micro_close_business_ids
         )
 
     def allows_p2_retention(self, business_id: UUID) -> bool:
@@ -230,14 +244,18 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "Settings":
         url = make_url(self.database_url.get_secret_value())
-        if self.app_db_user == "postgres":
-            if url.username != "postgres":
-                raise ValueError("DATABASE_URL username mismatch")
-        elif url.username != self.app_db_user or self.app_db_user.lower() in {
+        if url.username != self.app_db_user or self.app_db_user.lower() in {
+            "postgres",
             "ledgerpilot",
             "ledgerpilot_migrator",
         }:
             raise ValueError("DATABASE_URL must use the restricted application database role")
+        if self.rate_redis_url and not self.rate_redis_url.get_secret_value().startswith(
+            ("redis://", "rediss://")
+        ):
+            raise ValueError("Rate limiting requires a Redis URL")
+        if self.app_env == "production" and self.rate_redis_url is None:
+            raise ValueError("Production requires a dedicated Redis admission service")
         if self.app_env not in {"local", "test"}:
             is_internal_cloud = bool(
                 url.host

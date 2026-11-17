@@ -3,6 +3,7 @@
 import secrets
 from collections.abc import Iterator
 from dataclasses import dataclass
+from datetime import timedelta
 from typing import Annotated
 from uuid import UUID
 
@@ -12,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from ledgerpilot.identity import repository, service
 from ledgerpilot.identity.models import AuthSession, User
-from ledgerpilot.identity.security import decode_access, digest
+from ledgerpilot.identity.security import decode_access, digest, now
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.telemetry import bind_identity
 
@@ -37,6 +38,10 @@ def db_session(request: Request) -> Iterator[Session]:
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path
         db.info["rate_factory"] = request.app.state.rate_sessions
+        db.info["rate_workspace_budget"] = request.app.state.settings.rate_workspace_budget
+        db.info["rate_workspace_member_budget"] = (
+            request.app.state.settings.rate_workspace_member_budget
+        )
         db.info["rate_window_seconds"] = request.app.state.settings.rate_window_seconds
         db.info["rate_cooldown_max_seconds"] = request.app.state.settings.rate_cooldown_max_seconds
         admitted = getattr(request.state, "upload_rate_scope", None)
@@ -63,6 +68,7 @@ def principal(
         # Authenticate and touch activity in a short transaction, before the report
         # establishes its MVCC snapshot. Never hold the session write lock during IO.
         with request.app.state.sessions.begin() as auth_db:
+            auth_db.info["activity_probe"] = True
             principal(request, auth_db, token)
         # Acquire the report connection only after releasing the auth connection;
         # otherwise concurrent reads can exhaust the pool while awaiting a second slot.
@@ -71,7 +77,11 @@ def principal(
                 "isolation_level": "SERIALIZABLE" if request.method == "POST" else "REPEATABLE READ"
             }
         )
-    family = repository.session_record(db, uid, sid, lock=not snapshot)
+    activity_probe = bool(db.info.get("activity_probe"))
+    family = repository.session_record(db, uid, sid, lock=not (snapshot or activity_probe))
+    if activity_probe and family and family.last_seen_at <= now() - timedelta(seconds=60):
+        db.expire(family)
+        family = repository.session_record(db, uid, sid, lock=True)
     if family is None:
         raise DomainError("ERR_AUTH", "Authentication required.", 401)
     user = service.valid_family(db, family, touch=not snapshot)
@@ -87,7 +97,7 @@ def principal(
 
         delay = rate_limited(
             request.app.state.rate_sessions,
-            [(digest(f"user:{user.id}"), 240)],
+            [(digest(f"user:{user.id}"), request.app.state.settings.rate_user_budget)],
             window_seconds=request.app.state.settings.rate_window_seconds,
             cooldown_max_seconds=request.app.state.settings.rate_cooldown_max_seconds,
         )
@@ -115,6 +125,10 @@ def upload_preflight(request: Request, business_id: UUID) -> None:
         db.info["http_method"] = request.method
         db.info["request_path"] = request.url.path
         db.info["rate_factory"] = request.app.state.rate_sessions
+        db.info["rate_workspace_budget"] = request.app.state.settings.rate_workspace_budget
+        db.info["rate_workspace_member_budget"] = (
+            request.app.state.settings.rate_workspace_member_budget
+        )
         db.info["rate_window_seconds"] = request.app.state.settings.rate_window_seconds
         db.info["rate_cooldown_max_seconds"] = request.app.state.settings.rate_cooldown_max_seconds
         who = principal(request, db, request.cookies.get(ACCESS_COOKIE))

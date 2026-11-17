@@ -77,10 +77,16 @@ export function createApiClient(baseUrl: string, timeoutMs = 30_000) {
           csrf = undefined;
           return response;
         }
-        refreshRequest ??= client
-          .POST("/api/v1/auth/refresh")
-          .then((r) => r.response.ok)
-          .catch(() => false);
+        const refresh = () =>
+          client
+            .POST("/api/v1/auth/refresh")
+            .then((r) => r.response.ok)
+            .catch(() => false);
+        refreshRequest ??= (
+          typeof navigator !== "undefined" && navigator.locks
+            ? navigator.locks.request("ledgerpilot:session-refresh", refresh)
+            : refresh()
+        ).catch(() => false);
         let refreshed = false;
         try {
           refreshed = await refreshRequest;

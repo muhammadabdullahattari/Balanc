@@ -13,7 +13,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException
 
 from ledgerpilot.accounting.router import router as accounting_router
@@ -58,20 +58,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(application: FastAPI) -> AsyncIterator[None]:
         engine = build_engine(configured)
-        rate_engine = build_engine(configured, rate_limits=True)
+        from ledgerpilot.shared.admission import RedisAdmission
+
+        admission = None
+        rate_engine = None
+        if configured.rate_redis_url is not None:
+            admission = RedisAdmission(
+                configured.rate_redis_url.get_secret_value(),
+                configured.rate_redis_connections,
+                configured.rate_redis_timeout_seconds,
+            )
+            rate_backend: RedisAdmission | sessionmaker[Session] = admission
+        else:
+            rate_engine = build_engine(configured, rate_limits=True)
+            rate_backend = sessionmaker(rate_engine, expire_on_commit=False)
         application.state.engine = engine
         application.state.sessions = sessionmaker(engine, expire_on_commit=False)
-        application.state.rate_sessions = sessionmaker(rate_engine, expire_on_commit=False)
-        try:
-            from ledgerpilot.bootstrap import run_migrations_and_seed_if_needed
-
-            run_migrations_and_seed_if_needed(engine, configured)
-        except Exception as bootstrap_err:
-            logger.warning("Database initialization failed (%s)", type(bootstrap_err).__name__)
+        application.state.rate_sessions = rate_backend
+        cache = None
+        if configured.report_cache_redis_url is not None:
+            cache = RedisAdmission(
+                configured.report_cache_redis_url.get_secret_value(),
+                configured.rate_redis_connections,
+                configured.rate_redis_timeout_seconds,
+            )
+        application.state.report_cache = cache.client if cache is not None else None
+        readiness_engine = build_engine(configured, rate_limits=True)
+        application.state.readiness_engine = readiness_engine
         try:
             yield
         finally:
-            rate_engine.dispose()
+            if admission is not None:
+                admission.close()
+            if rate_engine is not None:
+                rate_engine.dispose()
+            if cache is not None:
+                cache.close()
+            readiness_engine.dispose()
             engine.dispose()
 
     local_docs = configured.app_env in {"local", "test"}
@@ -238,23 +261,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     def ready(request: Request) -> JSONResponse:
         try:
-            with request.app.state.engine.connect() as connection:
-                db_user = connection.execute(text("SELECT current_user")).scalar_one()
-                if db_user == "postgres" or configured.app_db_user == "postgres":
-                    safe = True
-                else:
-                    safe = connection.execute(
-                        text("""
-                        SELECT current_user=:role AND NOT (rolsuper OR rolcreatedb OR rolcreaterole
-                            OR rolreplication OR rolbypassrls)
-                        FROM pg_roles WHERE rolname=current_user
-                    """),
-                        {"role": configured.app_db_user},
-                    ).scalar_one()
+            with request.app.state.readiness_engine.connect() as connection:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one_or_none()
-                if not safe or version != "0030":
+                if version != "0031":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
