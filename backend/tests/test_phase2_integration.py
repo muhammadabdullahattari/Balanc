@@ -143,14 +143,32 @@ async def client(database_settings: FileSettings) -> AsyncIterator[httpx.AsyncCl
         yield browser
 
 
-async def mail_token(email: str) -> str:
+async def mail_token(email: str, subject_contains: str | None = None) -> str:
+    import asyncio
+
     async with httpx.AsyncClient(timeout=30.0) as mailbox:
-        result = await mailbox.get(
-            "http://127.0.0.1:8025/api/v1/search", params={"query": "to:" + email}
+        messages: list[dict[str, object]] = []
+        for _ in range(50):
+            result = await mailbox.get(
+                "http://127.0.0.1:8025/api/v1/search", params={"query": "to:" + email}
+            )
+            raw_items = result.json().get("messages", [])
+            items = [m for m in raw_items if isinstance(m, dict)]
+            if subject_contains:
+                items = [
+                    m
+                    for m in items
+                    if subject_contains.lower() in str(m.get("Subject", "")).lower()
+                ]
+            if items:
+                messages = items
+                break
+            await asyncio.sleep(0.1)
+
+        assert messages, f"Expected a real SMTP delivery matching '{subject_contains}' to {email}"
+        message = await mailbox.get(
+            "http://127.0.0.1:8025/api/v1/message/" + str(messages[0]["ID"])
         )
-        messages = result.json()["messages"]
-        assert messages, "Expected a real SMTP delivery to the local mailbox"
-        message = await mailbox.get("http://127.0.0.1:8025/api/v1/message/" + messages[0]["ID"])
         return str(message.json()["Text"]).replace("\r\n", "\n").split("\n\n")[1].strip()
 
 
@@ -293,7 +311,8 @@ async def accountant_context(
         )
         assert invitation.status_code == 202, invitation.text
         accepted = await accountant.post(
-            "/api/v1/invitations/accept", json={"token": await mail_token(email)}
+            "/api/v1/invitations/accept",
+            json={"token": await mail_token(email, subject_contains="invitation")},
         )
         assert accepted.status_code == 200, accepted.text
         yield bid, accountant
