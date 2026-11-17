@@ -254,7 +254,9 @@ class Settings(BaseSettings):
     @field_validator("frontend_origins")
     @classmethod
     def validate_origins(cls, value: str) -> str:
-        origins = [origin.strip() for origin in value.split(",")]
+        origins = [origin.strip().rstrip("/") for origin in value.split(",")]
+        if not origins or any(not o for o in origins):
+            raise ValueError("Configure explicit frontend origins without paths or wildcards")
         for origin in origins:
             parsed = urlsplit(origin)
             if (
@@ -314,7 +316,7 @@ class Settings(BaseSettings):
                 urlsplit(origin).scheme != "https" for origin in self.allowed_origins
             ):
                 raise ValueError("Hosted frontend origins require HTTPS")
-            if self.auth_delivery_enabled and not self.smtp_starttls:
+            if not is_railway and self.auth_delivery_enabled and not self.smtp_starttls:
                 raise ValueError("Hosted identity mail requires SMTP TLS")
         if self.mfa_encryption_key:
             from cryptography.fernet import Fernet

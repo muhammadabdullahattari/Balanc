@@ -145,6 +145,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 reconcile_disposals(startup_db, configured)
         except Exception:
             logger.warning("Startup disposal reconciliation skipped.")
+
+        is_railway_env = bool(
+            os.environ.get("RAILWAY_PROJECT_ID")
+            or os.environ.get("RAILWAY_ENVIRONMENT")
+            or os.environ.get("RAILWAY_SERVICE_ID")
+        )
+        if is_railway_env or os.environ.get("AUTO_MIGRATE") == "1":
+            import threading
+
+            def run_migrations() -> None:
+                try:
+                    from alembic import command
+                    from alembic.config import Config
+
+                    cfg = Config("alembic.ini")
+                    command.upgrade(cfg, "head")
+                    logger.info("Automatic database migrations completed successfully.")
+                except Exception as exc:
+                    logger.warning("Automatic database migrations skipped or failed: %s", exc)
+
+            threading.Thread(target=run_migrations, daemon=True, name="auto-migrate").start()
         try:
             yield
         finally:
