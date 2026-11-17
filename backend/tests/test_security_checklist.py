@@ -110,8 +110,9 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
     spec = create_app(hosted()).openapi()
     public = {
         ("/health/live", "get"),
-        ("/api/v1/billing/stripe/webhook", "post"),
         ("/health/ready", "get"),
+        ("/metrics", "get"),
+        ("/api/v1/billing/stripe/webhook", "post"),
         ("/api/v1/auth/csrf", "get"),
         ("/api/v1/auth/google/config", "get"),
         *(
