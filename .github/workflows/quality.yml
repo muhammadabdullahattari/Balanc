@@ -3,7 +3,7 @@ name: CI and Deployment Gate
 on:
   pull_request:
   push:
-    branches: [main, master]
+    branches: [main, master, 'ci/**']
   workflow_dispatch:
 
 permissions:
