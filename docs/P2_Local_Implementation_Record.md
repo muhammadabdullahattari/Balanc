@@ -300,6 +300,8 @@ The hosted cohort can open Controlled Posting to see workspace status, pause or 
 
 ### Hosted Release Checks & Operational Verification · 17 November 2026
 
+See [P2 Completion & Operational Verification Report](p2_completion_and_operational_verification_report.md) for the end-to-end evidence record, formal accountant sign-off, live Railway journal posting, legal hold demonstration, independent disposal approval, and benchmark dataset provenance.
+
 1. **GitHub Actions CI Pipeline Resiliency**:
    - Resolved `ResourceClosedError: This Connection is closed` in integration test bootstrap by preserving the connection lifecycle across Alembic migration runners and clearing stale attributes in `bootstrap.py`.
    - Hardened `email_operations.py` tenant health queries to wrap auxiliary diagnostic checks in PostgreSQL nested savepoints (`with contextlib.suppress(Exception), db.begin_nested():`) and corrected SQL column references to align strictly with schema tables (`app.evidence_jobs`, `app.cleanup_requests`, `app.close_tasks`, `app.legal_holds`).

@@ -107,7 +107,7 @@ P2 core engineering milestones are now implemented and verified:
 
 
 
-See [P2 Comprehensive Implementation Record](P2_Comprehensive_Implementation_Record.md) and [P2 Local Implementation Record](P2_Local_Implementation_Record.md) for full verification details.
+See [P2 Completion & Operational Verification Report](p2_completion_and_operational_verification_report.md), [P2 Comprehensive Implementation Record](P2_Comprehensive_Implementation_Record.md), and [P2 Local Implementation Record](P2_Local_Implementation_Record.md) for full verification details.
 
 
 
