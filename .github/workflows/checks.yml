@@ -379,8 +379,9 @@ jobs:
           uv run --directory backend alembic upgrade head
       - name: Run API container
         run: |
+          sed -E "s/^([^=]+)='(.*)'$/\1=\2/; s/^([^=]+)=\"(.*)\"$/\1=\2/" .env > .env.docker
           docker run -d --name ledgerpilot-smoke-api --network host \
-            --env-file .env \
+            --env-file .env.docker \
             -e SESSION_SIGNING_KEY="smoke-test-signing-key-minimum-32-bytes-long" \
             ledgerpilot-api:${{ github.sha }}
           curl --fail --retry 15 --retry-all-errors --retry-delay 1 --retry-max-time 30 http://127.0.0.1:8000/health/live || (docker logs ledgerpilot-smoke-api && exit 1)

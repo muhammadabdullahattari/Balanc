@@ -200,10 +200,10 @@ class Settings(BaseSettings):
     @classmethod
     def normalize_database_url(cls, value: object) -> object:
         raw = value.get_secret_value() if isinstance(value, SecretStr) else str(value)
+        raw = raw.strip().strip("'\"")
         if raw.startswith("postgresql://"):
             raw = "postgresql+psycopg://" + raw[len("postgresql://") :]
-            return SecretStr(raw)
-        return value
+        return SecretStr(raw)
 
     @field_validator("database_url")
     @classmethod
