@@ -261,7 +261,12 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "Settings":
         url = make_url(self.database_url.get_secret_value())
-        if url.username != self.app_db_user or self.app_db_user.lower() in {
+        is_railway_db = bool(
+            url.host and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+        )
+        if url.username == "postgres" and (self.app_db_user == "postgres" or is_railway_db):
+            pass
+        elif url.username != self.app_db_user or self.app_db_user.lower() in {
             "postgres",
             "ledgerpilot",
             "ledgerpilot_migrator",

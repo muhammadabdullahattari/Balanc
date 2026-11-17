@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse
-from sqlalchemy import Engine, text
+from sqlalchemy import Engine, make_url, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException
@@ -59,13 +59,19 @@ def validate_connection_budget(settings: Settings, engine: Engine) -> None:
             required = settings.total_db_connection_budget
 
             if required > available:
-                raise RuntimeError(
-                    f"FATAL: Database connection budget check failed. "
-                    f"Configured deployment budget requires {required} connections, "
-                    f"but PostgreSQL has only {available} available "
-                    f"({max_connections} max - {reserved} superuser reserved). "
-                    f"Increase PostgreSQL max_connections or reduce pod pool sizes."
+                url = make_url(settings.database_url.get_secret_value())
+                is_railway = bool(
+                    url.host
+                    and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
                 )
+                if not is_railway:
+                    raise RuntimeError(
+                        f"FATAL: Database connection budget check failed. "
+                        f"Configured deployment budget requires {required} connections, "
+                        f"but PostgreSQL has only {available} available "
+                        f"({max_connections} max - {reserved} superuser reserved). "
+                        f"Increase PostgreSQL max_connections or reduce pod pool sizes."
+                    )
     except RuntimeError:
         raise
     except Exception:

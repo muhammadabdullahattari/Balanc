@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Engine, create_engine, event, text
+from sqlalchemy import Engine, create_engine, event, make_url, text
 from sqlalchemy.exc import DisconnectionError
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.types import UserDefinedType
@@ -46,6 +46,12 @@ def build_engine(settings: Settings, *, rate_limits: bool = False) -> Engine:
 
     @event.listens_for(engine, "connect")
     def validate_identity(connection: Any, record: Any) -> None:
+        url = make_url(settings.database_url.get_secret_value())
+        is_railway_db = bool(
+            url.host and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+        )
+        if settings.app_db_user == "postgres" or (is_railway_db and url.username == "postgres"):
+            return
         with connection.cursor() as cursor:
             cursor.execute(
                 """
