@@ -1,5 +1,6 @@
 """Bounded application/counter pools; transaction-local identity cannot leak on reuse."""
 
+import os
 from collections.abc import Iterator
 from typing import Any
 from uuid import UUID
@@ -47,10 +48,19 @@ def build_engine(settings: Settings, *, rate_limits: bool = False) -> Engine:
     @event.listens_for(engine, "connect")
     def validate_identity(connection: Any, record: Any) -> None:
         url = make_url(settings.database_url.get_secret_value())
-        is_railway_db = bool(
-            url.host and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+        is_railway = bool(
+            os.environ.get("RAILWAY_PROJECT_ID")
+            or os.environ.get("RAILWAY_ENVIRONMENT")
+            or os.environ.get("RAILWAY_SERVICE_ID")
+            or (
+                url.host
+                and any(
+                    url.host.endswith(s)
+                    for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
+                )
+            )
         )
-        if settings.app_db_user == "postgres" or (is_railway_db and url.username == "postgres"):
+        if settings.app_db_user == "postgres" or (is_railway and url.username == "postgres"):
             return
         with connection.cursor() as cursor:
             cursor.execute(

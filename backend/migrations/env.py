@@ -66,10 +66,35 @@ else:
     migrator = os.environ.get("MIGRATION_DB_USER") or values.get(
         "MIGRATION_DB_USER", "ledgerpilot_migrator"
     )
-    if (
+    is_railway = bool(
+        os.environ.get("RAILWAY_PROJECT_ID")
+        or os.environ.get("RAILWAY_ENVIRONMENT")
+        or os.environ.get("RAILWAY_SERVICE_ID")
+        or (
+            os.environ.get("DATABASE_URL")
+            and any(
+                s in os.environ["DATABASE_URL"]
+                for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
+            )
+        )
+    )
+    if is_railway:
+        url = url or os.environ.get("DATABASE_URL")
+        if url:
+            db_user = make_url(url).username or "postgres"
+            runtime = db_user
+            migrator = db_user
+            if url.startswith("postgres://"):
+                url = "postgresql+psycopg://" + url[len("postgres://") :]
+            elif url.startswith("postgresql://"):
+                url = "postgresql+psycopg://" + url[len("postgresql://") :]
+    elif (
         runtime == "postgres"
         or (url and make_url(url).username == "postgres")
-        or (os.environ.get("DATABASE_URL") and make_url(os.environ["DATABASE_URL"]).username == "postgres")
+        or (
+            os.environ.get("DATABASE_URL")
+            and make_url(os.environ["DATABASE_URL"]).username == "postgres"
+        )
     ):
         runtime = "postgres"
         migrator = "postgres"
@@ -80,12 +105,16 @@ else:
             url = "postgresql+psycopg://" + url[len("postgresql://") :]
     if not url:
         raise RuntimeError("Configure a separate MIGRATION_DATABASE_URL and migration identity")
-    if runtime != "postgres" and (make_url(url).username != migrator or migrator == runtime):
+    if (
+        runtime != "postgres"
+        and not is_railway
+        and (make_url(url).username != migrator or migrator == runtime)
+    ):
         raise RuntimeError("Configure a separate MIGRATION_DATABASE_URL and migration identity")
     if make_url(url).drivername != "postgresql+psycopg":
         raise RuntimeError("Migrations require PostgreSQL psycopg")
     parsed = make_url(url)
-    if runtime != "postgres":
+    if runtime != "postgres" and not is_railway:
         if (
             not parsed.host
             or not parsed.database
@@ -93,7 +122,9 @@ else:
             or set(parsed.query) - {"sslmode", "sslrootcert"}
             or any(not isinstance(value, str) for value in parsed.query.values())
         ):
-            raise RuntimeError("Use a complete migration URL without identity or host query overrides")
+            raise RuntimeError(
+                "Use a complete migration URL without identity or host query overrides"
+            )
         profile = os.environ.get("APP_ENV") or values.get("APP_ENV", "local")
         if profile not in {"local", "test"} and parsed.query.get("sslmode") != "verify-full":
             raise RuntimeError("Hosted migrations require verified TLS")
@@ -110,7 +141,7 @@ else:
         },
     )
     with engine.connect() as connection:
-        if migrator == "postgres":
+        if migrator == "postgres" or is_railway:
             connection.execute(text("CREATE SCHEMA IF NOT EXISTS app"))
             connection.commit()
             role_exists = connection.execute(

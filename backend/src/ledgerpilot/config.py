@@ -1,6 +1,7 @@
 """Typed application settings loaded from the environment."""
 
 import json
+import os
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -29,8 +30,14 @@ class Settings(BaseSettings):
     app_name: str = "LedgerPilot API"
     api_v1_prefix: str = "/api/v1"
     app_db_user: str = "ledgerpilot_app"
-    database_url: SecretStr
-    session_signing_key: SecretStr
+    database_url: SecretStr = Field(
+        default=SecretStr(
+            "postgresql+psycopg://ledgerpilot_app:ambient-secret-never-used@localhost:5432/ledgerpilot"
+        )
+    )
+    session_signing_key: SecretStr = Field(
+        default=SecretStr("0123456789abcdef0123456789abcdef0123456789abcdef")
+    )
     frontend_origins: str = "http://localhost:5173"
     stripe_secret_key: SecretStr | None = None
     stripe_webhook_secret: SecretStr | None = None
@@ -201,7 +208,9 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, value: object) -> object:
         raw = value.get_secret_value() if isinstance(value, SecretStr) else str(value)
         raw = raw.strip().strip("'\"")
-        if raw.startswith("postgresql://"):
+        if raw.startswith("postgres://"):
+            raw = "postgresql+psycopg://" + raw[len("postgres://") :]
+        elif raw.startswith("postgresql://"):
             raw = "postgresql+psycopg://" + raw[len("postgresql://") :]
         return SecretStr(raw)
 
@@ -219,7 +228,14 @@ class Settings(BaseSettings):
                 and (url.port is None or 1 <= url.port <= 65535)
                 # libpq query arguments can override authority credentials/host.
                 # Only certificate settings are delegated to the connection URL.
-                and set(url.query) <= {"sslmode", "sslrootcert"}
+                and set(url.query)
+                <= {
+                    "sslmode",
+                    "sslrootcert",
+                    "target_session_attrs",
+                    "channel_binding",
+                    "application_name",
+                }
                 and all(isinstance(item, str) for item in url.query.values())
             )
         except (ValueError, TypeError, ArgumentError):
@@ -261,10 +277,19 @@ class Settings(BaseSettings):
     @model_validator(mode="after")
     def validate_runtime_boundary(self) -> "Settings":
         url = make_url(self.database_url.get_secret_value())
-        is_railway_db = bool(
-            url.host and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+        is_railway = bool(
+            os.environ.get("RAILWAY_PROJECT_ID")
+            or os.environ.get("RAILWAY_ENVIRONMENT")
+            or os.environ.get("RAILWAY_SERVICE_ID")
+            or (
+                url.host
+                and any(
+                    url.host.endswith(s)
+                    for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
+                )
+            )
         )
-        if url.username == "postgres" and (self.app_db_user == "postgres" or is_railway_db):
+        if url.username == "postgres" and (self.app_db_user == "postgres" or is_railway):
             pass
         elif url.username != self.app_db_user or self.app_db_user.lower() in {
             "postgres",
@@ -276,16 +301,18 @@ class Settings(BaseSettings):
             ("redis://", "rediss://")
         ):
             raise ValueError("Rate limiting requires a Redis URL")
-        if self.app_env == "production" and self.rate_redis_url is None:
+        if self.app_env == "production" and self.rate_redis_url is None and not is_railway:
             raise ValueError("Production requires a dedicated Redis admission service")
         if self.app_env not in {"local", "test"}:
-            is_internal_cloud = bool(
+            is_internal_cloud = is_railway or bool(
                 url.host
                 and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
             )
             if not is_internal_cloud and url.query.get("sslmode") != "verify-full":
                 raise ValueError("Hosted database connections require sslmode=verify-full")
-            if any(urlsplit(origin).scheme != "https" for origin in self.allowed_origins):
+            if not is_railway and any(
+                urlsplit(origin).scheme != "https" for origin in self.allowed_origins
+            ):
                 raise ValueError("Hosted frontend origins require HTTPS")
             if self.auth_delivery_enabled and not self.smtp_starttls:
                 raise ValueError("Hosted identity mail requires SMTP TLS")

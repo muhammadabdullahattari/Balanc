@@ -16,7 +16,7 @@ from uuid import uuid4
 import psycopg
 from dotenv import dotenv_values
 from psycopg import sql
-from pydantic import ValidationError
+from pydantic import Field, SecretStr, ValidationError
 from pydantic_settings import BaseSettings, PydanticBaseSettingsSource
 from sqlalchemy.engine import URL, make_url
 from sqlalchemy.exc import ArgumentError, SQLAlchemyError
@@ -41,6 +41,9 @@ def read_values(path: Path) -> dict[str, str]:
 
 class FileSettings(Settings):
     """Validate exactly the selected file, without ambient or default-file values."""
+
+    database_url: SecretStr = Field(...)
+    session_signing_key: SecretStr = Field(...)
 
     @classmethod
     def settings_customise_sources(

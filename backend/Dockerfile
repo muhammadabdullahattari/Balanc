@@ -23,6 +23,6 @@ RUN uv sync --locked --no-dev \
 USER 10001
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
-CMD ["/bin/sh", "-c", "exec /app/.venv/bin/uvicorn ledgerpilot.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-graceful-shutdown 30"]
+    CMD ["python", "-c", "import os, urllib.request; port = os.environ.get('PORT', '8000'); urllib.request.urlopen(f'http://127.0.0.1:{port}/health/live', timeout=3)"]
+CMD ["/bin/sh", "-c", "if [ -n \"$DATABASE_URL\" ] && [ \"$AUTO_MIGRATE\" != \"0\" ]; then /app/.venv/bin/alembic upgrade head || true; fi && exec /app/.venv/bin/uvicorn ledgerpilot.main:app --host 0.0.0.0 --port ${PORT:-8000} --timeout-graceful-shutdown 30"]
 

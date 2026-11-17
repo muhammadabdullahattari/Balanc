@@ -2,6 +2,7 @@
 
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from importlib.metadata import version
@@ -61,8 +62,21 @@ def validate_connection_budget(settings: Settings, engine: Engine) -> None:
             if required > available:
                 url = make_url(settings.database_url.get_secret_value())
                 is_railway = bool(
-                    url.host
-                    and (url.host.endswith(".railway.internal") or url.host.endswith(".internal"))
+                    os.environ.get("RAILWAY_PROJECT_ID")
+                    or os.environ.get("RAILWAY_ENVIRONMENT")
+                    or os.environ.get("RAILWAY_SERVICE_ID")
+                    or (
+                        url.host
+                        and any(
+                            url.host.endswith(s)
+                            for s in (
+                                ".railway.internal",
+                                ".internal",
+                                ".rlwy.net",
+                                ".railway.app",
+                            )
+                        )
+                    )
                 )
                 if not is_railway:
                     raise RuntimeError(
