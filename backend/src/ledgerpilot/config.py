@@ -1,5 +1,7 @@
 """Typed application settings loaded from the environment."""
 
+import base64
+import hashlib
 import json
 import os
 from functools import lru_cache
@@ -202,6 +204,48 @@ class Settings(BaseSettings):
         if len(key.encode()) < 32 or key.lower().startswith(("replace-", "local-only-")):
             raise ValueError("Set a random signing secret of at least 32 bytes")
         return value
+
+    @field_validator("mfa_encryption_key", "evidence_encryption_key", mode="before")
+    @classmethod
+    def normalize_fernet_key(cls, value: object) -> object:
+        if not value:
+            return None
+        raw = (
+            value.get_secret_value()
+            if isinstance(value, SecretStr)
+            else str(value).strip().strip("'\"")
+        )
+        if not raw:
+            return None
+        from cryptography.fernet import Fernet
+
+        try:
+            Fernet(raw.encode())
+            return SecretStr(raw)
+        except Exception:
+            derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest()).decode()
+            return SecretStr(derived)
+
+    @field_validator("export_signing_private_key", mode="before")
+    @classmethod
+    def normalize_hex_key(cls, value: object) -> object:
+        if not value:
+            return None
+        raw = (
+            value.get_secret_value()
+            if isinstance(value, SecretStr)
+            else str(value).strip().strip("'\"")
+        )
+        if not raw:
+            return None
+        try:
+            b = bytes.fromhex(raw)
+            if len(b) == 32:
+                return SecretStr(raw)
+        except ValueError:
+            pass
+        derived = hashlib.sha256(raw.encode()).hexdigest()
+        return SecretStr(derived)
 
     @field_validator("database_url", mode="before")
     @classmethod
