@@ -376,15 +376,14 @@ jobs:
           docker compose up -d --wait --wait-timeout 90 postgres
           docker compose -f docker-compose.auth.yml up -d
           docker compose -f docker-compose.performance.yml up -d
+          uv run --directory backend alembic upgrade head
       - name: Run API container
         run: |
-          APP_PASS=$(grep APP_DB_PASSWORD backend/.env | head -n1 | cut -d= -f2 | tr -d "'\"")
           docker run -d --name ledgerpilot-smoke-api --network host \
-            -e DATABASE_URL="postgresql+psycopg://ledgerpilot_app:${APP_PASS}@127.0.0.1:5432/ledgerpilot" \
+            --env-file .env \
             -e SESSION_SIGNING_KEY="smoke-test-signing-key-minimum-32-bytes-long" \
-            -e APP_ENV="local" \
             ledgerpilot-api:${{ github.sha }}
-          sleep 5
+          curl --fail --retry 15 --retry-all-errors --retry-delay 1 --retry-max-time 30 http://127.0.0.1:8000/health/live || (docker logs ledgerpilot-smoke-api && exit 1)
       - name: Execute k6 smoke test
         run: |
           docker run --rm --network host -v "${{ github.workspace }}/scripts/load:/load" grafana/k6:latest run /load/smoke.js
