@@ -22,6 +22,7 @@ from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.database import build_engine
 from ledgerpilot.documents.router import router as evidence_router
 from ledgerpilot.identity.router import router as identity_router
+from ledgerpilot.jobs.router import router as jobs_router
 from ledgerpilot.provider_integrations import router as provider_router
 from ledgerpilot.reports.router import router as reports_router
 from ledgerpilot.shared.errors import DomainError
@@ -265,13 +266,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one_or_none()
-                if version != "0031":
+                if version != "0032":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
             return JSONResponse({"status": "not_ready"}, status_code=503)
 
     application.include_router(identity_router, prefix=configured.api_v1_prefix)
+    application.include_router(jobs_router, prefix=configured.api_v1_prefix)
     application.include_router(tenancy_router, prefix=configured.api_v1_prefix)
     application.include_router(accounting_router, prefix=configured.api_v1_prefix)
     application.include_router(trade_router, prefix=configured.api_v1_prefix)
