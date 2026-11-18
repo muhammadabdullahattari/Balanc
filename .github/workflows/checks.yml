@@ -112,7 +112,6 @@ jobs:
       - name: Validate Docker Compose configurations
         run: |
           docker compose -f docker-compose.yml config --quiet
-          docker compose -f docker-compose.auth.yml config --quiet
           docker compose -f docker-compose.documents.yml config --quiet
           docker compose -f docker-compose.performance.yml config --quiet
       - name: Check Prometheus alert rules syntax
@@ -192,10 +191,11 @@ jobs:
       - name: Verify database grants and password rotation
         working-directory: backend
         run: uv run python -m ledgerpilot.local_setup verify --check-rotation
-      - name: Start Mailpit SMTP and web mailbox
-        timeout-minutes: 2
+      - name: Start standard SMTP test server
+        working-directory: backend
         run: |
-          docker compose -f docker-compose.auth.yml up -d
+          uv run python -m ledgerpilot.testing.smtp_server &
+          sleep 2
           curl --fail --silent --show-error --retry 10 --retry-all-errors --retry-delay 1 --retry-max-time 60 --connect-timeout 2 --max-time 5 --output /dev/null http://127.0.0.1:8025/api/v1/messages
       - name: Start Redis rate limiter and report cache
         run: docker compose -f docker-compose.performance.yml up -d
@@ -261,7 +261,6 @@ jobs:
         run: |
           docker compose -f docker-compose.documents.yml down --volumes || true
           docker compose -f docker-compose.performance.yml down --volumes || true
-          docker compose -f docker-compose.auth.yml down --volumes || true
           docker compose down --volumes || true
 
   migrations:
@@ -374,7 +373,6 @@ jobs:
         run: |
           uv run --directory backend python -m ledgerpilot.local_setup prepare
           docker compose up -d --wait --wait-timeout 90 postgres
-          docker compose -f docker-compose.auth.yml up -d
           docker compose -f docker-compose.performance.yml up -d
           uv run --directory backend alembic upgrade head
       - name: Run API container
@@ -393,5 +391,4 @@ jobs:
         run: |
           docker rm -f ledgerpilot-smoke-api || true
           docker compose -f docker-compose.performance.yml down --volumes || true
-          docker compose -f docker-compose.auth.yml down --volumes || true
           docker compose down --volumes || true

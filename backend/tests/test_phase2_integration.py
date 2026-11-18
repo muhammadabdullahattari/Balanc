@@ -34,7 +34,7 @@ from ledgerpilot.local_setup import (
 from ledgerpilot.main import create_app
 
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL and Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL and SMTP"
 )
 ORIGIN = "https://web.ledgerpilot.test"
 

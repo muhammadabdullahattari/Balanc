@@ -72,17 +72,15 @@ def suppressed(db: Session, bid: UUID, recipient: UUID) -> bool:
     )
 
 
-def local_delivery_available(settings: Settings, business_id: UUID) -> bool:
-    """Enable the implemented Mailpit profile on an explicitly approved business."""
-    return (
-        settings.app_env in {"local", "test"}
-        and settings.allows_p2_email_delivery(business_id)
-        and settings.smtp_host in {"127.0.0.1", "localhost"}
-        and settings.smtp_port == 1025
-        and not settings.smtp_starttls
-        and settings.smtp_username is None
-        and settings.smtp_password is None
+def delivery_available(settings: Settings, business_id: UUID) -> bool:
+    """Enable standard SMTP email delivery on an explicitly approved business."""
+    return bool(
+        settings.allows_p2_email_delivery(business_id) and settings.smtp_host and settings.smtp_port
     )
+
+
+def local_delivery_available(settings: Settings, business_id: UUID) -> bool:
+    return delivery_available(settings, business_id)
 
 
 def preferences(db: Session, bid: UUID, recipient: UUID) -> Preference | None:

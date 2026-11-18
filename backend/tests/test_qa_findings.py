@@ -34,7 +34,7 @@ from ledgerpilot.trade import repository as trade
 
 # ruff: noqa: F811 -- shared disposable database fixtures
 REAL = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL/Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL/SMTP"
 )
 
 

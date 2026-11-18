@@ -30,7 +30,7 @@ from ledgerpilot.shared.errors import DomainError
 # ruff: noqa: F811 -- shared real database fixture
 AUDIENCE = "synthetic-client.apps.googleusercontent.com"
 REAL = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/SMTP"
 )
 
 

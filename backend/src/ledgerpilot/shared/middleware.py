@@ -215,12 +215,24 @@ class FoundationMiddleware:
                     error=error,
                     request_id=request_id,
                 )
-                await reject(
-                    "ERR_DEPENDENCY",
-                    "LedgerPilot is temporarily unavailable. Wait a moment and try again.",
-                    503,
-                )
-                return
+                if settings.app_env in {"local", "test"}:
+                    logger.warning(
+                        "Rate limiter unavailable in %s (%s); fallback to memory",
+                        settings.app_env,
+                        error,
+                    )
+                    limited = in_memory_rate_limited(
+                        keys,
+                        window_seconds=settings.rate_window_seconds,
+                        cooldown_max_seconds=settings.rate_cooldown_max_seconds,
+                    )
+                else:
+                    await reject(
+                        "ERR_DEPENDENCY",
+                        "LedgerPilot is temporarily unavailable. Wait a moment and try again.",
+                        503,
+                    )
+                    return
             if limited:
                 await reject(
                     "ERR_RATE_LIMIT", "Too many attempts. Try again shortly.", 429, limited
@@ -321,6 +333,35 @@ def rate_limited(
             count=len(keys),
             window_seconds=window_seconds,
         )
+    return delay
+
+
+_LOCAL_RATE_BUCKETS: dict[str, tuple[float, int, float]] = {}
+
+
+def in_memory_rate_limited(
+    keys: list[tuple[str, int]],
+    *,
+    window_seconds: int = 60,
+    cooldown_max_seconds: int = 60,
+) -> int:
+    now_ts = time.time()
+    delay = 0
+    for key, limit in keys:
+        started_at, count, blocked_until = _LOCAL_RATE_BUCKETS.get(key, (now_ts, 0, 0.0))
+        if blocked_until > now_ts:
+            delay = max(delay, max(1, int(blocked_until - now_ts)))
+            continue
+        if now_ts - started_at > window_seconds:
+            started_at = now_ts
+            count = 1
+        else:
+            count += 1
+        if count > limit:
+            cooldown = min(float(cooldown_max_seconds), 2.0 ** min(count - limit, 12))
+            blocked_until = now_ts + cooldown
+            delay = max(delay, max(1, int(cooldown)))
+        _LOCAL_RATE_BUCKETS[key] = (started_at, count, blocked_until)
     return delay
 
 

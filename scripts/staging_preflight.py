@@ -328,46 +328,49 @@ def check_prometheus_and_alertmanager(prom_url: str | None, am_url: str | None) 
         )
 
 
-def check_smtp_sandbox(smtp_host: str | None, smtp_port: int, mailpit_url: str | None) -> CheckResult:
-    """9. SMTP sandbox / Mailpit reachable and isolated."""
-    # Check Mailpit API if provided
-    if mailpit_url:
+def check_smtp_service(smtp_host: str | None, smtp_port: int, mail_query_url: str | None = None) -> CheckResult:
+    """9. SMTP service reachable and responsive."""
+    if mail_query_url:
         try:
-            req = urllib.request.Request(f"{mailpit_url.rstrip('/')}/api/v1/messages")
+            req = urllib.request.Request(f"{mail_query_url.rstrip('/')}/api/v1/messages")
             with urllib.request.urlopen(req, timeout=2) as resp:
                 if resp.status == 200:
                     return CheckResult(
-                        name="9. Sandbox SMTP Reachable",
+                        name="9. SMTP Service Reachable",
                         passed=True,
-                        details=f"Mailpit sandbox API responsive at {mailpit_url}",
+                        details=f"SMTP test API responsive at {mail_query_url}",
                     )
         except Exception:
             pass
 
-    # Check raw socket to SMTP port
     import socket
 
     host = smtp_host or "127.0.0.1"
     try:
         with socket.create_connection((host, smtp_port), timeout=2) as s:
             banner = s.recv(1024).decode(errors="ignore")
-            if "mailpit" in banner.lower() or "220" in banner:
+            if "220" in banner:
                 return CheckResult(
-                    name="9. Sandbox SMTP Reachable",
+                    name="9. SMTP Service Reachable",
                     passed=True,
-                    details=f"Sandbox SMTP banner verified at {host}:{smtp_port}",
+                    details=f"SMTP server banner verified at {host}:{smtp_port}",
                 )
     except Exception as e:
         return CheckResult(
-            name="9. Sandbox SMTP Reachable",
+            name="9. SMTP Service Reachable",
             passed=False,
-            details=f"SMTP sandbox unreachable at {host}:{smtp_port} ({e})",
+            details=f"SMTP service unreachable at {host}:{smtp_port} ({e})",
         )
 
     return CheckResult(
-        name="9. Sandbox SMTP Reachable",
+        name="9. SMTP Service Reachable",
         passed=False,
-        details=f"Sandbox SMTP unconfirmed at {host}:{smtp_port}",
+        details=f"SMTP service unconfirmed at {host}:{smtp_port}",
+    )
+
+
+def check_smtp_sandbox(smtp_host: str | None, smtp_port: int, mailpit_url: str | None = None) -> CheckResult:
+    return check_smtp_service(smtp_host, smtp_port, mailpit_url)
     )
 
 

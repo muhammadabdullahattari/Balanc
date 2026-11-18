@@ -1,4 +1,4 @@
-"""Process one scoped workspace email job against the local Mailpit transport."""
+"""Process one scoped workspace email job against the configured SMTP transport."""
 
 import argparse
 import json
@@ -119,6 +119,12 @@ def _send(settings: Settings, delivery: Delivery) -> tuple[Outcome, str | None]:
     )
     try:
         client = smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5)
+        if settings.smtp_starttls:
+            import ssl
+
+            client.starttls(context=ssl.create_default_context())
+        if settings.smtp_username and settings.smtp_password:
+            client.login(settings.smtp_username, settings.smtp_password.get_secret_value())
     except (OSError, smtplib.SMTPException):
         return "retry", "ERR_SMTP_CONNECT"
     try:

@@ -235,17 +235,10 @@ def confirm(
 def google_config(request: Request, response: Response) -> dict[str, object]:
     settings = request.app.state.settings
     response.headers["Cache-Control"] = "no-store"
-    mailbox = (
-        f"http://127.0.0.1:{settings.mailpit_ui_port}"
-        if settings.app_env == "local"
-        and settings.smtp_host in {"localhost", "127.0.0.1"}
-        and settings.smtp_port == 1025
-        else None
-    )
     return {
         "enabled": bool(settings.google_client_id),
         "client_id": settings.google_client_id,
-        "local_mailbox": mailbox,
+        "local_mailbox": None,
     }
 
 

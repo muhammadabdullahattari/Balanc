@@ -29,7 +29,7 @@ from ledgerpilot.local_setup import FileSettings
 
 # ruff: noqa: F811 -- pytest injects imported real-service fixtures
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and SMTP"
 )
 
 

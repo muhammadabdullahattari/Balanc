@@ -38,7 +38,7 @@ from ledgerpilot.workspace.imports import ImportPreview, compile_rows
 
 # ruff: noqa: F811 -- imported isolated PostgreSQL/SMTP fixtures
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/Mailpit/ClamAV"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/SMTP/ClamAV"
 )
 METRICS: dict[str, Any] = {}
 

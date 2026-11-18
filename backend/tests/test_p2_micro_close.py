@@ -21,7 +21,7 @@ from ledgerpilot.workspace import micro_close
 
 # ruff: noqa: F811 -- shared service-backed fixtures
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and SMTP"
 )
 
 

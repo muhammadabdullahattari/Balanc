@@ -441,19 +441,6 @@ export function Auth() {
             />
           )}
           <div hidden={verifying}>
-            {config.data?.local_mailbox && (
-              <p className="notice auth-mailbox">
-                Local development: verification and reset emails appear in{" "}
-                <a
-                  href={config.data.local_mailbox}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  Mailpit
-                </a>
-                . They are not delivered to your personal inbox.
-              </p>
-            )}
             <div className="auth-links">
               {mode === "login" ? (
                 <>

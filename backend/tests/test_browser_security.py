@@ -21,7 +21,7 @@ from ledgerpilot.main import create_app
 
 # ruff: noqa: F811 -- shared isolated service fixtures
 REAL = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL/SMTP"
 )
 
 

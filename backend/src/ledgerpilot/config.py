@@ -114,7 +114,6 @@ class Settings(BaseSettings):
     cookie_samesite: Literal["lax", "none"] = "lax"
     smtp_host: str = "127.0.0.1"
     smtp_port: int = Field(default=1025, ge=1, le=65535)
-    mailpit_ui_port: int = Field(default=8025, ge=1, le=65535)
     smtp_from: str = "accounts@ledgerpilot.local"
     smtp_username: str | None = None
     smtp_password: SecretStr | None = None

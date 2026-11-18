@@ -18,7 +18,7 @@ from ledgerpilot.workspace.models import Evidence
 
 # ruff: noqa: F811
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires PostgreSQL and SMTP"
 )
 
 

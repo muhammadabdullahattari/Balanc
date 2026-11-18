@@ -1,4 +1,4 @@
-"""Exercise the local business email path with real PostgreSQL and Mailpit."""
+"""Exercise the local business email path with real PostgreSQL and SMTP."""
 
 import asyncio
 import os
@@ -28,7 +28,7 @@ from ledgerpilot.notifications import worker
 
 # ruff: noqa: F811 -- shared real-service fixtures
 pytestmark = pytest.mark.skipif(
-    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL and Mailpit"
+    os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Requires local PostgreSQL and SMTP"
 )
 
 

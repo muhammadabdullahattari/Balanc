@@ -17,7 +17,7 @@ from ledgerpilot.local_setup import FileSettings
 
 pytestmark = pytest.mark.skipif(
     os.environ.get("RUN_PHASE2_INTEGRATION") != "1",
-    reason="Requires PostgreSQL and Mailpit",
+    reason="Requires PostgreSQL and SMTP",
 )
 
 

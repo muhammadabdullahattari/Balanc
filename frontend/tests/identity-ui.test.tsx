@@ -78,7 +78,7 @@ it("validates registration composition before sending a password", async () => {
   expect(await screen.findByText("Add an uppercase letter.")).toBeVisible();
   expect(post).not.toHaveBeenCalled();
 });
-it("resends to the entered address, clears an old code and explains Mailpit", async () => {
+it("resends to the entered address and clears an old code", async () => {
   configuration();
   const post = vi
     .spyOn(api, "POST")
@@ -116,10 +116,6 @@ it("resends to the entered address, clears an old code and explains Mailpit", as
   expect(post).toHaveBeenCalledWith("/api/v1/auth/verification-request", {
     body: { email: "synthetic@example.invalid" },
   });
-  expect(screen.getByRole("link", { name: "Mailpit" })).toHaveAttribute(
-    "href",
-    "http://127.0.0.1:8025",
-  );
 });
 it("explains an invalid code without exposing token contents", async () => {
   let failure: unknown;
