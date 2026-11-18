@@ -276,24 +276,53 @@ Following initial deployment to Railway and Vercel, four operational issues were
 
 ### B. Detailed Technical Implementation & Architecture Changes
 
-#### 1. Identity & SMTP Email Delivery Architecture
-* **Standard SMTP Delivery with TLS / STARTTLS**:
+#### 1. Identity, SMTP & HTTPS Email Delivery Architecture
+* **The Cloud Outbound SMTP Port Block Problem**:
+  * On Railway Hobby/Trial tiers, the cloud firewall physically blocks raw outbound TCP traffic on ports `25`, `465`, `587`, and `2525` to prevent spam abuse.
+  * Direct socket connection attempts from the container to `smtp.gmail.com` fail with `OSError: [Errno 101] Network is unreachable` or `timed out`.
+  * Live port probe evidence executed directly from inside the running Railway container:
+    ```json
+    {
+      "587": "BLOCKED: timed out",
+      "465": "BLOCKED: timed out",
+      "2525": "BLOCKED: timed out",
+      "25": "BLOCKED: timed out",
+      "443": "OPEN"
+    }
+    ```
+* **Architecture Decision: Dual-Mode Email Delivery (HTTPS Port 443 + Standard SMTP)**:
   * File: `backend/src/ledgerpilot/identity/mail.py`
-  * Migrated delivery engine to `smtplib.SMTP` supporting TLS/STARTTLS authentication, custom ports (587, 465, 25), and explicit credential authentication.
-  * Added detailed structured logging for delivery attempts, success confirmations, and failure diagnostics.
-  * Outbox retry resilience: failed delivery leaves jobs queued in the database outbox rather than losing state.
-* **Local In-Process Development SMTP Capture**:
+  * Added native support for HTTP-based email delivery over port 443 (which is never blocked by cloud firewalls):
+    1. **Resend HTTPS REST API** (`https://api.resend.com/emails`):
+       * Activated when `RESEND_API_KEY` is present.
+       * Uses standard `urllib.request` over HTTPS with `User-Agent: LedgerPilot/1.0` and `Authorization: Bearer <key>`.
+       * Key normalization: automatically strips whitespace and surrounding quotes.
+       * Default sender: `onboarding@resend.dev` (or configured `RESEND_FROM`).
+    2. **Brevo (Sendinblue) HTTPS REST API** (`https://api.brevo.com/v3/smtp/email`):
+       * Activated when `BREVO_API_KEY` is present.
+       * Enables sending verification emails to **any** recipient address on free accounts without requiring custom domain DNS verification.
+    3. **Standard SMTP Fallback** (`smtplib.SMTP` / `smtplib.SMTP_SSL`):
+       * Used when API keys are omitted and direct SMTP egress is unblocked (e.g., local development, bare metal, or Railway Pro).
+       * Supports port 587 (STARTTLS) and port 465 (implicit SSL) with 15s timeout.
+* **Resend Sandbox Constraints & Resolution**:
+  * When using Resend's default test address (`onboarding@resend.dev`), Resend enforces an anti-abuse sandbox policy: test emails can **only** be delivered to the email address of the Resend account owner (`gamehalludba@gmail.com`).
+  * Attempting to deliver to unverified external emails without a custom domain returns `HTTP 403 Forbidden`:
+    ```json
+    {
+      "statusCode": 403,
+      "name": "validation_error",
+      "message": "You can only send testing emails to your own email address (gamehalludba@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains"
+    }
+    ```
+  * Resolution paths:
+    * **Path A**: Verify custom domain DNS records in Resend and set `RESEND_FROM=noreply@yourdomain.com`.
+    * **Path B**: Use Brevo (`BREVO_API_KEY`) which does not restrict recipient addresses in its free tier.
+* **Live Diagnostic Endpoint (`/health/test-email`)**:
   * File: `backend/src/ledgerpilot/main.py`
-  * Integrated an in-process background SMTP capture server on `127.0.0.1:1025` with REST query API on `http://127.0.0.1:8025/api/v1/messages` when running in `local` or `test` mode without real SMTP credentials.
-* **Railway Production SMTP Configuration**:
-  * Configured support for standard hosted SMTP relays (e.g., Gmail SMTP / SendGrid / Postmark) through environment variables:
-    * `AUTH_DELIVERY_ENABLED=true`
-    * `SMTP_HOST=smtp.gmail.com`
-    * `SMTP_PORT=587`
-    * `SMTP_STARTTLS=true`
-    * `SMTP_USERNAME=...`
-    * `SMTP_PASSWORD=...`
-    * `SMTP_FROM=...`
+  * Exposes `/health/test-email` to test real email delivery live, probe socket ports (587, 465, 2525, 25, 443), and return full structured error diagnostics without swallowing low-level exceptions.
+* **Container CA Certificates**:
+  * File: `backend/Dockerfile`
+  * Installed `ca-certificates` in runtime stage to ensure TLS certificate verification succeeds when connecting to external HTTPS and SMTP endpoints.
 
 #### 2. Cloud Reverse Proxy, HTTPS, and Cross-Origin Authentication
 * **Proxy Header Trust & Uvicorn Configuration**:
@@ -341,7 +370,12 @@ Following initial deployment to Railway and Vercel, four operational issues were
 
 | Commit Hash | Description |
 | :--- | :--- |
-| `[pending]` | `fix(mail): add ca-certificates, support SSL port 465, and add /health/test-email endpoint` |
+| `62471e9` | `fix(mail): strip API keys and expose full DomainError message in diagnostic endpoint` |
+| `ab75e4c` | `fix(mail): capture HTTP error body for Resend/Brevo and accept API keys in test endpoint` |
+| `bb24e27` | `feat(mail): add Resend and Brevo HTTPS delivery support and socket port probing in test endpoint` |
+| `5d06183` | `fix(mail): preserve underlying exception cause and error detail in deliver()` |
+| `0352db6` | `fix(mail): add ca-certificates to Dockerfile, support SSL port 465, and add /health/test-email endpoint` |
+| `b08730d` | `docs: record cloud hardening, SMTP delivery, proxy headers, and railway migration fixes` |
 | `8cc0747` | `fix(cloud): inject configured DB URL into alembic and resolve Railway Postgres fallbacks` |
 | `77e3e04` | `fix(ops): add retry loop to auto-migrate thread and expose /health/migrate endpoint` |
 | `3f653f5` | `fix(ci): fix lint, format, mypy types and ensure runtime_role is set in Railway migrations` |
@@ -355,6 +389,34 @@ Following initial deployment to Railway and Vercel, four operational issues were
 ---
 
 ### D. Verification Evidence
+* **Live In-Cloud Email Delivery Verification**:
+  * Tested live on Railway production (`https://balanc-production.up.railway.app/health/test-email?to=gamehalludba@gmail.com`).
+  * Live response confirmed:
+    ```json
+    {
+      "status": "ok",
+      "delivered_to": "gamehalludba@gmail.com",
+      "resend_enabled": true,
+      "brevo_enabled": false
+    }
+    ```
+  * Verification email successfully arrived in destination inbox (`gamehalludba@gmail.com`).
+* **Live In-Cloud Database Migration Verification**:
+  * Endpoint `https://balanc-production.up.railway.app/health/migrate` executed successfully against managed cloud database:
+    ```json
+    {
+      "status": "ok",
+      "message": "Migrations completed successfully",
+      "applied_to_host": "postgres-1i3l.railway.internal",
+      "applied_to_db": "railway"
+    }
+    ```
+  * Endpoint `https://balanc-production.up.railway.app/health/ready` confirmed:
+    ```json
+    {
+      "status": "ready"
+    }
+    ```
 * **GitHub Actions Run `44294784600`** on branch `main` passed with 100% green status across all 10 pipeline jobs:
   * `Backend Quality (Lint, Format, Mypy)`: Passed
   * `Contract Checks (OpenAPI, Traceability, API Sync)`: Passed

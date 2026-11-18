@@ -24,6 +24,7 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-016](ADR-016-report-snapshots-and-pilot-deployment.md) | Consistent report snapshots and durable readiness-gated pilot deployment | Accepted within audit remediation |
 
 | [ADR-017](ADR-017-floci-pilot-target.md) | Floci replaces AWS for Phase 9 pilot hosting | Target accepted; compatibility verification pending |
+| [ADR-018](ADR-018-cloud-networking-database-migrations-and-https-email-delivery.md) | Cloud networking, managed database migrations, and HTTPS email delivery | Accepted |
 
 ## Changing a decision
 
