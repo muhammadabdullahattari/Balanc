@@ -14,8 +14,8 @@ const business = {
   jurisdiction: "US",
   p2_insights_available: false,
   p2_micro_close_available: false,
-  p2_prepaids_available: false,
-  p2_projects_available: false,
+  p2_prepaids_available: true,
+  p2_projects_available: true,
   p2_reconciliation_available: false,
   p2_audit_available: false,
   p2_retention_available: false,
@@ -90,6 +90,9 @@ async function setup(page: Page, role = "accountant") {
   await expect(
     page.getByRole("heading", { name: "Financial overview" }),
   ).toBeVisible();
+  // The dashboard loads account choices after rendering its heading. Wait for
+  // that request before installing overrides for the chart-of-accounts screen.
+  await expect(page.getByLabel("Cash account").locator("option", { hasText: "Synthetic cash" })).toHaveCount(1);
   return failures;
 }
 async function navigate(page: Page, label: string, group?: string) {
@@ -117,6 +120,8 @@ test("every workspace route fits desktop, tablet and phone viewports", async ({
     ["Purchases", "Supplier bills"],
     ["Contacts", "Contacts"],
     ["Documents", "Supporting documents"],
+    ["Prepaid expenses", "Prepaid expense schedules"],
+    ["Projects", "Projects and billable expenses"],
     ["Reports", "Financial reports"],
     ["General ledger", "General ledger", "Accounting"],
     ["Accounts", "Chart of accounts", "Accounting"],
@@ -136,6 +141,7 @@ test("every workspace route fits desktop, tablet and phone viewports", async ({
     await page.setViewportSize({ width, height: 900 });
     for (const [label, heading, group] of routes) {
       await navigate(page, label, group);
+      await expect(page).toHaveTitle(label + " · LedgerPilot");
       await expect(
         page.getByRole("heading", { name: heading, level: 1, exact: true }),
       ).toBeVisible();
@@ -401,7 +407,66 @@ test("dashboard preserves exact totals and exposes chart data and freshness", as
   await page.getByLabel("Cash account").selectOption(id);
   await expect(page.getByText("USD 123.45", { exact: true })).toBeVisible();
   await expect(page.getByRole("img", { name: /Monthly income/ })).toBeVisible();
+  if (test.info().project.name === "chromium") {
+    for (const theme of ["light", "dark"]) {
+      if (await page.locator("html").getAttribute("data-theme") !== theme)
+        await page.getByRole("button", { name: "Switch to " + theme + " mode" }).click();
+      await test.info().attach("dashboard-" + theme, {
+        body: await page.screenshot({ fullPage: true, animations: "disabled" }),
+        contentType: "image/png",
+      });
+    }
+  }
   await page.getByText("View exact figures").click();
   await expect(page.getByRole("cell", { name: "USD 100.25" })).toBeVisible();
   await expect(page.getByText(/phase6-report/)).toContainText("accrual basis");
+});
+
+test("import choices remain readable in both themes and fit a narrow screen", async ({ page }) => {
+  await setup(page);
+  await page.route("**/quickbooks/preview?*", (route) => route.fulfill({json: {items: []}}));
+  await navigate(page, "Settings");
+  await page.getByRole("tab", {name: "Integrations"}).click();
+  const choice = page.getByLabel("Chart of Accounts", {exact: true});
+  await expect(choice).toBeVisible();
+  for (const theme of ["light","dark"]) {
+    if (await page.locator("html").getAttribute("data-theme") !== theme)
+      await page.getByRole("button", {name: "Switch to " + theme + " mode"}).click();
+    const contrast = await choice.evaluate((input) => {
+      const style = getComputedStyle(input.closest("label")!);
+      const luminance = (color: string) => {
+        const [r,g,b] = color.match(/\d+/g)!.slice(0,3).map((v) => {
+          const channel = Number(v)/255;
+          return channel <= .04045 ? channel/12.92 : ((channel+.055)/1.055)**2.4;
+        });
+        return .2126*r+.7152*g+.0722*b;
+      };
+      const a=luminance(style.color), b=luminance(style.backgroundColor);
+      return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+    });
+    expect(contrast).toBeGreaterThanOrEqual(4.5);
+  }
+  for (const width of [2560, 320]) {
+    await page.setViewportSize({width,height:900});
+    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+  }
+  await page.context().setOffline(true);
+  await expect(page.getByText("You’re offline. Reconnect before saving changes.")).toBeVisible();
+  await page.context().setOffline(false);
+  await expect(page.getByText("You’re offline. Reconnect before saving changes.")).toBeHidden();
+});
+
+test("canceling a file choice clears it before the next upload", async ({ page }) => {
+  await setup(page);
+  await navigate(page, "Documents");
+  const open = page.getByRole("button", { name: "Upload document" });
+  await open.click();
+  const chooser = page.waitForEvent("filechooser");
+  await page.locator('input[type="file"]').click();
+  await (await chooser).setFiles({ name: "receipt.csv", mimeType: "text/csv", buffer: Buffer.from("amount\n1\n") });
+  await expect(page.getByRole("button", { name: "Upload securely" })).toBeEnabled();
+  await page.keyboard.press("Escape");
+  await open.click();
+  await expect(page.getByRole("button", { name: "Upload securely" })).toBeDisabled();
+  await expect(page.getByText(/receipt\.csv/)).toHaveCount(0);
 });

@@ -15,6 +15,7 @@ from ledgerpilot.config import get_settings
 from ledgerpilot.identity.mail import deliver
 from ledgerpilot.provider_integrations import execute_quickbooks_import, load, process_stripe_event
 from ledgerpilot.reports.service import generate_report_export
+from ledgerpilot.shared.errors import DomainError
 
 logger = logging.getLogger("ledgerpilot.jobs.handlers")
 
@@ -65,6 +66,16 @@ def handle_quickbooks_import(
 ) -> dict[str, Any]:
     if business_id is None:
         raise ValueError("QuickBooks import requires business_id")
+    permitted = db.scalar(
+        text(
+            "SELECT EXISTS (SELECT 1 FROM app.memberships m JOIN app.users u ON u.id=m.user_id "
+            "WHERE m.business_id=:business AND m.user_id=:actor AND m.active AND NOT u.suspended "
+            "AND (m.role='accountant' OR (m.role='owner' AND m.can_post)))"
+        ),
+        {"business": business_id, "actor": created_by},
+    )
+    if not created_by or not permitted:
+        raise DomainError("ERR_IMPORT_ACTOR", "An authorized member must start a new import.", 403)
     settings = get_settings()
     current = load(db, business_id, "quickbooks")
     cutover_str = payload.get("cutover_date")
@@ -80,6 +91,7 @@ def handle_quickbooks_import(
         cutover_date=cutover,
         entities=entities,
         dry_run=dry_run,
+        user_id=created_by,
     )
     serialized: dict[str, Any] = {}
     for k, v in res.items():

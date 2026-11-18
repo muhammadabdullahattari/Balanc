@@ -1,9 +1,7 @@
 import { GoogleSignIn } from "./google-signin";
 import { RetentionControls } from "./retention";
 import { AuditShares } from "./audit-access";
-import { BillingSettings } from "./billing";
-import { QuickBooksImport } from "./quickbooks-import";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
 import {
@@ -11,12 +9,22 @@ import {
   Button,
   ErrorNotice,
   Field,
+  Loading,
   PageHeading,
   SectionTabs,
   Table,
 } from "../components/ui";
 import { useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
+const QuickBooksImport = lazy(() =>
+  import("./quickbooks-import").then((module) => ({
+    default: module.QuickBooksImport,
+  })),
+);
+const BillingSettings = lazy(() =>
+  import("./billing").then((module) => ({ default: module.BillingSettings })),
+);
+
 export function Settings() {
   const b = useBusiness();
   const path = { business_id: b.id };
@@ -212,8 +220,16 @@ export function Settings() {
             </form>
           </>
         )}
-        {section === "billing" && <BillingSettings />}
-        {section === "integrations" && <QuickBooksImport />}
+        {section === "billing" && (
+          <Suspense fallback={<Loading />}>
+            <BillingSettings />
+          </Suspense>
+        )}
+        {section === "integrations" && (
+          <Suspense fallback={<Loading />}>
+            <QuickBooksImport key={b.id} />
+          </Suspense>
+        )}
         {section === "security" && (
           <>
             <h2>Keep your workspace protected.</h2>

@@ -266,7 +266,10 @@ export function Evidence() {
       <Modal
         open={open}
         onClose={() => {
-          if (!upload.isPending) setOpen(false);
+          if (!upload.isPending) {
+            setOpen(false);
+            setFile(undefined);
+          }
         }}
         title="Upload a document"
         description="Documents are quarantined for scanning before extraction. Uploading never posts to your books."

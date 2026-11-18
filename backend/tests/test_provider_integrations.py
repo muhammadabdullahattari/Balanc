@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from ledgerpilot.config import Settings
-from ledgerpilot.provider_integrations import process_stripe_event, signed_event
+from ledgerpilot.provider_integrations import import_entities, process_stripe_event, signed_event
 from ledgerpilot.shared.errors import DomainError
 
 
@@ -766,3 +766,29 @@ def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
             if "INSERT INTO app.provider_connections" in str(args[0]):
                 saved = True
         assert saved, "Expected pending checkout session to be saved in provider_connections"
+
+
+def test_import_selection_is_explicit_and_order_independent() -> None:
+    assert len(import_entities(None)) == 10
+    assert import_entities(["Bill", "Invoice", "bill"]) == import_entities(["invoice", "bill"])
+    for invalid in ([], ["unsupported"], ["Bill", "unsupported"]):
+        with pytest.raises(DomainError, match="ERR_IMPORT_ENTITIES"):
+            import_entities(invalid)
+
+
+def test_queued_import_rechecks_and_preserves_requester(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ledgerpilot.jobs import handlers
+
+    business, actor = uuid4(), uuid4()
+    db = MagicMock()
+    execute = MagicMock(return_value={})
+    monkeypatch.setattr(handlers, "execute_quickbooks_import", execute)
+    monkeypatch.setattr(handlers, "get_settings", MagicMock())
+    monkeypatch.setattr(handlers, "load", MagicMock(return_value={}))
+    db.scalar.return_value = False
+    with pytest.raises(DomainError, match="ERR_IMPORT_ACTOR"):
+        handlers.handle_quickbooks_import(db, business, actor, {})
+    execute.assert_not_called()
+    db.scalar.return_value = True
+    handlers.handle_quickbooks_import(db, business, actor, {})
+    assert execute.call_args.kwargs["user_id"] == actor

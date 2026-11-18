@@ -819,6 +819,25 @@ def fetch_qb_pages(
     return records
 
 
+def import_entities(entities: list[str] | None) -> list[str]:
+    allowed = {
+        "account",
+        "customer",
+        "vendor",
+        "journalentry",
+        "invoice",
+        "bill",
+        "payment",
+        "billpayment",
+        "creditmemo",
+        "vendorcredit",
+    }
+    selected = allowed if entities is None else {item.lower() for item in entities}
+    if not selected or not selected <= allowed:
+        raise DomainError("ERR_IMPORT_ENTITIES", "Choose at least one supported record type.", 422)
+    return sorted(selected)
+
+
 @router.post("/businesses/{business_id}/quickbooks/import")
 def import_quickbooks(
     business_id: UUID,
@@ -840,9 +859,12 @@ def import_quickbooks(
             409,
         )
 
+    entities = import_entities(entities)
+    cutover_date = cutover_date or date.today()
     if async_job:
         from ledgerpilot.jobs import service as job_service
 
+        selection = hashlib.sha256(",".join(entities).encode()).hexdigest()
         job = job_service.enqueue(
             db,
             business_id=business_id,
@@ -854,7 +876,7 @@ def import_quickbooks(
                 "entities": entities,
                 "dry_run": dry_run,
             },
-            idempotency_key=f"qb_import:{business_id}:{cutover_date}:{dry_run}",
+            idempotency_key=f"qb_import:{business_id}:{cutover_date}:{dry_run}:{selection}",
             max_attempts=settings.jobs_default_max_attempts,
             timeout_seconds=600,
         )
@@ -887,24 +909,14 @@ def execute_quickbooks_import(
     user_id: UUID | None = None,
 ) -> dict[str, Any]:
 
+    if user_id is None:
+        raise DomainError("ERR_IMPORT_ACTOR", "Sign in again before starting an import.", 403)
     cipher = encryption(settings)
     tokens = json.loads(cipher.decrypt(current["tokens"].encode()))
     realm_id = current["realm_id"]
     access_token = tokens["access_token"]
     effective_cutover = cutover_date or date.today()
-    default_entities = [
-        "account",
-        "customer",
-        "vendor",
-        "journalentry",
-        "invoice",
-        "bill",
-        "payment",
-        "billpayment",
-        "creditmemo",
-        "vendorcredit",
-    ]
-    norm_entities = {e.lower() for e in (entities or default_entities)}
+    norm_entities = set(import_entities(entities))
 
     imported_accounts = 0
     imported_parties = 0
@@ -2019,19 +2031,6 @@ def execute_quickbooks_import(
         + imported_bill_payments
         + imported_vendor_credits
     )
-    effective_user_id = user_id
-    if effective_user_id is None:
-        with contextlib.suppress(Exception):
-            effective_user_id = db.execute(
-                text(
-                    "SELECT user_id FROM app.memberships WHERE business_id = :b "
-                    "AND role IN ('owner', 'accountant') AND active LIMIT 1"
-                ),
-                {"b": business_id},
-            ).scalar_one_or_none()
-    if effective_user_id is None:
-        effective_user_id = uuid4()
-
     if not dry_run and total_imported_entities > 0:
         batch_id = uuid4()
         db.execute(
@@ -2076,10 +2075,10 @@ def execute_quickbooks_import(
                         "credit": str(total_credit),
                     }
                 ),
-                "user": effective_user_id,
+                "user": user_id,
             },
         )
-        record(db, effective_user_id, "quickbooks.imported", business_id, batch_id)
+        record(db, user_id, "quickbooks.imported", business_id, batch_id)
 
     return {
         "status": "dry_run" if dry_run else "imported",

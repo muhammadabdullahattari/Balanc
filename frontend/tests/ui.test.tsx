@@ -65,3 +65,26 @@ it("requires verified posting permission and allows an accountant", () => {
   );
   expect(screen.getByRole("button", { name: "Post" })).toBeEnabled();
 });
+
+it("retry inside a form does not submit a second request", async () => {
+  let submissions = 0;
+  let retries = 0;
+  render(
+    <form
+      onSubmit={(event) => {
+        event.preventDefault();
+        submissions++;
+      }}
+    >
+      <ErrorNotice
+        error={new Error("Connection interrupted.")}
+        retry={() => {
+          retries++;
+        }}
+      />
+    </form>,
+  );
+  await userEvent.click(screen.getByRole("button", { name: "Try again" }));
+  expect(retries).toBe(1);
+  expect(submissions).toBe(0);
+});

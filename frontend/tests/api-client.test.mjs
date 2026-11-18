@@ -110,3 +110,14 @@ test("same-origin remote HTTP cannot transmit credentials, while local loopback 
  globalThis.window.location.origin="http://localhost:5173";
  assert.doesNotThrow(()=>createApiClient("http://localhost:5173"));
 });
+
+test("a stalled transport cannot delay timeout feedback or replay the read", async (t) => {
+  let reads = 0;
+  browser(t, () => {
+    reads++;
+    return new Promise(() => {});
+  });
+  const { client } = createApiClient("https://api.ledgerpilot.test", 20);
+  await assert.rejects(client.GET("/api/v1/businesses"), { name: "TimeoutError" });
+  assert.equal(reads, 1);
+});

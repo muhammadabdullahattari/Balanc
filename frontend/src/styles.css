@@ -1453,10 +1453,10 @@ summary {
     margin-top: 20px;
   }
   .metric > div {
-    font-size: 0.66rem;
+    font-size: 0.78rem;
   }
   .metric small {
-    font-size: 0.6rem;
+    font-size: 0.75rem;
   }
   .metric svg {
     display: none;
@@ -1566,6 +1566,7 @@ summary {
   *:before,
   *:after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
@@ -1781,4 +1782,31 @@ details > form {
     align-items: start;
     padding: 24px 14px 36px;
   }
+}
+
+.import-options {
+  margin: 0 0 1rem;
+}
+.import-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 11rem), 1fr));
+  gap: 0.5rem;
+}
+.import-option {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0.5rem 0.75rem;
+  border-radius: var(--radius-control);
+  background: var(--surface-alt);
+  color: var(--ink);
+  cursor: pointer;
+}
+.import-option:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.import-option input {
+  accent-color: var(--accent);
 }

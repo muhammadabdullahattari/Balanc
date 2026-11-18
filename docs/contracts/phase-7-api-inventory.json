@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 191,
-  "distinct_operations": 153,
+  "call_sites": 193,
+  "distinct_operations": 154,
   "operations": [
     {
       "file": "App.tsx",
@@ -504,6 +504,11 @@
       "path": "/api/v1/auth/google/login"
     },
     {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/login"
+    },
+    {
       "file": "features/ledger.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}"
@@ -702,6 +707,11 @@
       "file": "features/projects.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/projects/billable-drafts"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/authorize"
     },
     {
       "file": "features/quickbooks-import.tsx",

@@ -130,7 +130,9 @@ export function ErrorNotice({
     <div role="alert" className="notice error">
       <AlertCircle size={18} />
       <div>
-        {error instanceof Error ? error.message : "Something went wrong."}
+        {error instanceof Error
+          ? error.message
+          : "We couldn’t finish this action. Check your connection and try again."}
         {error instanceof ApiError && error.fields?.length ? (
           <ul>
             {error.fields.map((field, i) => {
@@ -162,6 +164,7 @@ export function ErrorNotice({
       </div>
       {!retry && error instanceof ApiError && error.status === 409 && (
         <Button
+          type="button"
           variant="ghost"
           onClick={() => {
             void queryClient.invalidateQueries();
@@ -171,7 +174,7 @@ export function ErrorNotice({
         </Button>
       )}
       {retry && (
-        <Button variant="ghost" onClick={retry}>
+        <Button type="button" variant="ghost" onClick={retry}>
           Try again
         </Button>
       )}
@@ -224,7 +227,7 @@ export function PageHeading({
   return (
     <header className="page-heading">
       <div>
-        <p className="eyebrow">{eyebrow || "YOUR FINANCE OFFICE"}</p>
+        {eyebrow && <p className="eyebrow">{eyebrow}</p>}
         <h1>{title}</h1>
         <p className="muted">{description}</p>
       </div>
@@ -345,7 +348,7 @@ export function Table<T>({
 }: {
   rows: T[];
   columns: { label: string; render: (row: T) => ReactNode }[];
-  rowKey: (row: T) => string;
+  rowKey: (row: T, index: number) => string;
   caption: string;
 }) {
   return (
@@ -367,8 +370,8 @@ export function Table<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
-            <tr key={rowKey(row)}>
+          {rows.map((row, index) => (
+            <tr key={rowKey(row, index)}>
               {columns.map((c) => (
                 <td key={c.label}>{c.render(row)}</td>
               ))}

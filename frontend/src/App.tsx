@@ -49,9 +49,15 @@ import {
 } from "./api/runtime";
 import { Button, ErrorNotice, Loading } from "./components/ui";
 import { Auth } from "./features/auth";
-import { BusinessChooser } from "./features/onboarding";
-import { AuditRecipient } from "./features/audit-access";
 import { BusinessContext, AccessContext } from "./features/context";
+const BusinessChooser = lazy(() =>
+  import("./features/onboarding").then((m) => ({ default: m.BusinessChooser })),
+);
+const AuditRecipient = lazy(() =>
+  import("./features/audit-access").then((m) => ({
+    default: m.AuditRecipient,
+  })),
+);
 const Drafts = lazy(() =>
   import("./features/drafts").then((m) => ({ default: m.Drafts })),
 );
@@ -251,6 +257,14 @@ function Workspace() {
   const navigate = useNavigate();
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
+    document
+      .querySelector('meta[name="theme-color"]')
+      ?.setAttribute(
+        "content",
+        getComputedStyle(document.documentElement)
+          .getPropertyValue("--canvas")
+          .trim(),
+      );
     try {
       localStorage.setItem("ledgerpilot-theme", theme);
     } catch {
@@ -320,6 +334,17 @@ function Workspace() {
       queryClient.setQueryData(keys.session, null);
     },
   });
+  const pageTitle = !session.data
+    ? "Account access"
+    : location.pathname === "/audit-access"
+      ? "Audit access"
+      : !businessId
+        ? "Choose a workspace"
+        : navigation.find((item) => item.to === location.pathname)?.label ||
+          (location.pathname === "/settings" ? "Settings" : "Workspace");
+  useEffect(() => {
+    document.title = pageTitle + " · LedgerPilot";
+  }, [pageTitle]);
   if (session.isPending)
     return (
       <div className="boot">
@@ -558,6 +583,11 @@ function Workspace() {
               </div>
             </header>
             <main id="main-content" className="main-content" tabIndex={-1}>
+              {offline && (
+                <p className="notice" role="status">
+                  You’re offline. Reconnect before saving changes.
+                </p>
+              )}
               <ErrorNotice error={logout.error} />
               <Suspense fallback={<Loading />}>
                 <Routes>
@@ -618,7 +648,9 @@ export default function App() {
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <BrowserRouter>
-          <Workspace />
+          <Suspense fallback={<Loading />}>
+            <Workspace />
+          </Suspense>
         </BrowserRouter>
       </QueryClientProvider>
     </ErrorBoundary>

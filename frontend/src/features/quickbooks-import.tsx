@@ -73,6 +73,8 @@ export function QuickBooksImport() {
   });
 
   const toggleEntity = (entity: string) => {
+    importDryRun.reset();
+    importLive.reset();
     setSelectedEntities((prev) =>
       prev.includes(entity)
         ? prev.filter((e) => e !== entity)
@@ -152,11 +154,10 @@ export function QuickBooksImport() {
   }
   return (
     <div className="quickbooks-import">
-      <h2>QuickBooks Online Migration & Import</h2>
+      <h2>Import from QuickBooks</h2>
       <p className="muted">
-        Reviewed one-way ledger and entity synchronization. Preview mapping,
-        verify balance reconciliation in dry-run mode, and post historical books
-        through standard accounting controls.
+        Choose the records to bring into this workspace. Review the totals
+        before posting to the ledger.
       </p>
 
       <ErrorNotice
@@ -164,55 +165,46 @@ export function QuickBooksImport() {
       />
 
       <div className="review-summary" style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: "1rem",
+            alignItems: "center",
+          }}
+        >
           <strong>Sandbox Connector:</strong>
           <Badge>CONNECTED</Badge>
         </div>
       </div>
 
-      <h3>1. Select Entities for Import</h3>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-          gap: "0.5rem",
-          marginBottom: "1rem",
-        }}
-      >
-        {[
-          ["Account", "Chart of Accounts"],
-          ["Customer", "Customers"],
-          ["Vendor", "Vendors"],
-          ["JournalEntry", "Journal Entries"],
-          ["Invoice", "Invoices"],
-          ["Bill", "Bills"],
-          ["Payment", "Payments (Customer Receipts)"],
-          ["CreditMemo", "Credit Memos (Customer Credits)"],
-          ["BillPayment", "Bill Payments (Supplier Settlement)"],
-          ["VendorCredit", "Vendor Credits (Applied Credits)"],
-        ].map(([key, label]) => (
-          <label
-            key={key}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.5rem",
-              background: "var(--surface-raised, #1a1a24)",
-              borderRadius: "4px",
-              cursor: "pointer",
-            }}
-          >
-            <input
-              type="checkbox"
-              checked={selectedEntities.includes(key)}
-              onChange={() => toggleEntity(key)}
-            />
-            <span>{label}</span>
-          </label>
-        ))}
-      </div>
-
+      <fieldset className="import-options">
+        <legend>Records to import</legend>
+        <div className="import-grid">
+          {[
+            ["Account", "Chart of Accounts"],
+            ["Customer", "Customers"],
+            ["Vendor", "Vendors"],
+            ["JournalEntry", "Journal Entries"],
+            ["Invoice", "Invoices"],
+            ["Bill", "Bills"],
+            ["Payment", "Payments (Customer Receipts)"],
+            ["CreditMemo", "Credit Memos (Customer Credits)"],
+            ["BillPayment", "Bill Payments (Supplier Settlement)"],
+            ["VendorCredit", "Vendor Credits (Applied Credits)"],
+          ].map(([key, label]) => (
+            <label key={key} className="import-option">
+              <input
+                type="checkbox"
+                disabled={importDryRun.isPending || importLive.isPending}
+                checked={selectedEntities.includes(key)}
+                onChange={() => toggleEntity(key)}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
       <div
         className="form-grid"
         style={{ maxWidth: "300px", marginBottom: "1rem" }}
@@ -221,15 +213,31 @@ export function QuickBooksImport() {
           <input
             type="date"
             value={cutoverDate}
-            onChange={(e) => setCutoverDate(e.target.value)}
+            disabled={importDryRun.isPending || importLive.isPending}
+            onChange={(e) => {
+              importDryRun.reset();
+              importLive.reset();
+              setCutoverDate(e.target.value);
+            }}
           />
         </Field>
       </div>
 
-      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.5rem" }}>
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "0.75rem",
+          marginBottom: "1.5rem",
+        }}
+      >
         <Button
           busy={importDryRun.isPending}
-          disabled={selectedEntities.length === 0}
+          disabled={
+            !cutoverDate ||
+            selectedEntities.length === 0 ||
+            importLive.isPending
+          }
           onClick={() => importDryRun.mutate()}
         >
           Run Pre-Import Review (Dry Run)
@@ -239,7 +247,10 @@ export function QuickBooksImport() {
           busy={importLive.isPending}
           disabled={
             selectedEntities.length === 0 ||
-            (dryRunData !== undefined && !dryRunData.reconciled)
+            !cutoverDate ||
+            importDryRun.isPending ||
+            !dryRunData?.reconciled ||
+            importLive.isSuccess
           }
           permission="post"
           onClick={() => {
@@ -265,6 +276,7 @@ export function QuickBooksImport() {
           <div
             style={{
               display: "flex",
+              flexWrap: "wrap",
               gap: "1rem",
               alignItems: "center",
               margin: "0.5rem 0",
@@ -308,8 +320,8 @@ export function QuickBooksImport() {
               <Table
                 caption="Unmapped accounts"
                 rows={unmapped}
-                rowKey={(u) =>
-                  `${u.code || "unknown"}-${u.journal_id || Math.random()}`
+                rowKey={(u, index) =>
+                  `${u.code || "unknown"}-${u.journal_id || index}`
                 }
                 columns={[
                   { label: "QB Code / Ref", render: (u) => u.code || "—" },

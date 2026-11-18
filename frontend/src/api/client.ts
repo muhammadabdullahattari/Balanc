@@ -28,8 +28,34 @@ export function createApiClient(baseUrl: string, timeoutMs = 30_000) {
   let csrf: string | undefined;
   let refreshRequest: Promise<boolean> | undefined;
   let csrfRequest: Promise<string> | undefined;
+  // Some transports wait for the network operation to settle after a cancellation.
+  // Surface the deadline to the caller immediately, including on refreshed reads.
+  async function fetchWithinDeadline(request: Request): Promise<Response> {
+    const controller = new AbortController();
+    const signal = AbortSignal.any([request.signal, controller.signal]);
+    const bounded = new Request(request, { signal });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        fetch(bounded),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => {
+            const reason = new DOMException(
+              "Request timed out",
+              "TimeoutError",
+            );
+            reject(reason);
+            controller.abort(reason);
+          }, timeoutMs);
+        }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
   const client = createClient<paths>({
     baseUrl: url.origin,
+    fetch: fetchWithinDeadline,
     credentials: "include",
   });
   const middleware: Middleware = {
@@ -94,7 +120,9 @@ export function createApiClient(baseUrl: string, timeoutMs = 30_000) {
           refreshRequest = undefined;
         }
         if (refreshed)
-          return fetch(new Request(request, { credentials: "include" }));
+          return fetchWithinDeadline(
+            new Request(request, { credentials: "include" }),
+          );
       }
       // Login/refresh/logout can replace the session's CSRF value.
       if (

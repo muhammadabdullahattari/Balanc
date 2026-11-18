@@ -1,0 +1,776 @@
+# Local QA inventory
+
+Discovery covered 447 tracked paths and 187 API paths. Inventory membership does not indicate manual review or a passed test.
+
+## Browser feature modules
+
+- frontend/src/features/activity.tsx
+- frontend/src/features/advances.tsx
+- frontend/src/features/audit-access.tsx
+- frontend/src/features/auth.tsx
+- frontend/src/features/banking.tsx
+- frontend/src/features/beneficiary-review.tsx
+- frontend/src/features/billing.tsx
+- frontend/src/features/cleanup.tsx
+- frontend/src/features/close-packages.tsx
+- frontend/src/features/close.tsx
+- frontend/src/features/context.tsx
+- frontend/src/features/controlled-posting.tsx
+- frontend/src/features/dashboard.tsx
+- frontend/src/features/directory.tsx
+- frontend/src/features/drafts.tsx
+- frontend/src/features/email-operations.tsx
+- frontend/src/features/evidence.tsx
+- frontend/src/features/export-disposal.tsx
+- frontend/src/features/google-signin.tsx
+- frontend/src/features/ledger.tsx
+- frontend/src/features/loans.tsx
+- frontend/src/features/lookup-more.tsx
+- frontend/src/features/onboarding.tsx
+- frontend/src/features/openings.tsx
+- frontend/src/features/prepaids.tsx
+- frontend/src/features/projects.tsx
+- frontend/src/features/quickbooks-import.tsx
+- frontend/src/features/reconciliation.tsx
+- frontend/src/features/refunds.tsx
+- frontend/src/features/reports.tsx
+- frontend/src/features/retention.tsx
+- frontend/src/features/rules.tsx
+- frontend/src/features/settings.tsx
+- frontend/src/features/sign-in-verification.tsx
+- frontend/src/features/trade.tsx
+
+## API operations
+
+- GET /api/v1/audit-access/{grant_id}/reports/{report_id} — Read Shared
+- GET /api/v1/auth/csrf — Csrf
+- POST /api/v1/auth/google/challenge — Google Challenge
+- GET /api/v1/auth/google/config — Google Config
+- POST /api/v1/auth/google/link — Google Link
+- POST /api/v1/auth/google/login — Google Login
+- POST /api/v1/auth/login — Login
+- POST /api/v1/auth/logout — Logout
+- POST /api/v1/auth/logout-all — Logout All
+- GET /api/v1/auth/me — Me
+- POST /api/v1/auth/mfa/confirm — Confirm
+- POST /api/v1/auth/mfa/enroll — Enroll
+- POST /api/v1/auth/refresh — Refresh
+- POST /api/v1/auth/register — Register
+- POST /api/v1/auth/reset — Reset
+- POST /api/v1/auth/reset-request — Reset Request
+- POST /api/v1/auth/verification-request — Verification Request
+- POST /api/v1/auth/verify — Verify
+- POST /api/v1/billing/stripe/webhook — Stripe Webhook
+- GET /api/v1/businesses — Businesses
+- POST /api/v1/businesses — Create
+- GET /api/v1/businesses/{business_id} — Business
+- GET /api/v1/businesses/{business_id}/accounts — Accounts
+- POST /api/v1/businesses/{business_id}/accounts — Create Account
+- PATCH /api/v1/businesses/{business_id}/accounts/{account_id} — Update Account
+- GET /api/v1/businesses/{business_id}/advances — Advances List
+- POST /api/v1/businesses/{business_id}/advances — Advance Create
+- POST /api/v1/businesses/{business_id}/advances/{advance_id}/applications — Advance Apply
+- POST /api/v1/businesses/{business_id}/assistant/report-answer — Answer
+- GET /api/v1/businesses/{business_id}/audit-events — Audits
+- GET /api/v1/businesses/{business_id}/audit-grants — Grants
+- POST /api/v1/businesses/{business_id}/audit-grants — Grant
+- POST /api/v1/businesses/{business_id}/audit-grants/{grant_id}/revoke — Revoke
+- GET /api/v1/businesses/{business_id}/bank-imports — Imports
+- POST /api/v1/businesses/{business_id}/bank-imports — Import Csv
+- POST /api/v1/businesses/{business_id}/bank-imports/preview — Preview
+- GET /api/v1/businesses/{business_id}/bank-rules — Rules
+- POST /api/v1/businesses/{business_id}/bank-rules — Rule Create
+- GET /api/v1/businesses/{business_id}/bank-rules/controlled-posting/control — Get Controlled Posting Control
+- POST /api/v1/businesses/{business_id}/bank-rules/controlled-posting/pause — Set Controlled Posting Pause
+- GET /api/v1/businesses/{business_id}/bank-rules/correction-suggestions — Correction Suggestions
+- PATCH /api/v1/businesses/{business_id}/bank-rules/{rule_id} — Update Rule
+- POST /api/v1/businesses/{business_id}/bank-rules/{rule_id}/activation — Activate Rule
+- POST /api/v1/businesses/{business_id}/bank-rules/{rule_id}/controlled-posting — Rule Controlled Posting
+- GET /api/v1/businesses/{business_id}/bank-rules/{rule_id}/preview — Preview Rule
+- POST /api/v1/businesses/{business_id}/bank-rules/{rule_id}/rollback — Rollback Rule
+- GET /api/v1/businesses/{business_id}/bank-rules/{rule_id}/shadow-evaluation — Shadow Evaluation
+- GET /api/v1/businesses/{business_id}/bank-transactions — Transactions
+- POST /api/v1/businesses/{business_id}/bank-transactions/{row_id}/disposition — Disposition
+- GET /api/v1/businesses/{business_id}/bank-transactions/{row_id}/matches — Matches
+- POST /api/v1/businesses/{business_id}/bank-transactions/{row_id}/preview — Disposition Preview
+- GET /api/v1/businesses/{business_id}/bank-transactions/{row_id}/proposal — Proposal
+- GET /api/v1/businesses/{business_id}/bank-transactions/{row_id}/reclassifications — Reclassifications
+- POST /api/v1/businesses/{business_id}/bank-transactions/{row_id}/reclassifications — Reclassify
+- GET /api/v1/businesses/{business_id}/beneficiary-changes — Beneficiary Changes
+- POST /api/v1/businesses/{business_id}/billing/checkout — Checkout
+- POST /api/v1/businesses/{business_id}/billing/reconcile — Reconcile Billing
+- GET /api/v1/businesses/{business_id}/billing/subscription — Get Subscription
+- POST /api/v1/businesses/{business_id}/billing/subscription/cancel — Cancel Subscription
+- POST /api/v1/businesses/{business_id}/billing/subscription/plan — Change Subscription Plan
+- GET /api/v1/businesses/{business_id}/close-packages — Packages
+- POST /api/v1/businesses/{business_id}/close-packages — Prepare
+- GET /api/v1/businesses/{business_id}/close-packages/{package_id} — Read
+- POST /api/v1/businesses/{business_id}/close-packages/{package_id}/review — Review
+- GET /api/v1/businesses/{business_id}/close-tasks — Tasks
+- POST /api/v1/businesses/{business_id}/close-tasks — Create Task
+- PATCH /api/v1/businesses/{business_id}/close-tasks/{task_id} — Task Update
+- GET /api/v1/businesses/{business_id}/consents — Consents
+- POST /api/v1/businesses/{business_id}/consents — Consent
+- GET /api/v1/businesses/{business_id}/dashboard — Dashboard
+- GET /api/v1/businesses/{business_id}/email-operations — Workspace Email Operations
+- POST /api/v1/businesses/{business_id}/email-operations/grants — Create Email Support Grant
+- POST /api/v1/businesses/{business_id}/email-operations/grants/{grant_id}/revoke — Revoke Email Support Grant
+- POST /api/v1/businesses/{business_id}/email-operations/jobs/{job_id}/feedback — Workspace Email Feedback
+- GET /api/v1/businesses/{business_id}/entitlement — Entitlement
+- GET /api/v1/businesses/{business_id}/evidence — List Evidence
+- GET /api/v1/businesses/{business_id}/evidence/capabilities — Capabilities
+- POST /api/v1/businesses/{business_id}/evidence/upload — Upload
+- GET /api/v1/businesses/{business_id}/evidence/{evidence_id} — Evidence Detail
+- GET /api/v1/businesses/{business_id}/evidence/{evidence_id}/download — Download
+- GET /api/v1/businesses/{business_id}/evidence/{evidence_id}/duplicate-candidates — Duplicate Candidates
+- GET /api/v1/businesses/{business_id}/evidence/{evidence_id}/identity — Reviewed Identity
+- POST /api/v1/businesses/{business_id}/evidence/{evidence_id}/identity — Identity Review
+- POST /api/v1/businesses/{business_id}/evidence/{evidence_id}/links — Link
+- GET /api/v1/businesses/{business_id}/evidence/{evidence_id}/notes — Notes
+- POST /api/v1/businesses/{business_id}/evidence/{evidence_id}/notes — Note
+- GET /api/v1/businesses/{business_id}/exports/evidence-pack.zip — Evidence Pack
+- GET /api/v1/businesses/{business_id}/exports/journals.csv — Export
+- POST /api/v1/businesses/{business_id}/exports/snapshots — Export Snapshot
+- GET /api/v1/businesses/{business_id}/exports/snapshots/{snapshot_id} — Snapshot Status
+- GET /api/v1/businesses/{business_id}/exports/snapshots/{snapshot_id}/download — Snapshot Download
+- GET /api/v1/businesses/{business_id}/exports/verification-key — Export Key
+- GET /api/v1/businesses/{business_id}/imports — Imports List
+- POST /api/v1/businesses/{business_id}/imports/apply — Import Apply
+- POST /api/v1/businesses/{business_id}/imports/preview — Import Preview
+- GET /api/v1/businesses/{business_id}/imports/{batch_id}/comparison — Import Comparison
+- POST /api/v1/businesses/{business_id}/imports/{batch_id}/parallel-comparison — Parallel Import Comparison
+- POST /api/v1/businesses/{business_id}/invitations — Invite
+- GET /api/v1/businesses/{business_id}/jobs — Jobs
+- GET /api/v1/businesses/{business_id}/jobs/{job_id} — Get Job Status
+- POST /api/v1/businesses/{business_id}/jobs/{job_id}/replay — Job Replay
+- POST /api/v1/businesses/{business_id}/journal-drafts — Create Draft
+- PATCH /api/v1/businesses/{business_id}/journal-drafts/{journal_id} — Update Draft
+- POST /api/v1/businesses/{business_id}/journal-drafts/{journal_id}/post — Publish Draft
+- POST /api/v1/businesses/{business_id}/journals — Post
+- GET /api/v1/businesses/{business_id}/journals/{journal_id} — Journal
+- POST /api/v1/businesses/{business_id}/journals/{journal_id}/reversal — Reverse
+- GET /api/v1/businesses/{business_id}/ledger — Ledger
+- GET /api/v1/businesses/{business_id}/loans — Loans
+- POST /api/v1/businesses/{business_id}/loans — Loan
+- GET /api/v1/businesses/{business_id}/loans/{loan_id}/movements — Movements
+- POST /api/v1/businesses/{business_id}/loans/{loan_id}/movements — Movement
+- GET /api/v1/businesses/{business_id}/membership — Current Membership
+- GET /api/v1/businesses/{business_id}/memberships — Members
+- PATCH /api/v1/businesses/{business_id}/memberships/{user_id} — Update Member
+- GET /api/v1/businesses/{business_id}/micro-close — Micro Close Workpaper
+- GET /api/v1/businesses/{business_id}/notification-email-history — Email History
+- GET /api/v1/businesses/{business_id}/notification-preferences — Preferences
+- PATCH /api/v1/businesses/{business_id}/notification-preferences — Preference Update
+- GET /api/v1/businesses/{business_id}/notifications — Notifications
+- POST /api/v1/businesses/{business_id}/notifications/{notification_id}/read — Notification Read
+- GET /api/v1/businesses/{business_id}/opening-balances — Opening Balances
+- POST /api/v1/businesses/{business_id}/opening-balances/{opening_id}/cash-policy — Opening Cash Policy
+- POST /api/v1/businesses/{business_id}/opening-balances/{opening_id}/corrections — Opening Correction
+- GET /api/v1/businesses/{business_id}/opening-balances/{opening_id}/history — Opening History
+- GET /api/v1/businesses/{business_id}/operations/{operation_id} — Operation
+- GET /api/v1/businesses/{business_id}/parties — Parties
+- POST /api/v1/businesses/{business_id}/parties — Create Party
+- PATCH /api/v1/businesses/{business_id}/parties/{party_id} — Update Party
+- POST /api/v1/businesses/{business_id}/parties/{party_id}/beneficiary-changes — Beneficiary Request
+- GET /api/v1/businesses/{business_id}/parties/{party_id}/statement — Party Statement
+- GET /api/v1/businesses/{business_id}/payments — Payments
+- POST /api/v1/businesses/{business_id}/payments — Payment
+- GET /api/v1/businesses/{business_id}/periods — Periods
+- POST /api/v1/businesses/{business_id}/periods — Create Period
+- PATCH /api/v1/businesses/{business_id}/periods/{period_id} — Lock Period
+- GET /api/v1/businesses/{business_id}/policies — Policies
+- POST /api/v1/businesses/{business_id}/policies — Change Policy
+- GET /api/v1/businesses/{business_id}/prepaids — Prepaid List
+- POST /api/v1/businesses/{business_id}/prepaids — Prepaid Prepare
+- GET /api/v1/businesses/{business_id}/prepaids/sources — Prepaid Sources
+- POST /api/v1/businesses/{business_id}/prepaids/{schedule_id}/recognize — Prepaid Recognize
+- GET /api/v1/businesses/{business_id}/privacy-export — Privacy Export
+- GET /api/v1/businesses/{business_id}/privacy-requests — Privacy Requests
+- POST /api/v1/businesses/{business_id}/privacy-requests — Privacy
+- GET /api/v1/businesses/{business_id}/privacy-requests/{privacy_id} — Privacy History
+- POST /api/v1/businesses/{business_id}/privacy-requests/{privacy_id}/reviews — Review Privacy
+- GET /api/v1/businesses/{business_id}/privacy-review-queue — Privacy Queue
+- GET /api/v1/businesses/{business_id}/projects — Projects List
+- POST /api/v1/businesses/{business_id}/projects — Project Create
+- POST /api/v1/businesses/{business_id}/projects/billable-drafts — Project Billable Draft
+- GET /api/v1/businesses/{business_id}/projects/ledger-lines — Project Ledger Lines
+- POST /api/v1/businesses/{business_id}/projects/ledger-lines/{line_id}/tag — Project Line Tag
+- GET /api/v1/businesses/{business_id}/projects/{project_id}/totals — Project Totals
+- POST /api/v1/businesses/{business_id}/quickbooks/authorize — Start Quickbooks
+- POST /api/v1/businesses/{business_id}/quickbooks/import — Import Quickbooks
+- POST /api/v1/businesses/{business_id}/quickbooks/preview — Preview Quickbooks
+- POST /api/v1/businesses/{business_id}/quickbooks/refresh — Refresh Quickbooks
+- GET /api/v1/businesses/{business_id}/readiness — Readiness
+- POST /api/v1/businesses/{business_id}/reminders/review — Review Reminders
+- GET /api/v1/businesses/{business_id}/reports/aging — Aging
+- GET /api/v1/businesses/{business_id}/reports/balance-sheet — Balance Sheet
+- GET /api/v1/businesses/{business_id}/reports/balances — Materialized Balances
+- GET /api/v1/businesses/{business_id}/reports/controls — Controls
+- POST /api/v1/businesses/{business_id}/reports/export — Export Report
+- GET /api/v1/businesses/{business_id}/reports/export/{job_id}/download — Download Report Export
+- GET /api/v1/businesses/{business_id}/reports/forecast — Forecast
+- GET /api/v1/businesses/{business_id}/reports/forecast/{report_id}/evaluation — Forecast Evaluation
+- GET /api/v1/businesses/{business_id}/reports/forecast/{report_id}/interval — Forecast Interval
+- GET /api/v1/businesses/{business_id}/reports/history — Report History
+- GET /api/v1/businesses/{business_id}/reports/history/{report_id} — Report
+- GET /api/v1/businesses/{business_id}/reports/profit-loss — Profit Loss
+- GET /api/v1/businesses/{business_id}/reports/profit-variance — Profit Variance
+- GET /api/v1/businesses/{business_id}/reports/tax-support — Tax Support
+- GET /api/v1/businesses/{business_id}/retention — State
+- GET /api/v1/businesses/{business_id}/retention/cleanup/policies — List Policies
+- POST /api/v1/businesses/{business_id}/retention/cleanup/policies — Create Policy
+- POST /api/v1/businesses/{business_id}/retention/cleanup/policies/{policy_id}/approve — Approve Policy
+- POST /api/v1/businesses/{business_id}/retention/cleanup/reconcile — Trigger Reconciliation
+- GET /api/v1/businesses/{business_id}/retention/cleanup/requests — List Requests
+- POST /api/v1/businesses/{business_id}/retention/cleanup/requests — Create Request
+- POST /api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/approve — Approve Request
+- POST /api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/confirm — Confirm External
+- GET /api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/events — History
+- POST /api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/execute — Execute Request
+- POST /api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/preview — Preview Request
+- POST /api/v1/businesses/{business_id}/retention/disposal/assess — Assess Storage
+- GET /api/v1/businesses/{business_id}/retention/disposal/exports — Preview Exports
+- POST /api/v1/businesses/{business_id}/retention/disposal/exports — Dispose Exports
+- POST /api/v1/businesses/{business_id}/retention/holds — Place Hold
+- POST /api/v1/businesses/{business_id}/retention/holds/{hold_id}/release — Release Hold
+- POST /api/v1/businesses/{business_id}/retention/policies — Configure
+- POST /api/v1/businesses/{business_id}/retention/preview — Preview
+- GET /api/v1/businesses/{business_id}/search — Search
+- GET /api/v1/businesses/{business_id}/source-drafts — Source Draft List
+- POST /api/v1/businesses/{business_id}/source-drafts — Source Draft Create
+- PATCH /api/v1/businesses/{business_id}/source-drafts/{draft_id} — Source Draft Edit
+- POST /api/v1/businesses/{business_id}/source-drafts/{draft_id}/issue — Source Draft Issue
+- POST /api/v1/businesses/{business_id}/source-drafts/{draft_id}/void — Source Draft Void
+- POST /api/v1/businesses/{business_id}/statements/preview — Statement Preview
+- POST /api/v1/businesses/{business_id}/statements/sign-off — Sign Off
+- POST /api/v1/businesses/{business_id}/tax/remittances — Tax Remittance
+- GET /api/v1/businesses/{business_id}/trade-documents — Documents
+- POST /api/v1/businesses/{business_id}/trade-documents — Issue
+- POST /api/v1/businesses/{business_id}/trade-documents/preview — Preview Document
+- GET /api/v1/businesses/{business_id}/trade-documents/{document_id} — Document
+- PATCH /api/v1/businesses/{business_id}/trade-documents/{document_id}/dispute — Dispute
+- GET /api/v1/businesses/{business_id}/trial-balance — Trial Balance
+- GET /api/v1/businesses/{business_id}/usage — Usage
+- GET /api/v1/integrations/quickbooks/callback — Quickbooks Callback
+- POST /api/v1/invitations/accept — Accept
+- GET /health/live — Live
+- GET /health/ready — Ready
+- GET /metrics — Metrics
+
+## Persistence models
+
+- accounts — backend/src/ledgerpilot/accounting/models.py
+- periods — backend/src/ledgerpilot/accounting/models.py
+- journals — backend/src/ledgerpilot/accounting/models.py
+- journal_lines — backend/src/ledgerpilot/accounting/models.py
+- audit_events — backend/src/ledgerpilot/audit/models.py
+- bank_imports — backend/src/ledgerpilot/banking/models.py
+- bank_rows — backend/src/ledgerpilot/banking/models.py
+- bank_rules — backend/src/ledgerpilot/banking/models.py
+- bank_matches — backend/src/ledgerpilot/banking/models.py
+- bank_corrections — backend/src/ledgerpilot/banking/models.py
+- statements — backend/src/ledgerpilot/banking/models.py
+- users — backend/src/ledgerpilot/identity/models.py
+- sessions — backend/src/ledgerpilot/identity/models.py
+- refresh_tokens — backend/src/ledgerpilot/identity/models.py
+- action_tokens — backend/src/ledgerpilot/identity/models.py
+- mfa_factors — backend/src/ledgerpilot/identity/models.py
+- recovery_codes — backend/src/ledgerpilot/identity/models.py
+- auth_rate_buckets — backend/src/ledgerpilot/identity/models.py
+- google_identities — backend/src/ledgerpilot/identity/models.py
+- google_challenges — backend/src/ledgerpilot/identity/models.py
+- background_jobs — backend/src/ledgerpilot/jobs/models.py
+- business_email_support_grants — backend/src/ledgerpilot/notifications/email_operations.py
+- business_email_jobs — backend/src/ledgerpilot/notifications/email_outbox.py
+- business_email_feedback — backend/src/ledgerpilot/notifications/email_outbox.py
+- balance_summaries — backend/src/ledgerpilot/reports/models.py
+- businesses — backend/src/ledgerpilot/tenancy/models.py
+- memberships — backend/src/ledgerpilot/tenancy/models.py
+- invitations — backend/src/ledgerpilot/tenancy/models.py
+- policy_history — backend/src/ledgerpilot/tenancy/models.py
+- parties — backend/src/ledgerpilot/trade/models.py
+- operations — backend/src/ledgerpilot/trade/models.py
+- trade_documents — backend/src/ledgerpilot/trade/models.py
+- source_drafts — backend/src/ledgerpilot/trade/models.py
+- payments — backend/src/ledgerpilot/trade/models.py
+- allocations — backend/src/ledgerpilot/trade/models.py
+- loans — backend/src/ledgerpilot/trade/models.py
+- loan_movements — backend/src/ledgerpilot/trade/models.py
+- audit_report_grants — backend/src/ledgerpilot/workspace/audit_access.py
+- cleanup_policies — backend/src/ledgerpilot/workspace/cleanup_models.py
+- cleanup_requests — backend/src/ledgerpilot/workspace/cleanup_models.py
+- cleanup_events — backend/src/ledgerpilot/workspace/cleanup_models.py
+- disposal_intents — backend/src/ledgerpilot/workspace/cleanup_models.py
+- report_runs — backend/src/ledgerpilot/workspace/models.py
+- document_identities — backend/src/ledgerpilot/workspace/models.py
+- export_snapshots — backend/src/ledgerpilot/workspace/models.py
+- privacy_reviews — backend/src/ledgerpilot/workspace/models.py
+- opening_corrections — backend/src/ledgerpilot/workspace/models.py
+- opening_cash_policies — backend/src/ledgerpilot/workspace/models.py
+- import_batches — backend/src/ledgerpilot/workspace/models.py
+- evidence — backend/src/ledgerpilot/workspace/models.py
+- evidence_jobs — backend/src/ledgerpilot/workspace/models.py
+- evidence_notes — backend/src/ledgerpilot/workspace/models.py
+- evidence_links — backend/src/ledgerpilot/workspace/models.py
+- notifications — backend/src/ledgerpilot/workspace/models.py
+- notification_preferences — backend/src/ledgerpilot/workspace/models.py
+- close_tasks — backend/src/ledgerpilot/workspace/models.py
+- consents — backend/src/ledgerpilot/workspace/models.py
+- privacy_requests — backend/src/ledgerpilot/workspace/models.py
+- trial_entitlements — backend/src/ledgerpilot/workspace/models.py
+- opening_items — backend/src/ledgerpilot/workspace/models.py
+- beneficiary_changes — backend/src/ledgerpilot/workspace/models.py
+- advances — backend/src/ledgerpilot/workspace/models.py
+- advance_applications — backend/src/ledgerpilot/workspace/models.py
+- retention_policies — backend/src/ledgerpilot/workspace/retention.py
+- legal_holds — backend/src/ledgerpilot/workspace/retention.py
+
+## Tracked files
+
+- .env.example
+- .gitattributes
+- .github/ISSUE_TEMPLATE/bug_report.yml
+- .github/ISSUE_TEMPLATE/feature_request.yml
+- .github/pull_request_template.md
+- .github/workflows/checks.yml
+- .github/workflows/deploy.yml
+- .github/workflows/load-test.yml
+- .github/workflows/quality.yml
+- .github/workflows/release.yml
+- .gitignore
+- .nvmrc
+- .trivyignore
+- CONTRIBUTING.md
+- IMPLEMENTATION_STANDARDS.md
+- README.md
+- SECURITY.md
+- backend/.dockerignore
+- backend/.python-version
+- backend/Dockerfile
+- backend/Dockerfile.ocr
+- backend/README.md
+- backend/alembic.ini
+- backend/db/init/01-roles.sql
+- backend/migrations/README.md
+- backend/migrations/env.py
+- backend/migrations/script.py.mako
+- backend/migrations/versions/.gitkeep
+- backend/migrations/versions/0001_foundation.py
+- backend/migrations/versions/0001_guards.sql
+- backend/migrations/versions/0001_tables.sql
+- backend/migrations/versions/0002_readiness.py
+- backend/migrations/versions/0003_runtime_locks.py
+- backend/migrations/versions/0004_auth_backoff.py
+- backend/migrations/versions/0005_drafts.py
+- backend/migrations/versions/0005_drafts.sql
+- backend/migrations/versions/0006_sources.py
+- backend/migrations/versions/0006_sources.sql
+- backend/migrations/versions/0007_workspace.py
+- backend/migrations/versions/0007_workspace.sql
+- backend/migrations/versions/0008_source_controls.py
+- backend/migrations/versions/0008_source_controls.sql
+- backend/migrations/versions/0009_evidence_jobs.py
+- backend/migrations/versions/0009_evidence_jobs.sql
+- backend/migrations/versions/0010_source_drafts.py
+- backend/migrations/versions/0011_payment_fees.py
+- backend/migrations/versions/0012_extraction_results.py
+- backend/migrations/versions/0012_extraction_results.sql
+- backend/migrations/versions/0013_import_batches.py
+- backend/migrations/versions/0014_bank_matches.py
+- backend/migrations/versions/0014_bank_matches.sql
+- backend/migrations/versions/0015_bank_corrections.py
+- backend/migrations/versions/0016_trial_and_replay.py
+- backend/migrations/versions/0016_trial_and_replay.sql
+- backend/migrations/versions/0017_transfer_peer.py
+- backend/migrations/versions/0018_opening_balances.py
+- backend/migrations/versions/0018_opening_balances.sql
+- backend/migrations/versions/0019_phase3_closure.py
+- backend/migrations/versions/0019_phase3_closure.sql
+- backend/migrations/versions/0020_phase23_audit.py
+- backend/migrations/versions/0020_phase23_audit.sql
+- backend/migrations/versions/0021_identity_hardening.py
+- backend/migrations/versions/0022_verification_browser_binding.py
+- backend/migrations/versions/0023_p2_email_outbox.py
+- backend/migrations/versions/0024_p2_projects.py
+- backend/migrations/versions/0025_p2_prepaid.py
+- backend/migrations/versions/0026_p2_email_operations.py
+- backend/migrations/versions/0027_retention_controls.py
+- backend/migrations/versions/0028_scoped_audit_reports.py
+- backend/migrations/versions/0029_provider_connections.py
+- backend/migrations/versions/0030_cleanup_workflows.py
+- backend/migrations/versions/0031_scoped_stripe_webhook.py
+- backend/migrations/versions/0032_background_jobs.py
+- backend/migrations/versions/0033_webhook_and_balance_summaries.py
+- backend/migrations/versions/0034_crash_safe_disposal.py
+- backend/migrations/versions/0035_immutable_signup_email.py
+- backend/pyproject.toml
+- backend/src/ledgerpilot/__init__.py
+- backend/src/ledgerpilot/accounting/__init__.py
+- backend/src/ledgerpilot/accounting/drafts.py
+- backend/src/ledgerpilot/accounting/models.py
+- backend/src/ledgerpilot/accounting/money.py
+- backend/src/ledgerpilot/accounting/reconciliation.py
+- backend/src/ledgerpilot/accounting/repository.py
+- backend/src/ledgerpilot/accounting/router.py
+- backend/src/ledgerpilot/accounting/schemas.py
+- backend/src/ledgerpilot/accounting/service.py
+- backend/src/ledgerpilot/accounting/tax.py
+- backend/src/ledgerpilot/api/__init__.py
+- backend/src/ledgerpilot/api/v1/__init__.py
+- backend/src/ledgerpilot/audit/__init__.py
+- backend/src/ledgerpilot/audit/models.py
+- backend/src/ledgerpilot/audit/service.py
+- backend/src/ledgerpilot/banking/__init__.py
+- backend/src/ledgerpilot/banking/corrections.py
+- backend/src/ledgerpilot/banking/models.py
+- backend/src/ledgerpilot/banking/read.py
+- backend/src/ledgerpilot/banking/reconciliation.py
+- backend/src/ledgerpilot/banking/router.py
+- backend/src/ledgerpilot/banking/schemas.py
+- backend/src/ledgerpilot/banking/service.py
+- backend/src/ledgerpilot/banking/shadow.py
+- backend/src/ledgerpilot/banking/suggestions.py
+- backend/src/ledgerpilot/billing/replay_webhooks.py
+- backend/src/ledgerpilot/config.py
+- backend/src/ledgerpilot/database.py
+- backend/src/ledgerpilot/documents/__init__.py
+- backend/src/ledgerpilot/documents/duplicates.py
+- backend/src/ledgerpilot/documents/extraction.py
+- backend/src/ledgerpilot/documents/ocr_service.py
+- backend/src/ledgerpilot/documents/router.py
+- backend/src/ledgerpilot/documents/storage.py
+- backend/src/ledgerpilot/documents/worker.py
+- backend/src/ledgerpilot/export_openapi.py
+- backend/src/ledgerpilot/identity/PASSWORD_LIST_NOTICE.md
+- backend/src/ledgerpilot/identity/SECLISTS_LICENSE.txt
+- backend/src/ledgerpilot/identity/__init__.py
+- backend/src/ledgerpilot/identity/common-passwords.txt
+- backend/src/ledgerpilot/identity/dependencies.py
+- backend/src/ledgerpilot/identity/google.py
+- backend/src/ledgerpilot/identity/mail.py
+- backend/src/ledgerpilot/identity/models.py
+- backend/src/ledgerpilot/identity/repository.py
+- backend/src/ledgerpilot/identity/revoke_fixtures.py
+- backend/src/ledgerpilot/identity/router.py
+- backend/src/ledgerpilot/identity/schemas.py
+- backend/src/ledgerpilot/identity/security.py
+- backend/src/ledgerpilot/identity/service.py
+- backend/src/ledgerpilot/jobs/__init__.py
+- backend/src/ledgerpilot/jobs/cli.py
+- backend/src/ledgerpilot/jobs/handlers.py
+- backend/src/ledgerpilot/jobs/models.py
+- backend/src/ledgerpilot/jobs/router.py
+- backend/src/ledgerpilot/jobs/schemas.py
+- backend/src/ledgerpilot/jobs/service.py
+- backend/src/ledgerpilot/jobs/worker.py
+- backend/src/ledgerpilot/local_setup.py
+- backend/src/ledgerpilot/main.py
+- backend/src/ledgerpilot/models.py
+- backend/src/ledgerpilot/notifications/__init__.py
+- backend/src/ledgerpilot/notifications/email_operations.py
+- backend/src/ledgerpilot/notifications/email_outbox.py
+- backend/src/ledgerpilot/notifications/shortfalls.py
+- backend/src/ledgerpilot/notifications/worker.py
+- backend/src/ledgerpilot/observability/__init__.py
+- backend/src/ledgerpilot/observability/janitor.py
+- backend/src/ledgerpilot/observability/metrics.py
+- backend/src/ledgerpilot/observability/router.py
+- backend/src/ledgerpilot/provider_integrations.py
+- backend/src/ledgerpilot/purchases/__init__.py
+- backend/src/ledgerpilot/reports/__init__.py
+- backend/src/ledgerpilot/reports/cache.py
+- backend/src/ledgerpilot/reports/models.py
+- backend/src/ledgerpilot/reports/router.py
+- backend/src/ledgerpilot/reports/schemas.py
+- backend/src/ledgerpilot/reports/service.py
+- backend/src/ledgerpilot/reports/uncertainty.py
+- backend/src/ledgerpilot/sales/__init__.py
+- backend/src/ledgerpilot/shared/__init__.py
+- backend/src/ledgerpilot/shared/admission.py
+- backend/src/ledgerpilot/shared/contracts.py
+- backend/src/ledgerpilot/shared/errors.py
+- backend/src/ledgerpilot/shared/middleware.py
+- backend/src/ledgerpilot/shared/operations.py
+- backend/src/ledgerpilot/shared/query_limits.py
+- backend/src/ledgerpilot/shared/responses.py
+- backend/src/ledgerpilot/shared/schemas.py
+- backend/src/ledgerpilot/shared/security_headers.py
+- backend/src/ledgerpilot/shared/telemetry.py
+- backend/src/ledgerpilot/swagger.py
+- backend/src/ledgerpilot/tenancy/__init__.py
+- backend/src/ledgerpilot/tenancy/models.py
+- backend/src/ledgerpilot/tenancy/router.py
+- backend/src/ledgerpilot/tenancy/schemas.py
+- backend/src/ledgerpilot/tenancy/service.py
+- backend/src/ledgerpilot/testing/__init__.py
+- backend/src/ledgerpilot/testing/smtp_server.py
+- backend/src/ledgerpilot/trade/__init__.py
+- backend/src/ledgerpilot/trade/advances.py
+- backend/src/ledgerpilot/trade/drafts.py
+- backend/src/ledgerpilot/trade/models.py
+- backend/src/ledgerpilot/trade/read.py
+- backend/src/ledgerpilot/trade/repository.py
+- backend/src/ledgerpilot/trade/router.py
+- backend/src/ledgerpilot/trade/schemas.py
+- backend/src/ledgerpilot/trade/service.py
+- backend/src/ledgerpilot/trade/statements.py
+- backend/src/ledgerpilot/verify_traceability.py
+- backend/src/ledgerpilot/workspace/__init__.py
+- backend/src/ledgerpilot/workspace/audit_access.py
+- backend/src/ledgerpilot/workspace/benchmarks.py
+- backend/src/ledgerpilot/workspace/beneficiaries.py
+- backend/src/ledgerpilot/workspace/cleanup.py
+- backend/src/ledgerpilot/workspace/cleanup_models.py
+- backend/src/ledgerpilot/workspace/close_packages.py
+- backend/src/ledgerpilot/workspace/disposal.py
+- backend/src/ledgerpilot/workspace/exports.py
+- backend/src/ledgerpilot/workspace/importing/__init__.py
+- backend/src/ledgerpilot/workspace/importing/comparison.py
+- backend/src/ledgerpilot/workspace/importing/compiler.py
+- backend/src/ledgerpilot/workspace/importing/schemas.py
+- backend/src/ledgerpilot/workspace/importing/workflow.py
+- backend/src/ledgerpilot/workspace/imports.py
+- backend/src/ledgerpilot/workspace/micro_close.py
+- backend/src/ledgerpilot/workspace/models.py
+- backend/src/ledgerpilot/workspace/opening_adjustments.py
+- backend/src/ledgerpilot/workspace/opening_cash.py
+- backend/src/ledgerpilot/workspace/openings.py
+- backend/src/ledgerpilot/workspace/prepaids.py
+- backend/src/ledgerpilot/workspace/privacy.py
+- backend/src/ledgerpilot/workspace/projects.py
+- backend/src/ledgerpilot/workspace/resumable.py
+- backend/src/ledgerpilot/workspace/retention.py
+- backend/src/ledgerpilot/workspace/router.py
+- backend/src/ledgerpilot/workspace/schemas.py
+- backend/src/ledgerpilot/workspace/service.py
+- backend/tests/.gitkeep
+- backend/tests/conftest.py
+- backend/tests/deploy_shell_harness.py
+- backend/tests/frontend_acceptance_server.py
+- backend/tests/test_api_surface.py
+- backend/tests/test_background_jobs.py
+- backend/tests/test_bootstrap_integration.py
+- backend/tests/test_browser_security.py
+- backend/tests/test_card_settlement.py
+- backend/tests/test_config.py
+- backend/tests/test_database_audit.py
+- backend/tests/test_deployment_audit.py
+- backend/tests/test_health.py
+- backend/tests/test_identity_hardening.py
+- backend/tests/test_import_contract.py
+- backend/tests/test_local_setup.py
+- backend/tests/test_mail_failover.py
+- backend/tests/test_opening_balances.py
+- backend/tests/test_opening_corrections.py
+- backend/tests/test_p2_audit_access.py
+- backend/tests/test_p2_benchmarks.py
+- backend/tests/test_p2_cleanup.py
+- backend/tests/test_p2_close_packages.py
+- backend/tests/test_p2_controlled_posting.py
+- backend/tests/test_p2_disposal.py
+- backend/tests/test_p2_email_delivery.py
+- backend/tests/test_p2_insights.py
+- backend/tests/test_p2_micro_close.py
+- backend/tests/test_p2_prepaids.py
+- backend/tests/test_p2_projects.py
+- backend/tests/test_p2_retention.py
+- backend/tests/test_p2_shortfalls.py
+- backend/tests/test_p2_uncertainty.py
+- backend/tests/test_phase23_audit.py
+- backend/tests/test_phase2_hardening.py
+- backend/tests/test_phase2_integration.py
+- backend/tests/test_phase2_security.py
+- backend/tests/test_phase3_closure.py
+- backend/tests/test_phase3_edges.py
+- backend/tests/test_phase3_integration.py
+- backend/tests/test_phase3_storage_safety.py
+- backend/tests/test_phase4_contention_and_capacity.py
+- backend/tests/test_phase4_verification.py
+- backend/tests/test_phase5_observability_and_cleanup.py
+- backend/tests/test_phase6_revocation.py
+- backend/tests/test_prometheus_alerts.py
+- backend/tests/test_provider_integrations.py
+- backend/tests/test_qa_findings.py
+- backend/tests/test_security_checklist.py
+- backend/tests/test_spike_hardening.py
+- backend/tests/test_stripe_webhook_runtime.py
+- backend/uv.lock
+- deploy/aws/deploy-api.sh
+- deploy/aws/ledgerpilot-upstream.conf
+- deploy/demo/.gitkeep
+- deploy/production/.gitkeep
+- deploy/prometheus/alerts.yml
+- deploy/prometheus/alerts_test.yml
+- docker-compose.documents.yml
+- docker-compose.performance.yml
+- docker-compose.yml
+- docs/CI_CD.md
+- docs/Deployment_and_CI_CD_Implementation_Record.md
+- docs/Implementation_Plan.docx
+- docs/Implementation_Plan.md
+- docs/Next_Phases_Implementation_Plan.md
+- docs/P2_Comprehensive_Implementation_Record.md
+- docs/P2_Implementation_Plan.md
+- docs/P2_Local_Implementation_Record.md
+- docs/P3_Implementation_Plan.md
+- docs/P4_Implementation_Plan.md
+- docs/Traffic_Spike_Hardening.md
+- docs/Traffic_Spike_Hardening_Final.md
+- docs/adr/.gitkeep
+- docs/api/.gitkeep
+- docs/architecture/ADR-001-project-structure.md
+- docs/architecture/ADR-002-configuration-and-secrets.md
+- docs/architecture/ADR-003-data-model-and-persistence.md
+- docs/architecture/ADR-004-background-jobs-and-runtime.md
+- docs/architecture/ADR-005-api-surface-and-schemas.md
+- docs/architecture/ADR-006-durable-job-delivery.md
+- docs/architecture/ADR-007-observability.md
+- docs/architecture/ADR-008-security-and-multitenancy.md
+- docs/architecture/ADR-009-test-strategy.md
+- docs/architecture/ADR-010-phase-2-auth-and-posting.md
+- docs/architecture/ADR-011-phase-3-sources-and-local-extraction.md
+- docs/architecture/ADR-012-reviewed-opening-balances.md
+- docs/architecture/ADR-013-local-p1-closure.md
+- docs/architecture/ADR-014-phase-4-local-verification.md
+- docs/architecture/ADR-015-google-and-verification-hardening.md
+- docs/architecture/ADR-016-report-snapshots-and-pilot-deployment.md
+- docs/architecture/ADR-017-floci-pilot-target.md
+- docs/architecture/ADR-018-cloud-networking-database-migrations-and-https-email-delivery.md
+- docs/architecture/ADR-019-universal-email-delivery-multi-provider-failover-and-sandbox-remediation.md
+- docs/architecture/ADR_INDEX.md
+- docs/architecture/REFERENCE_RECONCILIATION.md
+- docs/auth-session-contract.md
+- docs/authentication-improvements.md
+- docs/benchmarks/p2_benchmark_report.json
+- docs/benchmarks/p2_representative_benchmark.json
+- docs/contracts/database-query-audit-results.json
+- docs/contracts/deployment-audit-results.json
+- docs/contracts/document-extraction.md
+- docs/contracts/identity-hardening-results.json
+- docs/contracts/openapi.json
+- docs/contracts/opening-balances.md
+- docs/contracts/password-session-csrf-results.json
+- docs/contracts/phase-3-api-coverage.md
+- docs/contracts/phase-3-completion.md
+- docs/contracts/phase-4-results.json
+- docs/contracts/phase-4-traceability.json
+- docs/contracts/phase-5-results.json
+- docs/contracts/phase-6-results.json
+- docs/contracts/phase-7-api-inventory.json
+- docs/contracts/phase-7-results.json
+- docs/contracts/phase-8-candidate.json
+- docs/contracts/phase-8-results.json
+- docs/contracts/qa-findings-results.json
+- docs/contracts/security-checklist-results.json
+- docs/database-query-audit.md
+- docs/deployment-audit-fixes.md
+- docs/floci-deployment-guide.md
+- docs/p2_completion_and_operational_verification_report.md
+- docs/password-session-csrf-security.md
+- docs/phase-0-1-audit.md
+- docs/phase-1-service-setup.md
+- docs/phase-2-3-audit.md
+- docs/phase-2-backend-foundation.md
+- docs/phase-3-business-modules.md
+- docs/phase-4-backend-verification.md
+- docs/phase-5-responsive-frontend.md
+- docs/phase-6-ui-testing.md
+- docs/phase-7-api-integration.md
+- docs/phase-8-integration-testing.md
+- docs/qa-findings-resolution.md
+- docs/runbooks/.gitkeep
+- docs/security-checklist-audit.md
+- docs/srs/LedgerPilot_Complete_SRS_Updated.docx
+- docs/system-audit-2026-11-05.md
+- docs/verification_evidence/01-staging-readiness.md
+- frontend-implementation-standards.md
+- frontend/.env.example
+- frontend/index.html
+- frontend/package-lock.json
+- frontend/package.json
+- frontend/playwright.config.ts
+- frontend/playwright.integration.config.ts
+- frontend/scripts/check-integration.mjs
+- frontend/security-policy.ts
+- frontend/src/App.tsx
+- frontend/src/api/.gitkeep
+- frontend/src/api/client.ts
+- frontend/src/api/generated/schema.ts
+- frontend/src/api/runtime.ts
+- frontend/src/components/.gitkeep
+- frontend/src/components/ui.tsx
+- frontend/src/features/.gitkeep
+- frontend/src/features/activity.tsx
+- frontend/src/features/advances.tsx
+- frontend/src/features/audit-access.tsx
+- frontend/src/features/auth.tsx
+- frontend/src/features/banking.tsx
+- frontend/src/features/beneficiary-review.tsx
+- frontend/src/features/billing.tsx
+- frontend/src/features/cleanup.tsx
+- frontend/src/features/close-packages.tsx
+- frontend/src/features/close.tsx
+- frontend/src/features/context.tsx
+- frontend/src/features/controlled-posting.tsx
+- frontend/src/features/dashboard.tsx
+- frontend/src/features/directory.tsx
+- frontend/src/features/drafts.tsx
+- frontend/src/features/email-operations.tsx
+- frontend/src/features/evidence.tsx
+- frontend/src/features/export-disposal.tsx
+- frontend/src/features/google-signin.tsx
+- frontend/src/features/ledger.tsx
+- frontend/src/features/loans.tsx
+- frontend/src/features/lookup-more.tsx
+- frontend/src/features/onboarding.tsx
+- frontend/src/features/openings.tsx
+- frontend/src/features/prepaids.tsx
+- frontend/src/features/projects.tsx
+- frontend/src/features/quickbooks-import.tsx
+- frontend/src/features/reconciliation.tsx
+- frontend/src/features/refunds.tsx
+- frontend/src/features/reports.tsx
+- frontend/src/features/retention.tsx
+- frontend/src/features/rules.tsx
+- frontend/src/features/settings.tsx
+- frontend/src/features/sign-in-verification.tsx
+- frontend/src/features/trade.tsx
+- frontend/src/forms/.gitkeep
+- frontend/src/hooks/.gitkeep
+- frontend/src/main.tsx
+- frontend/src/routes/.gitkeep
+- frontend/src/styles.css
+- frontend/src/test/.gitkeep
+- frontend/src/vite-env.d.ts
+- frontend/tests/accessibility.test.tsx
+- frontend/tests/api-client.test.mjs
+- frontend/tests/api-contract.test.ts
+- frontend/tests/browser-live/phase8.spec.ts
+- frontend/tests/browser/phase6.spec.ts
+- frontend/tests/browser/security.spec.ts
+- frontend/tests/controlled-posting.test.tsx
+- frontend/tests/evidence-refresh.test.tsx
+- frontend/tests/identity-ui.test.tsx
+- frontend/tests/live.acceptance.tsx
+- frontend/tests/p2-audit-access.test.tsx
+- frontend/tests/p2-completion.test.tsx
+- frontend/tests/p2-retention.test.tsx
+- frontend/tests/phase6-screens.test.tsx
+- frontend/tests/phase6.test.tsx
+- frontend/tests/run-browser-live.mjs
+- frontend/tests/run-live.mjs
+- frontend/tests/security-policy.test.tsx
+- frontend/tests/setup.ts
+- frontend/tests/ui.test.tsx
+- frontend/tsconfig.json
+- frontend/vercel.json
+- frontend/vite.config.ts
+- frontend/vitest.config.ts
+- frontend/vitest.live.config.ts
+- scripts/bootstrap-local-db.ps1
+- scripts/check-deployment-container.py
+- scripts/load/p2-spike.js
+- scripts/load/smoke.js
+- scripts/record-phase8-candidate.mjs
+- scripts/reset-local-db.ps1
+- scripts/staging_preflight.py

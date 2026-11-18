@@ -316,9 +316,14 @@ export function Auth() {
                     autoComplete="email"
                     {...register("email")}
                     aria-invalid={!!errors.email}
+                    aria-describedby={
+                      errors.email ? "auth-email-error" : undefined
+                    }
                   />
                   {errors.email && (
-                    <small role="alert">{errors.email.message}</small>
+                    <small id="auth-email-error" role="alert">
+                      {errors.email.message}
+                    </small>
                   )}
                 </Field>
                 <Field
@@ -336,10 +341,16 @@ export function Auth() {
                       mode === "login" ? "current-password" : "new-password"
                     }
                     minLength={mode === "register" ? 15 : 1}
+                    aria-invalid={!!errors.password}
+                    aria-describedby={
+                      errors.password ? "auth-password-error" : undefined
+                    }
                     {...register("password")}
                   />
                   {errors.password && (
-                    <small role="alert">{errors.password.message}</small>
+                    <small id="auth-password-error" role="alert">
+                      {errors.password.message}
+                    </small>
                   )}
                 </Field>
                 <Button busy={mutation.isPending} type="submit">

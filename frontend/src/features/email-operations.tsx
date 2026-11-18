@@ -126,7 +126,7 @@ export function EmailOperations() {
               "suppressed",
             ].map((state) => (
               <div key={state}>
-                <dt>{state === "sent" ? "Accepted by SMTP" : state}</dt>
+                <dt>{state === "sent" ? "Accepted by mail server" : state}</dt>
                 <dd>{overviewData.counts[state] ?? 0}</dd>
               </div>
             ))}
@@ -136,19 +136,20 @@ export function EmailOperations() {
               style={{
                 margin: "1rem 0",
                 padding: "1rem",
-                background: "var(--surface-raised, #1a1a24)",
+                background: "var(--surface-alt)",
                 borderRadius: "4px",
               }}
             >
               <div
                 style={{
                   display: "flex",
+                  flexWrap: "wrap",
                   gap: "1rem",
                   alignItems: "center",
                   marginBottom: "0.5rem",
                 }}
               >
-                <strong>Tenant Health:</strong>
+                <strong>Workspace status:</strong>
                 <Badge>{overviewData.health.status.toUpperCase()}</Badge>
                 <span>
                   Active Legal Holds:{" "}
@@ -195,10 +196,15 @@ export function EmailOperations() {
                 {
                   label: "State",
                   render: (job) =>
-                    job.state === "sent" ? "Accepted by SMTP" : job.state,
+                    job.state === "sent"
+                      ? "Accepted by mail server"
+                      : job.state,
                 },
                 { label: "Attempts", render: (job) => job.attempts },
-                { label: "Outcome", render: (job) => job.outcome_code ?? "—" },
+                {
+                  label: "Outcome",
+                  render: (job) => job.outcome_code ?? "—",
+                },
                 {
                   label: "Feedback",
                   render: (job) => job.feedback.join(", ") || "—",
