@@ -150,7 +150,7 @@ else:
             ).scalar_one_or_none()
             if not role_exists:
                 runtime = "postgres"
-                config.attributes["runtime_role"] = "postgres"
+            config.attributes["runtime_role"] = runtime
         else:
             safe = connection.execute(
                 text("""

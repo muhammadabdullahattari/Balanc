@@ -43,7 +43,13 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
             if settings.smtp_username and settings.smtp_password:
                 client.login(settings.smtp_username, settings.smtp_password.get_secret_value())
             client.send_message(message)
-            logger.info("Identity email (%s) delivered to %s via %s:%d", purpose, recipient, settings.smtp_host, settings.smtp_port)
+            logger.info(
+                "Identity email (%s) delivered to %s via %s:%d",
+                purpose,
+                recipient,
+                settings.smtp_host,
+                settings.smtp_port,
+            )
     except (OSError, smtplib.SMTPException) as exc:
         logger.error(
             "Identity email delivery failed for %s to %s via %s:%d: %s",

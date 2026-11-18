@@ -364,18 +364,22 @@ class Settings(BaseSettings):
             if not is_railway and self.auth_delivery_enabled and not self.smtp_starttls:
                 raise ValueError("Hosted identity mail requires SMTP TLS")
         if is_railway and not self.mfa_encryption_key:
-            raw = self.session_signing_key.get_secret_value() + ":mfa"
-            derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest()).decode()
-            object.__setattr__(self, "mfa_encryption_key", SecretStr(derived))
+            mfa_seed = self.session_signing_key.get_secret_value() + ":mfa"
+            mfa_derived = base64.urlsafe_b64encode(
+                hashlib.sha256(mfa_seed.encode()).digest()
+            ).decode()
+            object.__setattr__(self, "mfa_encryption_key", SecretStr(mfa_derived))
         if is_railway and not self.evidence_encryption_key:
-            raw = self.session_signing_key.get_secret_value() + ":evidence"
-            derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest()).decode()
-            object.__setattr__(self, "evidence_encryption_key", SecretStr(derived))
+            evidence_seed = self.session_signing_key.get_secret_value() + ":evidence"
+            evidence_derived = base64.urlsafe_b64encode(
+                hashlib.sha256(evidence_seed.encode()).digest()
+            ).decode()
+            object.__setattr__(self, "evidence_encryption_key", SecretStr(evidence_derived))
         if is_railway and not self.export_signing_private_key:
-            derived = hashlib.sha256(
+            export_derived = hashlib.sha256(
                 (self.session_signing_key.get_secret_value() + ":export").encode()
             ).hexdigest()
-            object.__setattr__(self, "export_signing_private_key", SecretStr(derived))
+            object.__setattr__(self, "export_signing_private_key", SecretStr(export_derived))
 
         if self.mfa_encryption_key:
             from cryptography.fernet import Fernet
@@ -398,10 +402,10 @@ class Settings(BaseSettings):
                 raise ValueError("Evidence, MFA and signing keys must be distinct")
         if self.export_signing_private_key:
             try:
-                raw = bytes.fromhex(self.export_signing_private_key.get_secret_value())
+                export_raw = bytes.fromhex(self.export_signing_private_key.get_secret_value())
             except ValueError:
                 raise ValueError("Export signing key must be 32 bytes encoded as hex") from None
-            if len(raw) != 32:
+            if len(export_raw) != 32:
                 raise ValueError("Export signing key must be 32 bytes encoded as hex")
         if self.ocr_enabled:
             ocr_url = urlsplit(self.ocr_service_url)
@@ -416,9 +420,12 @@ class Settings(BaseSettings):
             ):
                 raise ValueError("OCR must use the configured local private extraction endpoint")
             if (
-                self.ocr_service_token is None or len(self.ocr_service_token.get_secret_value()) < 32
+                self.ocr_service_token is None
+                or len(self.ocr_service_token.get_secret_value()) < 32
             ):
-                raise ValueError("Local OCR requires a private service token of at least 32 characters")
+                raise ValueError(
+                    "Local OCR requires a private service token of at least 32 characters"
+                )
         if bool(self.session_previous_signing_key) != bool(self.session_previous_key_id):
             raise ValueError("Previous JWT key and key ID must be configured together")
         if self.session_previous_key_id == self.jwt_key_id:
