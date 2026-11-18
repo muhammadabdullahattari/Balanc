@@ -61,8 +61,8 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
             exc,
         )
         raise DomainError(
-            "ERR_MAIL_UNAVAILABLE", "Identity email delivery is unavailable.", 503
-        ) from None
+            "ERR_MAIL_UNAVAILABLE", f"Identity email delivery failed: {exc}", 503
+        ) from exc
 
 
 def enqueue_mail(

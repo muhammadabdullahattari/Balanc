@@ -443,10 +443,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 }
             )
         except Exception as exc:
+            detail = getattr(exc, "detail", str(exc))
+            cause = getattr(exc, "__cause__", None)
             return JSONResponse(
                 {
                     "status": "error",
                     "error": str(exc),
+                    "detail": detail,
+                    "cause": str(cause) if cause else None,
+                    "cause_type": type(cause).__name__ if cause else None,
                     "traceback": traceback.format_exc(),
                     "smtp_host": configured.smtp_host,
                     "smtp_port": configured.smtp_port,
