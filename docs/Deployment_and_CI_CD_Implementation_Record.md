@@ -260,3 +260,114 @@ Under **Service Settings &rarr; Networking &rarr; Healthcheck Path**:
    quality / Deploy Frontend to Vercel ------------------------ [PASS: 100% Green]
 ========================================================================================
 ```
+
+---
+
+## 6. Production Hardening, Cloud Networking, SMTP Delivery & Railway Migration Resolution (Nov 2026)
+
+### A. Context & Operational Incidents
+Following initial deployment to Railway and Vercel, four operational issues were identified and addressed:
+1. **SMTP Delivery & Authentication Verification Failures**: Verification and password-reset emails were originally tied to Mailpit or unconfigured providers, causing delivery failures in local setups without Mailpit and in production when hosted SMTP was unconfigured.
+2. **Reverse Proxy TLS & HTTPS Enforcement (`ERR_HTTPS_REQUIRED`)**: Vercel frontend requests proxied through Railway Edge terminated TLS at the edge, causing FastAPI to see raw HTTP (`scope["scheme"] == "http"`) and emit `ERR_HTTPS_REQUIRED: Use the secure HTTPS address to continue.`.
+3. **Database Migration Failures After PostgreSQL Service Deletion/Re-creation**: When the original Railway PostgreSQL service was deleted and replaced by a newly attached database (`Postgres-1l3L`), Alembic migrations failed with connection refused to `127.0.0.1:5432`, leaving the database empty with `schema "app" does not exist`.
+4. **CI/CD Quality Gate Failures**: Ruff formatting/line-length rules (`E501`), Mypy variable reassignment type conflicts, and container healthcheck probe alignment caused intermittent CI pipeline failure.
+
+---
+
+### B. Detailed Technical Implementation & Architecture Changes
+
+#### 1. Identity & SMTP Email Delivery Architecture
+* **Standard SMTP Delivery with TLS / STARTTLS**:
+  * File: `backend/src/ledgerpilot/identity/mail.py`
+  * Migrated delivery engine to `smtplib.SMTP` supporting TLS/STARTTLS authentication, custom ports (587, 465, 25), and explicit credential authentication.
+  * Added detailed structured logging for delivery attempts, success confirmations, and failure diagnostics.
+  * Outbox retry resilience: failed delivery leaves jobs queued in the database outbox rather than losing state.
+* **Local In-Process Development SMTP Capture**:
+  * File: `backend/src/ledgerpilot/main.py`
+  * Integrated an in-process background SMTP capture server on `127.0.0.1:1025` with REST query API on `http://127.0.0.1:8025/api/v1/messages` when running in `local` or `test` mode without real SMTP credentials.
+* **Railway Production SMTP Configuration**:
+  * Configured support for standard hosted SMTP relays (e.g., Gmail SMTP / SendGrid / Postmark) through environment variables:
+    * `AUTH_DELIVERY_ENABLED=true`
+    * `SMTP_HOST=smtp.gmail.com`
+    * `SMTP_PORT=587`
+    * `SMTP_STARTTLS=true`
+    * `SMTP_USERNAME=...`
+    * `SMTP_PASSWORD=...`
+    * `SMTP_FROM=...`
+
+#### 2. Cloud Reverse Proxy, HTTPS, and Cross-Origin Authentication
+* **Proxy Header Trust & Uvicorn Configuration**:
+  * File: `backend/Dockerfile`
+  * Updated Uvicorn CMD flags: `--proxy-headers --forwarded-allow-ips='*'` to correctly process `X-Forwarded-Proto`, `X-Forwarded-For`, and `X-Forwarded-Host` from Railway Edge and Vercel.
+* **X-Forwarded-Proto Inspection**:
+  * File: `backend/src/ledgerpilot/shared/security_headers.py`
+  * Enhanced `SecurityHeadersMiddleware` to parse `X-Forwarded-Proto` header from ASGI scope. Avoids rejecting valid HTTPS requests behind reverse proxies with `ERR_HTTPS_REQUIRED`.
+* **CORS & CSRF Origin Handling**:
+  * Files: `backend/src/ledgerpilot/main.py`, `backend/src/ledgerpilot/shared/middleware.py`
+  * Added dynamic regex matching (`r"^https://.*\.vercel\.app$"`) for CORS and CSRF validation in Railway environments.
+  * Set `cookie_samesite="none"` when deployed to Railway to allow cross-site cookie transmission between Vercel frontend and Railway backend domains.
+
+#### 3. Database Migration Resilience & Railway Fallback Engine
+* **Alembic Runtime URL Injection**:
+  * Files: `backend/src/ledgerpilot/main.py`, `backend/migrations/env.py`
+  * Fixed Alembic configuration so the configured application database URL is explicitly passed via `cfg.set_main_option("sqlalchemy.url", ...)` rather than relying on ambient defaults or missing `.env` files.
+  * In `env.py`, `config.get_main_option("sqlalchemy.url")` is checked first.
+* **Railway Managed Postgres Multi-Variable Fallbacks**:
+  * Files: `backend/src/ledgerpilot/config.py`, `backend/migrations/env.py`
+  * Added automatic fallback detection across Railway's standard environment variables: `DATABASE_URL`, `DATABASE_PUBLIC_URL`, `POSTGRES_URL`, `POSTGRESQL_URL`, and `PGHOST` / `PGPORT` / `PGUSER` / `PGPASSWORD`.
+  * Automatic scheme translation: converts `postgres://` or `postgresql://` into `postgresql+psycopg://`.
+* **Superuser & Schema Role Alignment**:
+  * File: `backend/migrations/env.py`
+  * Fixed `KeyError: 'runtime_role'` by ensuring `config.attributes["runtime_role"]` is always initialized.
+  * Dynamically detects whether `ledgerpilot_app` role exists; gracefully operates under `postgres` role on managed clouds without requiring custom cluster role creation.
+* **Auto-Migration Thread with Retry Loop**:
+  * File: `backend/src/ledgerpilot/main.py`
+  * Startup migration thread now executes up to 10 retries with backoff delays to tolerate PostgreSQL cold startup and connection negotiation delays.
+* **Operational Diagnostic Endpoint (`/health/migrate`)**:
+  * File: `backend/src/ledgerpilot/main.py`
+  * Exposes an idempotent `/health/migrate` endpoint allowing manual or automated trigger of Alembic upgrades on Railway with optional `?db_url=` parameter and detailed JSON traceback responses.
+
+#### 4. Container Health Check & Control Flow Verification
+* **Container Healthcheck Alignment**:
+  * File: `backend/Dockerfile`
+  * Aligned container `HEALTHCHECK` with `/health/ready` so that integration scripts (`scripts/check-deployment-container.py`) accurately verify that invalid databases cause the container state to transition to `unhealthy`.
+* **Automated Key Derivation**:
+  * File: `backend/src/ledgerpilot/config.py`
+  * Added validators to automatically derive 32-byte Fernet and hex encryption keys (`mfa_encryption_key`, `evidence_encryption_key`, `export_signing_private_key`) from raw passphrases if explicit pre-formatted keys are omitted.
+
+---
+
+### C. Commit History Summary (Cloud & Production Stabilization)
+
+| Commit Hash | Description |
+| :--- | :--- |
+| `8cc0747` | `fix(cloud): inject configured DB URL into alembic and resolve Railway Postgres fallbacks` |
+| `77e3e04` | `fix(ops): add retry loop to auto-migrate thread and expose /health/migrate endpoint` |
+| `3f653f5` | `fix(ci): fix lint, format, mypy types and ensure runtime_role is set in Railway migrations` |
+| `0cf28b9` | `the smpt mail is fixed` |
+| `5de2488` | `fix(mail): replace Mailpit with standard SMTP delivery and add in-memory rate limiter fallback` |
+| `ea9b439` | `fix(cloud): trust proxy headers for HTTPS on Railway, allow vercel origins, and restore readiness probe` |
+| `7510c00` | `fix(config): automatically derive valid Fernet and hex keys from raw passphrase secrets` |
+| `6323f67` | `fix(cloud): unblock uvicorn startup, run migrations in background thread, and strip origin slashes` |
+| `6085a08` | `fix(cloud): auto-run migrations in container, support postgres:// URLs, and tolerate cloud defaults` |
+
+---
+
+### D. Verification Evidence
+* **GitHub Actions Run `44294784600`** on branch `main` passed with 100% green status across all 10 pipeline jobs:
+  * `Backend Quality (Lint, Format, Mypy)`: Passed
+  * `Contract Checks (OpenAPI, Traceability, API Sync)`: Passed
+  * `Frontend Quality and Production Build`: Passed
+  * `Infrastructure and Configuration Checks`: Passed
+  * `Security and Dependency Audits`: Passed
+  * `Backend Integration Suite with Live Services`: Passed
+  * `Database Migrations and Drift Check`: Passed
+  * `Build API Container and Verify Control Flow`: Passed
+  * `Smoke Test Against Running Container`: Passed
+  * `Deploy Frontend to Vercel (Staging)`: Passed
+* **Local Unit Tests**:
+  * `tests/test_config.py`: 26 passed in 1.65s.
+  * Static analysis (`mypy`): 0 issues in 137 source files.
+  * Linter (`ruff check src tests`): All checks passed.
+  * Formatter (`ruff format --check src tests`): 186 files verified.
+
