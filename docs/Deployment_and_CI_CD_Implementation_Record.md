@@ -341,6 +341,7 @@ Following initial deployment to Railway and Vercel, four operational issues were
 
 | Commit Hash | Description |
 | :--- | :--- |
+| `[pending]` | `fix(mail): add ca-certificates, support SSL port 465, and add /health/test-email endpoint` |
 | `8cc0747` | `fix(cloud): inject configured DB URL into alembic and resolve Railway Postgres fallbacks` |
 | `77e3e04` | `fix(ops): add retry loop to auto-migrate thread and expose /health/migrate endpoint` |
 | `3f653f5` | `fix(ci): fix lint, format, mypy types and ensure runtime_role is set in Railway migrations` |

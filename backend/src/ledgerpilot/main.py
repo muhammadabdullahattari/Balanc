@@ -422,6 +422,42 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=500,
             )
 
+    @application.get("/health/test-email", include_in_schema=False)
+    def test_email_endpoint(to: str = "tintinxlr8@gmail.com") -> JSONResponse:
+        import traceback
+
+        from ledgerpilot.identity.mail import deliver
+
+        try:
+            deliver(configured, to, "verify", "123456")
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "delivered_to": to,
+                    "smtp_host": configured.smtp_host,
+                    "smtp_port": configured.smtp_port,
+                    "auth_delivery_enabled": configured.auth_delivery_enabled,
+                    "smtp_starttls": configured.smtp_starttls,
+                    "smtp_from": configured.smtp_from,
+                    "smtp_username": configured.smtp_username,
+                }
+            )
+        except Exception as exc:
+            return JSONResponse(
+                {
+                    "status": "error",
+                    "error": str(exc),
+                    "traceback": traceback.format_exc(),
+                    "smtp_host": configured.smtp_host,
+                    "smtp_port": configured.smtp_port,
+                    "auth_delivery_enabled": configured.auth_delivery_enabled,
+                    "smtp_starttls": configured.smtp_starttls,
+                    "smtp_from": configured.smtp_from,
+                    "smtp_username": configured.smtp_username,
+                },
+                status_code=500,
+            )
+
     application.include_router(identity_router, prefix=configured.api_v1_prefix)
     application.include_router(jobs_router, prefix=configured.api_v1_prefix)
     application.include_router(tenancy_router, prefix=configured.api_v1_prefix)

@@ -60,6 +60,7 @@ class SecurityHeadersMiddleware:
             "/health/live",
             "/health/ready",
             "/health/migrate",
+            "/health/test-email",
         }
         scheme = scope.get("scheme", "")
         for header_name, header_value in scope.get("headers", []):

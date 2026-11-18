@@ -35,8 +35,9 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
         "Use it only if you requested it in LedgerPilot. Never share it."
     )
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
-            if settings.smtp_starttls:
+        smtp_cls = smtplib.SMTP_SSL if settings.smtp_port == 465 else smtplib.SMTP
+        with smtp_cls(settings.smtp_host, settings.smtp_port, timeout=15) as client:
+            if settings.smtp_starttls and settings.smtp_port != 465:
                 import ssl
 
                 client.starttls(context=ssl.create_default_context())

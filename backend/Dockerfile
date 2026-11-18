@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # hadolint ignore=DL3008
-RUN apt-get update && apt-get install --no-install-recommends -y zlib1g \
+RUN apt-get update && apt-get install --no-install-recommends -y zlib1g ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv /uv /uvx /bin/
