@@ -22,18 +22,98 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
         raise ValueError("Unsupported identity email purpose")
     if not settings.auth_delivery_enabled:
         raise DomainError("ERR_MAIL_UNAVAILABLE", "Identity email delivery is not configured.", 503)
-    message = EmailMessage()
-    message["From"] = settings.smtp_from
-    message["To"] = recipient
-    message["Subject"] = SUBJECTS[purpose]
     lifetime = (
         "15 minutes. Only the newest code works." if purpose in {"verify", "reset"} else "48 hours."
     )
-    message.set_content(
+    body_text = (
         f"Your {purpose} token is:\n\n{token}\n\n"
         f"It expires in {lifetime}\n"
         "Use it only if you requested it in LedgerPilot. Never share it."
     )
+
+    import os
+
+    resend_key = os.environ.get("RESEND_API_KEY")
+    if resend_key:
+        import json
+        import urllib.request
+
+        sender = os.environ.get("RESEND_FROM") or settings.smtp_from
+        if "@gmail.com" in sender or "ledgerpilot.local" in sender:
+            sender = "LedgerPilot <onboarding@resend.dev>"
+        payload = json.dumps(
+            {
+                "from": sender,
+                "to": [recipient],
+                "subject": SUBJECTS[purpose],
+                "text": body_text,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.resend.com/emails",
+            data=payload,
+            headers={
+                "Authorization": f"Bearer {resend_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "LedgerPilot/1.0",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status in (200, 201):
+                    logger.info(
+                        "Identity email (%s) delivered to %s via Resend HTTPS",
+                        purpose,
+                        recipient,
+                    )
+                    return
+        except Exception as exc:
+            logger.error("Resend delivery failed: %s", exc)
+            raise DomainError(
+                "ERR_MAIL_UNAVAILABLE", f"Resend delivery failed: {exc}", 503
+            ) from exc
+
+    brevo_key = os.environ.get("BREVO_API_KEY")
+    if brevo_key:
+        import json
+        import urllib.request
+
+        payload = json.dumps(
+            {
+                "sender": {"email": settings.smtp_from, "name": "LedgerPilot"},
+                "to": [{"email": recipient}],
+                "subject": SUBJECTS[purpose],
+                "textContent": body_text,
+            }
+        ).encode("utf-8")
+        req = urllib.request.Request(
+            "https://api.brevo.com/v3/smtp/email",
+            data=payload,
+            headers={
+                "api-key": brevo_key,
+                "Content-Type": "application/json",
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                if resp.status in (200, 201):
+                    logger.info(
+                        "Identity email (%s) delivered to %s via Brevo HTTPS",
+                        purpose,
+                        recipient,
+                    )
+                    return
+        except Exception as exc:
+            logger.error("Brevo delivery failed: %s", exc)
+            raise DomainError("ERR_MAIL_UNAVAILABLE", f"Brevo delivery failed: {exc}", 503) from exc
+
+    message = EmailMessage()
+    message["From"] = settings.smtp_from
+    message["To"] = recipient
+    message["Subject"] = SUBJECTS[purpose]
+    message.set_content(body_text)
     try:
         smtp_cls = smtplib.SMTP_SSL if settings.smtp_port == 465 else smtplib.SMTP
         with smtp_cls(settings.smtp_host, settings.smtp_port, timeout=15) as client:

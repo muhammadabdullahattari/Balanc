@@ -424,9 +424,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @application.get("/health/test-email", include_in_schema=False)
     def test_email_endpoint(to: str = "tintinxlr8@gmail.com") -> JSONResponse:
+        import socket
         import traceback
 
         from ledgerpilot.identity.mail import deliver
+
+        probe_ports = [587, 465, 2525, 25, 443]
+        port_results = {}
+        for p in probe_ports:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.settimeout(2)
+            try:
+                s.connect(("smtp.gmail.com", p))
+                port_results[p] = "OPEN"
+            except Exception as e:
+                port_results[p] = f"BLOCKED: {e}"
+            finally:
+                s.close()
 
         try:
             deliver(configured, to, "verify", "123456")
@@ -434,12 +448,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 {
                     "status": "ok",
                     "delivered_to": to,
+                    "port_probes": port_results,
                     "smtp_host": configured.smtp_host,
                     "smtp_port": configured.smtp_port,
                     "auth_delivery_enabled": configured.auth_delivery_enabled,
                     "smtp_starttls": configured.smtp_starttls,
                     "smtp_from": configured.smtp_from,
                     "smtp_username": configured.smtp_username,
+                    "resend_enabled": bool(os.environ.get("RESEND_API_KEY")),
+                    "brevo_enabled": bool(os.environ.get("BREVO_API_KEY")),
                 }
             )
         except Exception as exc:
@@ -453,12 +470,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "cause": str(cause) if cause else None,
                     "cause_type": type(cause).__name__ if cause else None,
                     "traceback": traceback.format_exc(),
+                    "port_probes": port_results,
                     "smtp_host": configured.smtp_host,
                     "smtp_port": configured.smtp_port,
                     "auth_delivery_enabled": configured.auth_delivery_enabled,
                     "smtp_starttls": configured.smtp_starttls,
                     "smtp_from": configured.smtp_from,
                     "smtp_username": configured.smtp_username,
+                    "resend_enabled": bool(os.environ.get("RESEND_API_KEY")),
+                    "brevo_enabled": bool(os.environ.get("BREVO_API_KEY")),
                 },
                 status_code=500,
             )
