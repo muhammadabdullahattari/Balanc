@@ -62,12 +62,11 @@ class SecurityHeadersMiddleware:
             "/health/migrate",
             "/health/test-email",
         }
-        scheme = scope.get("scheme", "")
-        for header_name, header_value in scope.get("headers", []):
-            if header_name.lower() == b"x-forwarded-proto":
-                scheme = header_value.decode("latin1").lower()
-                break
-        if settings.app_env not in {"local", "test"} and scheme != "https" and not health_probe:
+        if (
+            settings.app_env not in {"local", "test"}
+            and scope.get("scheme") != "https"
+            and not health_probe
+        ):
             # Outside CORS as well: even preflight must use the hosted TLS endpoint.
             request_id = str(uuid4())
             scope.setdefault("state", {})["request_id"] = request_id

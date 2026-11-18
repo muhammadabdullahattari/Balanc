@@ -427,6 +427,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         to: str = "tintinxlr8@gmail.com",
         resend_key: str | None = None,
         brevo_key: str | None = None,
+        sendgrid_key: str | None = None,
     ) -> JSONResponse:
         import os
         import socket
@@ -435,9 +436,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         from ledgerpilot.identity.mail import deliver
 
         if resend_key:
-            os.environ["RESEND_API_KEY"] = resend_key
+            os.environ["RESEND_API_KEY"] = resend_key.strip().strip("'\"")
         if brevo_key:
-            os.environ["BREVO_API_KEY"] = brevo_key
+            os.environ["BREVO_API_KEY"] = brevo_key.strip().strip("'\"")
+        if sendgrid_key:
+            os.environ["SENDGRID_API_KEY"] = sendgrid_key.strip().strip("'\"")
 
         probe_ports = [587, 465, 2525, 25, 443]
         port_results = {}
@@ -467,6 +470,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     "smtp_username": configured.smtp_username,
                     "resend_enabled": bool(os.environ.get("RESEND_API_KEY")),
                     "brevo_enabled": bool(os.environ.get("BREVO_API_KEY")),
+                    "sendgrid_enabled": bool(os.environ.get("SENDGRID_API_KEY")),
                 }
             )
         except Exception as exc:

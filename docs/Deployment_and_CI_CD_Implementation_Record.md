@@ -370,6 +370,7 @@ Following initial deployment to Railway and Vercel, four operational issues were
 
 | Commit Hash | Description |
 | :--- | :--- |
+| `1bb6529` | `docs: record ADR-018 on cloud networking, database migrations, and HTTPS email delivery` |
 | `62471e9` | `fix(mail): strip API keys and expose full DomainError message in diagnostic endpoint` |
 | `ab75e4c` | `fix(mail): capture HTTP error body for Resend/Brevo and accept API keys in test endpoint` |
 | `bb24e27` | `feat(mail): add Resend and Brevo HTTPS delivery support and socket port probing in test endpoint` |
@@ -388,6 +389,50 @@ Following initial deployment to Railway and Vercel, four operational issues were
 
 ---
 
+## 4. Multi-Provider Failover & Third-Party Sandbox Remediation
+
+### A. Context & Incident Report
+Following the deployment of commit `1bb6529`, operational testing of password resets and registration across multiple test identities surfaced an upstream third-party restriction:
+1. **Frontend Symptom**: When initiating a password reset for `theab9098@gmail.com` on Vercel (`balanc-48v9yo9n5-abd-c462.vercel.app`), the UI displayed:
+   `"We couldn't send the email. Please try again shortly or contact support. Support reference 9ecf3322-9c74-454e-9169-241c1d0466ef"`.
+2. **Railway Network Logs**: The active container logged:
+   `POST /api/v1/auth/reset-request -> HTTP 503 (duration: 183ms)`.
+3. **Upstream Cause**: In the `/health/test-email?to=theab9098@gmail.com` diagnostic probe, Resend returned:
+   `HTTP 403 Forbidden: "You can only send testing emails to your own email address (gamehalludba@gmail.com). To send emails to other recipients, please verify a domain at resend.com/domains..."`.
+4. **Behavioral Divergence**: Registration (`/api/v1/auth/register`) and verification resend (`/api/v1/auth/verification-request`) return `202 Accepted` because `verification_delivery()` intentionally suppresses `ERR_MAIL_UNAVAILABLE` to protect the pending identity record from being rolled back by transient network outages. Conversely, password reset (`/api/v1/auth/reset-request`) strictly requires active token dispatch and bubbles `ERR_MAIL_UNAVAILABLE` as HTTP 503.
+
+### B. Architectural Decisions & Rationale
+
+| Decision | Issue Solved | Why Decision Was Taken | How Implemented |
+| :--- | :--- | :--- | :--- |
+| **Multi-Provider Failover Pipeline** | If Resend encounters a sandbox restriction (403), rate limit (429), or network blip, the entire application halts with 503. | Single-provider architecture created a single point of failure and blocked all users not matching the account owner email. | In `backend/src/ledgerpilot/identity/mail.py`, implemented a non-halting cascade: `Resend -> Brevo -> SendGrid -> SMTP`. Upstream errors are caught, logged, and execution continues to the next available provider. |
+| **Zero-Domain Universal Delivery (Brevo)** | Resend free tier strictly demands custom DNS domain verification before sending to non-owner recipients. Operators often do not own a custom domain during staging. | Brevo provides 300 free transactional emails per day to **any recipient email address** globally with only single-sender email verification (confirming ownership via email link), requiring zero custom DNS domain setup. | Supported `BREVO_API_KEY` over HTTPS port 443 (`POST https://api.brevo.com/v3/smtp/email`). |
+| **SendGrid HTTPS Backup** | Provides a secondary enterprise fallback for cloud environments without open SMTP sockets. | Enhances platform redundancy; allows single-sender verification on personal email addresses with 100 free emails/day. | Supported `SENDGRID_API_KEY` over HTTPS port 443 (`POST https://api.sendgrid.com/v3/mail/send`). |
+| **Transparent Sandbox Diagnostics** | Operators saw generic `503 ERR_MAIL_UNAVAILABLE` without knowing that Resend's anti-spam testing sandbox was the root blocker. | Prevents debugging confusion and provides immediate self-serve remediation steps in container logs and health endpoints. | When all providers fail, `mail.py` detects Resend sandbox text and appends an explicit hint instructing the operator to either configure Brevo or add a domain in Resend. |
+| **In-Cloud Credential Validation** | Operators had to redeploy containers just to test if a new API key was valid. | Speeds up credential verification and eliminates guess-and-check restart cycles. | Updated `/health/test-email` to accept `resend_key`, `brevo_key`, and `sendgrid_key` query parameters for instantaneous in-cloud testing. |
+
+### C. Operator Runbook for Enabling Delivery to Any Email
+
+To deliver verification and password reset emails to any recipient (such as `theab9098@gmail.com`):
+
+#### Option 1: Brevo (Recommended — 2-minute setup, NO custom domain needed)
+1. Sign up for a free account at [Brevo.com](https://www.brevo.com) (free plan: 300 emails/day to any recipient).
+2. Go to **Settings** -> **Senders, Domains & Dedicated IPs** -> **Senders** -> **Add a new sender**.
+3. Enter your Gmail address (e.g. `muhammadabdullahattari.jk@gmail.com`). Brevo will send a 6-digit verification code to that inbox. Enter the code to verify.
+4. Go to **SMTP & API** -> **API Keys** -> **Generate a new API key**. Copy the key (starts with `xkeysib-...`).
+5. Open your Railway Dashboard -> Service **Balanc** -> **Variables**:
+   - Add `BREVO_API_KEY` = `xkeysib-...`
+   - Set `SMTP_FROM` = `muhammadabdullahattari.jk@gmail.com`
+6. Done! All verification and reset emails will now deliver to any email address immediately.
+
+#### Option 2: Resend with Verified Custom Domain
+1. Log in to [Resend.com](https://resend.com) -> **Domains** -> **Add Domain** (e.g. `yourdomain.com`).
+2. Add the DKIM, SPF, and MX TXT records in your DNS provider (Cloudflare, Namecheap, GoDaddy).
+3. In Railway Variables, set `RESEND_FROM` = `LedgerPilot <noreply@yourdomain.com>`.
+4. Once verified by Resend, Resend will send to any email address worldwide.
+
+---
+
 ### D. Verification Evidence
 * **Live In-Cloud Email Delivery Verification**:
   * Tested live on Railway production (`https://balanc-production.up.railway.app/health/test-email?to=gamehalludba@gmail.com`).
@@ -401,6 +446,12 @@ Following initial deployment to Railway and Vercel, four operational issues were
     }
     ```
   * Verification email successfully arrived in destination inbox (`gamehalludba@gmail.com`).
+* **Multi-Provider Failover Unit Suite**:
+  * File: `backend/tests/test_mail_failover.py`
+  * Verified 3/3 tests passing:
+    1. `test_resend_fails_falls_through_to_brevo`: Verified Resend 403 sandbox error cascades to Brevo 201 without throwing.
+    2. `test_resend_and_brevo_fail_falls_through_to_sendgrid`: Verified 3-tier cascade (`Resend 403 -> Brevo 401 -> SendGrid 202`).
+    3. `test_all_fail_aggregates_errors_and_hints`: Verified comprehensive diagnostic message and remediation hint injection when all providers fail.
 * **Live In-Cloud Database Migration Verification**:
   * Endpoint `https://balanc-production.up.railway.app/health/migrate` executed successfully against managed cloud database:
     ```json
@@ -429,8 +480,9 @@ Following initial deployment to Railway and Vercel, four operational issues were
   * `Smoke Test Against Running Container`: Passed
   * `Deploy Frontend to Vercel (Staging)`: Passed
 * **Local Unit Tests**:
-  * `tests/test_config.py`: 26 passed in 1.65s.
+  * `tests/test_config.py` & `tests/test_mail_failover.py`: 29 passed in 3.80s.
+  * `tests/test_security_checklist.py`: 3 passed, 2 skipped in 19.28s.
   * Static analysis (`mypy`): 0 issues in 137 source files.
   * Linter (`ruff check src tests`): All checks passed.
-  * Formatter (`ruff format --check src tests`): 186 files verified.
+  * Formatter (`ruff format --check src tests`): 187 files verified.
 
