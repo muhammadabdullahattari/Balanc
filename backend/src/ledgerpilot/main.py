@@ -166,9 +166,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                     logger.warning("Automatic database migrations skipped or failed: %s", exc)
 
             threading.Thread(target=run_migrations, daemon=True, name="auto-migrate").start()
+
+        smtp_dev_server = None
+        if (
+            configured.app_env in {"local", "test"}
+            and configured.smtp_host in {"127.0.0.1", "localhost"}
+            and configured.smtp_port == 1025
+        ):
+            try:
+                from ledgerpilot.testing.smtp_server import ensure_test_smtp_server
+
+                smtp_dev_server = ensure_test_smtp_server(
+                    host=configured.smtp_host, smtp_port=configured.smtp_port
+                )
+                logger.info(
+                    "Local background SMTP capture active on %s:%d (queries at http://127.0.0.1:8025/api/v1/messages)",
+                    configured.smtp_host,
+                    configured.smtp_port,
+                )
+            except Exception as exc:
+                logger.warning("Could not start local background SMTP capture: %s", exc)
+
         try:
             yield
         finally:
+            if smtp_dev_server is not None:
+                smtp_dev_server.stop()
             if admission is not None:
                 admission.close()
             if rate_engine is not None:

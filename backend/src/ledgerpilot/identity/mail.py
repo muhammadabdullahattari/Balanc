@@ -1,11 +1,14 @@
 """Real SMTP delivery; disabled delivery fails explicitly, never returns tokens."""
 
+import logging
 import smtplib
 from email.message import EmailMessage
 from typing import Any
 
 from ledgerpilot.config import Settings
 from ledgerpilot.shared.errors import DomainError
+
+logger = logging.getLogger("ledgerpilot.identity.mail")
 
 SUBJECTS = {
     "verify": "LedgerPilot — Verify your email",
@@ -32,7 +35,7 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
         "Use it only if you requested it in LedgerPilot. Never share it."
     )
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=5) as client:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as client:
             if settings.smtp_starttls:
                 import ssl
 
@@ -40,7 +43,16 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
             if settings.smtp_username and settings.smtp_password:
                 client.login(settings.smtp_username, settings.smtp_password.get_secret_value())
             client.send_message(message)
-    except (OSError, smtplib.SMTPException):
+            logger.info("Identity email (%s) delivered to %s via %s:%d", purpose, recipient, settings.smtp_host, settings.smtp_port)
+    except (OSError, smtplib.SMTPException) as exc:
+        logger.error(
+            "Identity email delivery failed for %s to %s via %s:%d: %s",
+            purpose,
+            recipient,
+            settings.smtp_host,
+            settings.smtp_port,
+            exc,
+        )
         raise DomainError(
             "ERR_MAIL_UNAVAILABLE", "Identity email delivery is unavailable.", 503
         ) from None
@@ -99,7 +111,13 @@ def enqueue_mail(
                     with ScopedSession(bind()) as fin_db:
                         job_service.finish_job(fin_db, job_id, uuid4(), {"delivered": True})
                         fin_db.commit()
-        except Exception:
+        except Exception as exc:
+            logger.error(
+                "Identity email delivery attempt failed in outbox for %s to %s: %s",
+                purpose,
+                recipient,
+                exc,
+            )
             # SMTP failure leaves the job queued in outbox for background worker retry
             pass
 

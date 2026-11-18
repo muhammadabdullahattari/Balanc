@@ -215,7 +215,10 @@ class FoundationMiddleware:
                     error=error,
                     request_id=request_id,
                 )
-                if settings.app_env in {"local", "test"}:
+                is_railway = bool(
+                    os.environ.get("RAILWAY_PROJECT_ID") or os.environ.get("RAILWAY_ENVIRONMENT")
+                )
+                if settings.app_env in {"local", "test"} or is_railway:
                     logger.warning(
                         "Rate limiter unavailable in %s (%s); fallback to memory",
                         settings.app_env,
