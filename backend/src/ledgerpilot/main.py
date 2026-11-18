@@ -155,15 +155,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             import threading
 
             def run_migrations() -> None:
-                try:
-                    from alembic import command
-                    from alembic.config import Config
+                import time
 
-                    cfg = Config("alembic.ini")
-                    command.upgrade(cfg, "head")
-                    logger.info("Automatic database migrations completed successfully.")
-                except Exception as exc:
-                    logger.warning("Automatic database migrations skipped or failed: %s", exc)
+                for attempt in range(5):
+                    try:
+                        from alembic import command
+                        from alembic.config import Config
+
+                        cfg = Config("alembic.ini")
+                        command.upgrade(cfg, "head")
+                        logger.info("Automatic database migrations completed successfully.")
+                        break
+                    except Exception as exc:
+                        logger.warning(
+                            "Automatic database migration attempt %d failed: %s", attempt + 1, exc
+                        )
+                        time.sleep(2)
 
             threading.Thread(target=run_migrations, daemon=True, name="auto-migrate").start()
 
@@ -380,6 +387,23 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
             return JSONResponse({"status": "not_ready"}, status_code=503)
+
+    @application.get("/health/migrate", include_in_schema=False)
+    def run_migrations_endpoint() -> JSONResponse:
+        import traceback
+
+        try:
+            from alembic import command
+            from alembic.config import Config
+
+            cfg = Config("alembic.ini")
+            command.upgrade(cfg, "head")
+            return JSONResponse({"status": "ok", "message": "Migrations completed successfully"})
+        except Exception as exc:
+            return JSONResponse(
+                {"status": "error", "error": str(exc), "traceback": traceback.format_exc()},
+                status_code=500,
+            )
 
     application.include_router(identity_router, prefix=configured.api_v1_prefix)
     application.include_router(jobs_router, prefix=configured.api_v1_prefix)
