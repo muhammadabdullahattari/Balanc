@@ -61,7 +61,11 @@ if existing_conn is not None and not getattr(existing_conn, "closed", False):
         context.run_migrations()
 else:
     values = read_values(ROOT / ".env")
-    url = os.environ.get("MIGRATION_DATABASE_URL") or values.get("MIGRATION_DATABASE_URL")
+    url = (
+        config.get_main_option("sqlalchemy.url")
+        or os.environ.get("MIGRATION_DATABASE_URL")
+        or values.get("MIGRATION_DATABASE_URL")
+    )
     runtime = os.environ.get("APP_DB_USER") or values.get("APP_DB_USER", "ledgerpilot_app")
     migrator = os.environ.get("MIGRATION_DB_USER") or values.get(
         "MIGRATION_DB_USER", "ledgerpilot_migrator"
@@ -77,9 +81,30 @@ else:
                 for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
             )
         )
+        or (
+            url
+            and any(
+                s in url
+                for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
+            )
+        )
     )
     if is_railway:
-        url = url or os.environ.get("DATABASE_URL")
+        url = (
+            url
+            or os.environ.get("DATABASE_URL")
+            or os.environ.get("DATABASE_PUBLIC_URL")
+            or os.environ.get("POSTGRES_URL")
+            or os.environ.get("POSTGRESQL_URL")
+        )
+        if not url and os.environ.get("PGHOST"):
+            user = os.environ.get("PGUSER", "postgres")
+            password = os.environ.get("PGPASSWORD", "")
+            host = os.environ.get("PGHOST")
+            port = os.environ.get("PGPORT", "5432")
+            database = os.environ.get("PGDATABASE", "railway")
+            auth = f"{user}:{password}@" if password else f"{user}@"
+            url = f"postgresql+psycopg://{auth}{host}:{port}/{database}"
         if url:
             db_user = make_url(url).username or "postgres"
             runtime = db_user

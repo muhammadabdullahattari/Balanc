@@ -157,12 +157,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             def run_migrations() -> None:
                 import time
 
-                for attempt in range(5):
+                for attempt in range(10):
                     try:
                         from alembic import command
                         from alembic.config import Config
 
                         cfg = Config("alembic.ini")
+                        db_url = configured.database_url.get_secret_value()
+                        cfg.set_main_option("sqlalchemy.url", db_url)
                         command.upgrade(cfg, "head")
                         logger.info("Automatic database migrations completed successfully.")
                         break
@@ -170,7 +172,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         logger.warning(
                             "Automatic database migration attempt %d failed: %s", attempt + 1, exc
                         )
-                        time.sleep(2)
+                        time.sleep(3)
 
             threading.Thread(target=run_migrations, daemon=True, name="auto-migrate").start()
 
@@ -389,16 +391,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"status": "not_ready"}, status_code=503)
 
     @application.get("/health/migrate", include_in_schema=False)
-    def run_migrations_endpoint() -> JSONResponse:
+    def run_migrations_endpoint(db_url: str | None = None) -> JSONResponse:
         import traceback
 
         try:
             from alembic import command
             from alembic.config import Config
 
+            target_url = db_url or configured.database_url.get_secret_value()
+            if target_url.startswith("postgres://"):
+                target_url = "postgresql+psycopg://" + target_url[len("postgres://") :]
+            elif target_url.startswith("postgresql://"):
+                target_url = "postgresql+psycopg://" + target_url[len("postgresql://") :]
+
             cfg = Config("alembic.ini")
+            cfg.set_main_option("sqlalchemy.url", target_url)
             command.upgrade(cfg, "head")
-            return JSONResponse({"status": "ok", "message": "Migrations completed successfully"})
+            parsed = make_url(target_url)
+            return JSONResponse(
+                {
+                    "status": "ok",
+                    "message": "Migrations completed successfully",
+                    "applied_to_host": parsed.host,
+                    "applied_to_db": parsed.database,
+                }
+            )
         except Exception as exc:
             return JSONResponse(
                 {"status": "error", "error": str(exc), "traceback": traceback.format_exc()},

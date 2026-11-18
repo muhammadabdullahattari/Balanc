@@ -251,6 +251,36 @@ class Settings(BaseSettings):
     def normalize_database_url(cls, value: object) -> object:
         raw = value.get_secret_value() if isinstance(value, SecretStr) else str(value)
         raw = raw.strip().strip("'\"")
+        is_railway = bool(
+            os.environ.get("RAILWAY_PROJECT_ID")
+            or os.environ.get("RAILWAY_ENVIRONMENT")
+            or os.environ.get("RAILWAY_SERVICE_ID")
+        )
+        if is_railway and (
+            not raw
+            or "localhost" in raw
+            or "127.0.0.1" in raw
+            or "ambient-secret-never-used" in raw
+        ):
+            fallback = (
+                os.environ.get("DATABASE_URL")
+                or os.environ.get("DATABASE_PUBLIC_URL")
+                or os.environ.get("POSTGRES_URL")
+                or os.environ.get("POSTGRESQL_URL")
+            )
+            if fallback and not any(h in fallback for h in ("localhost", "127.0.0.1")):
+                raw = fallback.strip().strip("'\"")
+            elif os.environ.get("PGHOST") and os.environ["PGHOST"] not in (
+                "localhost",
+                "127.0.0.1",
+            ):
+                user = os.environ.get("PGUSER", "postgres")
+                password = os.environ.get("PGPASSWORD", "")
+                host = os.environ["PGHOST"]
+                port = os.environ.get("PGPORT", "5432")
+                database = os.environ.get("PGDATABASE", "railway")
+                auth = f"{user}:{password}@" if password else f"{user}@"
+                raw = f"postgresql+psycopg://{auth}{host}:{port}/{database}"
         if raw.startswith("postgres://"):
             raw = "postgresql+psycopg://" + raw[len("postgres://") :]
         elif raw.startswith("postgresql://"):
