@@ -20,3 +20,5 @@ Collect measured P2/P3 traffic and document volumes, customer commitments, suppo
 ## Release gate
 
 Funded infrastructure, 24/7 or explicitly bounded operational coverage, legal approvals and tested rollback/recovery are required. Publish only measured capacity, availability, migration and recovery results with workload, region, date and test methodology. Revalidate targets as the architecture or customer workload changes.
+
+See [feature-by-feature delivery plan](P3_P4_Feature_Implementation_Plan.md) for the full implementation order, dependencies and acceptance checks.

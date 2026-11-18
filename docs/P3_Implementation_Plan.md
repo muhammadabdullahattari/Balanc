@@ -26,3 +26,5 @@ P3 does not introduce autonomous accounting or AI-authorized payments. Human app
 ## Release gate
 
 Accounting, security, privacy/legal, operations and product owners approve each provider and workflow. The release candidate passes deployed integration, recovery, tenant isolation, payment safety, audit, accessibility and measured capacity checks; support/on-call and rollback procedures are staffed.
+
+See [feature-by-feature delivery plan](P3_P4_Feature_Implementation_Plan.md) for the full implementation order, dependencies and acceptance checks.
