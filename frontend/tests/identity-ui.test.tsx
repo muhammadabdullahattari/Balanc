@@ -96,12 +96,15 @@ it("resends to the entered address and clears an old code", async () => {
   await userEvent.click(
     screen.getByRole("button", { name: "Create account", exact: true }),
   );
-  await screen.findByLabelText("Token from your email");
+  await screen.findByLabelText("Code from your email");
+  expect(screen.getByLabelText("Verification email address")).toHaveAttribute(
+    "readonly",
+  );
   expect(screen.getByLabelText("Verification email address")).toHaveValue(
     "synthetic@example.invalid",
   );
   await userEvent.type(
-    screen.getByLabelText("Token from your email"),
+    screen.getByLabelText("Code from your email"),
     "obsolete-synthetic-code",
   );
   await userEvent.click(
@@ -112,7 +115,7 @@ it("resends to the entered address and clears an old code", async () => {
       screen.getByRole("button", { name: /Resend available/ }),
     ).toBeDisabled(),
   );
-  expect(screen.getByLabelText("Token from your email")).toHaveValue("");
+  expect(screen.getByLabelText("Code from your email")).toHaveValue("");
   expect(post).toHaveBeenCalledWith("/api/v1/auth/verification-request", {
     body: { email: "synthetic@example.invalid" },
   });
@@ -159,7 +162,7 @@ it("renders authenticator QR locally and keeps manual setup available", async ()
   ).not.toBeNull();
   expect(view.container.querySelector('img[src^="http"]')).toBeNull();
 });
-it("asks for MFA after Google, then retries a rejected code without choosing an account again", async () => {
+function googleButton() {
   vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(360);
   vi.spyOn(api, "GET").mockResolvedValue(
     response({
@@ -188,6 +191,47 @@ it("asks for MFA after Google, then retries a rejected code without choosing an 
       },
     },
   };
+}
+it("registers with Google and a chosen password before returning to sign in", async () => {
+  googleButton();
+  const post = vi
+    .spyOn(api, "POST")
+    .mockImplementation(
+      (path) =>
+        Promise.resolve(
+          response(
+            path.endsWith("/challenge")
+              ? { nonce: "synthetic-nonce" }
+              : { status: "registered" },
+          ),
+        ) as any,
+    );
+  show(<Auth />);
+  await userEvent.click(screen.getByText("Create an account"));
+  await userEvent.click(
+    await screen.findByRole("button", { name: "Google test button" }),
+  );
+  await userEvent.type(
+    screen.getByLabelText("New password"),
+    "Synthetic onboarding 8!",
+  );
+  expect(screen.queryByLabelText("Authenticator code")).toBeNull();
+  await userEvent.click(
+    screen.getByRole("button", { name: "Create account", exact: true }),
+  );
+  expect(
+    await screen.findByText("Your account is ready. Sign in to continue."),
+  ).toBeVisible();
+  expect(post).toHaveBeenCalledWith("/api/v1/auth/google/login", {
+    body: {
+      nonce: "synthetic-nonce",
+      credential: "synthetic-provider-proof",
+      signup_password: "Synthetic onboarding 8!",
+    },
+  });
+});
+it("asks for MFA after Google, then retries a rejected code without choosing an account again", async () => {
+  googleButton();
   const post = vi
     .spyOn(api, "POST")
     .mockImplementation(

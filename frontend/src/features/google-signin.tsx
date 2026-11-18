@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api, ApiError, keys, queryClient, result } from "../api/runtime";
-import { ErrorNotice } from "../components/ui";
+import { Button, ErrorNotice, Field, PasswordInput } from "../components/ui";
 import { SignInVerification, type SignInFactor } from "./sign-in-verification";
 type Credential = { credential: string };
 type GoogleSDK = {
@@ -67,10 +67,12 @@ export function useAuthConfiguration() {
 }
 export function GoogleSignIn({
   mode = "login",
+  onRegistered,
   onLinked,
   onVerificationChange,
 }: {
-  mode?: "login" | "link";
+  mode?: "login" | "register" | "link";
+  onRegistered?: () => void;
   onLinked?: () => void;
   onVerificationChange?: (active: boolean) => void;
 }) {
@@ -104,6 +106,12 @@ export function GoogleSignIn({
         auto_select: false,
         callback: ({ credential }) => {
           if (cancelled) return;
+          if (mode === "register") {
+            proof.current = { credential, nonce };
+            setVerifying(true);
+            current.current.onVerificationChange?.(true);
+            return;
+          }
           setBusy(true);
           setError(undefined);
           const body = { credential, nonce };
@@ -152,7 +160,7 @@ export function GoogleSignIn({
               ? "filled_black"
               : "outline",
           size: "large",
-          text: mode === "link" ? "continue_with" : "signin_with",
+          text: mode === "login" ? "signin_with" : "continue_with",
           shape: "rectangular",
           width: String(width),
         });
@@ -248,7 +256,59 @@ export function GoogleSignIn({
           </p>
         )}
       </div>
-      {verifying && (
+      {verifying && mode === "register" && (
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!proof.current || busy) return;
+            const password = String(
+              new FormData(event.currentTarget).get("password"),
+            );
+            setBusy(true);
+            setError(undefined);
+            try {
+              await result(
+                api.POST("/api/v1/auth/google/login", {
+                  body: { ...proof.current, signup_password: password },
+                }),
+              );
+              proof.current = null;
+              onRegistered?.();
+            } catch (failure) {
+              setError(failure);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <h1>Create your password</h1>
+          <Field
+            label="New password"
+            hint="Use 15–128 characters with uppercase, lowercase, a number and a special character."
+          >
+            <PasswordInput
+              name="password"
+              required
+              minLength={15}
+              maxLength={128}
+              autoComplete="new-password"
+            />
+          </Field>
+          <ErrorNotice error={error} />
+          <Button type="submit" busy={busy}>
+            Create account
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={restart}
+          >
+            Back
+          </Button>
+        </form>
+      )}
+      {verifying && mode !== "register" && (
         <SignInVerification
           description="Google confirmed your identity. Enter a code to finish signing in to LedgerPilot."
           error={error}

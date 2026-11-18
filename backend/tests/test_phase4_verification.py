@@ -13,7 +13,7 @@ import pytest
 from alembic import command as migrations
 from alembic.config import Config
 from cryptography.fernet import Fernet
-from psycopg import sql
+from psycopg import errors, sql
 from pydantic import SecretStr
 from sqlalchemy.engine import URL, make_url
 from test_phase2_integration import (
@@ -199,7 +199,14 @@ def test_previous_supported_schema_upgrades_without_losing_identity(
             assert db.execute(
                 "SELECT password_version FROM app.users WHERE id=%s", (user_id,)
             ).fetchone() == (1,)
-            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0034",)
+            with (
+                pytest.raises(errors.CheckViolation, match="ERR_EMAIL_IMMUTABLE"),
+                db.transaction(),
+            ):
+                db.execute(
+                    "UPDATE app.users SET email=%s WHERE id=%s", ("other@example.com", user_id)
+                )
+            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0035",)
     finally:
         assert name.startswith("ledgerpilot_upgrade_")
         with connect(admin_url) as db:
@@ -332,7 +339,7 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                     "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user"
                 ).fetchone() == (False,)
                 assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == (
-                    "0034",
+                    "0035",
                 )
             restored_root = tmp_path / "restored-evidence"
             shutil.copytree(evidence_backup, restored_root)

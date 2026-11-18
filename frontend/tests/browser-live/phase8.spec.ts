@@ -230,12 +230,12 @@ test("real sign-up replaces verification code and completes local QR enrollment"
   ).toBeDisabled();
   const latest = await newestCode();
   expect(latest).not.toBe(old);
-  await page.getByLabel("Token from your email").fill(old);
+  await page.getByLabel("Code from your email").fill(old);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText(
     "Request a new code and use the newest email",
   );
-  await page.getByLabel("Token from your email").fill(latest);
+  await page.getByLabel("Code from your email").fill(latest);
   await page.getByRole("button", { name: "Continue", exact: true }).click();
   await expect(
     page.getByRole("heading", { name: "Welcome back." }),

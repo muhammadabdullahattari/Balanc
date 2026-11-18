@@ -15,6 +15,7 @@ from ledgerpilot.identity.schemas import (
     Credentials,
     EmailRequest,
     GoogleCredentials,
+    GoogleSignInCredentials,
     MFARequest,
     Registration,
     ResetRequest,
@@ -258,11 +259,13 @@ def google_challenge(request: Request, response: Response, db: DB) -> dict[str, 
     response_model_exclude_none=True,
 )
 def google_login(
-    data: GoogleCredentials, request: Request, response: Response, db: DB
+    data: GoogleSignInCredentials, request: Request, response: Response, db: DB
 ) -> dict[str, str]:
     user, mfa = google.authenticate(
         db, request.app.state.settings, data, request.headers.get("x-csrf-token", "")
     )
+    if data.signup_password is not None:
+        return {"status": "registered"}
     cookies(request, response, service.issue_session(db, request.app.state.settings, user, mfa))
     return {"status": "authenticated"}
 

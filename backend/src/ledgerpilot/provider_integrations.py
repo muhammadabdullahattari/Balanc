@@ -102,7 +102,11 @@ def provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 def stripe(settings: Settings, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
     key = settings.stripe_secret_key
     if not key or not key.get_secret_value().startswith(("sk_test_", "rk_test_")):
-        raise DomainError("ERR_PROVIDER_CONFIG", "Stripe sandbox credentials are required.", 503)
+        raise DomainError(
+            "ERR_PROVIDER_CONFIG",
+            "Billing is temporarily unavailable. Contact support before trying again.",
+            503,
+        )
     return provider(
         method, "https://api.stripe.com/v1/" + path, auth=(key.get_secret_value(), ""), **kwargs
     )
@@ -151,7 +155,9 @@ def checkout(
     destination = settings.billing_return_url
     if not price.startswith("price_") or urlsplit(destination).scheme != "https":
         raise DomainError(
-            "ERR_PROVIDER_CONFIG", "Configure a test price and HTTPS billing return URL.", 503
+            "ERR_PROVIDER_CONFIG",
+            "Billing is temporarily unavailable. Contact support before trying again.",
+            503,
         )
     connection = load(db, business_id, "stripe")
     # Release any active transaction locks before slow outbound Stripe HTTP calls (H6)
@@ -457,7 +463,9 @@ def quickbooks_config(settings: Settings) -> tuple[str, str, str]:
         or urlsplit(settings.quickbooks_redirect_uri).scheme != "https"
     ):
         raise DomainError(
-            "ERR_PROVIDER_CONFIG", "Configure Intuit sandbox credentials and HTTPS callback.", 503
+            "ERR_PROVIDER_CONFIG",
+            "QuickBooks connection setup is unavailable. Contact support for help.",
+            503,
         )
     return (
         settings.quickbooks_client_id,
@@ -560,7 +568,11 @@ def refresh_quickbooks(
     client, secret, _ = quickbooks_config(settings)
     current = load(db, business_id, "quickbooks")
     if "tokens" not in current:
-        raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+        raise DomainError(
+            "ERR_QUICKBOOKS_DISCONNECTED",
+            "Ask the workspace owner to connect QuickBooks before importing records.",
+            409,
+        )
     cipher = encryption(settings)
     tokens = json.loads(cipher.decrypt(current["tokens"].encode()))
     refreshed = provider(
@@ -606,7 +618,11 @@ def preview_quickbooks(
     quickbooks_config(settings)
     current = load(db, business_id, "quickbooks")
     if "tokens" not in current:
-        raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+        raise DomainError(
+            "ERR_QUICKBOOKS_DISCONNECTED",
+            "Ask the workspace owner to connect QuickBooks before importing records.",
+            409,
+        )
     tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
     result = provider(
         "GET",
@@ -702,7 +718,11 @@ def change_subscription_plan(
     }
     price = prices[new_plan]
     if not price.startswith("price_"):
-        raise DomainError("ERR_PROVIDER_CONFIG", "Configure the requested plan price.", 503)
+        raise DomainError(
+            "ERR_PROVIDER_CONFIG",
+            "Billing is temporarily unavailable. Contact support before trying again.",
+            503,
+        )
 
     sub = stripe(settings, "GET", f"subscriptions/{current['subscription_id']}")
     item_id = sub["items"]["data"][0]["id"]
@@ -814,7 +834,11 @@ def import_quickbooks(
     settings: Settings = request.app.state.settings
     current = load(db, business_id, "quickbooks")
     if "tokens" not in current or "realm_id" not in current:
-        raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+        raise DomainError(
+            "ERR_QUICKBOOKS_DISCONNECTED",
+            "Ask the workspace owner to connect QuickBooks before importing records.",
+            409,
+        )
 
     if async_job:
         from ledgerpilot.jobs import service as job_service

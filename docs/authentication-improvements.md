@@ -57,3 +57,18 @@ Local verification is complete: 58 focused backend security/identity checks, 33 
 The root Google client ID is now configured and format-valid. The public response allowlist is verified by tests; the configured client ID was format-validated without printing its value. Live Google account consent/Cloud origin acceptance remains unverified; do not interpret the isolated provider-signature fixtures as a real Google login. Mailpit continues to capture development emails locally. Migrations 0021/0022 were applied to the local development database on 2 November without deleting user or ledger data.
 
 The subsequent focused review adds hosted HTTP rejection/HSTS, a loopback-only HTTP exception in the browser transport, sign-out-everywhere cookie clearing and short test tracebacks. Production TLS/proxy acceptance remains Phase 9/10. Nothing was committed, pushed or deployed.
+
+## Signup and immutable email (migration 0035)
+
+Google account creation now collects a LedgerPilot password after the account chooser.
+The verified Google credential and browser-bound nonce accompany the password.
+Successful registration returns to sign-in without issuing session cookies. Existing
+linked identities continue through Google login and any enrolled second factor.
+Existing password accounts require a signed-in link in Settings > Security.
+Previously registered Google users can use password reset to choose a local password.
+
+The verified identity email has no settings editor. Migration 0035 rejects changes
+to the stored email, including direct updates. The address entry on the standalone
+resend screen locates a pending registration and cannot modify its destination.
+Authenticator enrollment still requires proof of possession before workspace access.
+Roll out the migration and compatible API before the web client.

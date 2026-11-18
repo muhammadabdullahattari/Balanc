@@ -36,3 +36,7 @@ class GoogleCredentials(Schema):
     nonce: SecretStr = Field(min_length=32, max_length=128)
     mfa_code: SecretStr | None = Field(default=None, min_length=6, max_length=6)
     recovery_code: SecretStr | None = Field(default=None, max_length=128)
+
+
+class GoogleSignInCredentials(GoogleCredentials):
+    signup_password: SecretStr | None = Field(default=None, min_length=15, max_length=128)

@@ -5468,6 +5468,25 @@ export interface components {
             /** Status */
             status: string;
         };
+        /** GoogleSignInCredentials */
+        GoogleSignInCredentials: {
+            /**
+             * Credential
+             * Format: password
+             */
+            credential: string;
+            /** Mfa Code */
+            mfa_code?: string | null;
+            /**
+             * Nonce
+             * Format: password
+             */
+            nonce: string;
+            /** Recovery Code */
+            recovery_code?: string | null;
+            /** Signup Password */
+            signup_password?: string | null;
+        };
         /** GrantCreate */
         GrantCreate: {
             /** Hours */
@@ -9259,7 +9278,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["GoogleCredentials"];
+                "application/json": components["schemas"]["GoogleSignInCredentials"];
             };
         };
         responses: {

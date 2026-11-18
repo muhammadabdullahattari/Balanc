@@ -220,16 +220,22 @@ async def test_google_requires_nonce_binding_and_independent_email_proof(
 
 
 @REAL
-async def test_google_gmail_bootstraps_owned_session_without_bypassing_mfa(
+async def test_google_signup_requires_password_then_separate_login(
     auth_client: httpx.AsyncClient, signed_google
 ) -> None:
     api = auth_client
     nonce = (await api.post("/api/v1/auth/google/challenge")).json()["nonce"]
-    response = await api.post(
-        "/api/v1/auth/google/login",
-        json={"nonce": nonce, "credential": signed_google(uuid4().hex + "@gmail.com", nonce)},
-    )
-    assert response.status_code == 200, response.text
+    email = uuid4().hex + "@gmail.com"
+    password = "Synthetic onboard phrase 7!"
+    body = {"nonce": nonce, "credential": signed_google(email, nonce)}
+    endpoint = "/api/v1/auth/google/login"
+    assert (await api.post(endpoint, json=body)).json()["error"]["code"] == "ERR_GOOGLE_SIGNUP"
+    created = await api.post(endpoint, json={**body, "signup_password": password})
+    assert created.json() == {"status": "registered"}
+    assert api.cookies.get("__Host-lp_access") is None
+    assert (await api.post(endpoint, json=body)).status_code == 401
+    response = await api.post("/api/v1/auth/login", json={"email": email, "password": password})
+    assert response.status_code == 200
     api.headers["X-CSRF-Token"] = (await api.get("/api/v1/auth/csrf")).json()["csrf_token"]
     identity = (await api.get("/api/v1/auth/me")).json()
     assert identity["verified"] is True and identity["mfa"] is False

@@ -5556,6 +5556,77 @@
         "title": "GoogleLoginRead",
         "type": "object"
       },
+      "GoogleSignInCredentials": {
+        "additionalProperties": false,
+        "properties": {
+          "credential": {
+            "format": "password",
+            "maxLength": 8192,
+            "minLength": 20,
+            "title": "Credential",
+            "type": "string",
+            "writeOnly": true
+          },
+          "mfa_code": {
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 6,
+                "minLength": 6,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mfa Code"
+          },
+          "nonce": {
+            "format": "password",
+            "maxLength": 128,
+            "minLength": 32,
+            "title": "Nonce",
+            "type": "string",
+            "writeOnly": true
+          },
+          "recovery_code": {
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 128,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Recovery Code"
+          },
+          "signup_password": {
+            "anyOf": [
+              {
+                "format": "password",
+                "maxLength": 128,
+                "minLength": 15,
+                "type": "string",
+                "writeOnly": true
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Signup Password"
+          }
+        },
+        "required": [
+          "credential",
+          "nonce"
+        ],
+        "title": "GoogleSignInCredentials",
+        "type": "object"
+      },
       "GrantCreate": {
         "additionalProperties": false,
         "properties": {
@@ -13658,7 +13729,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/GoogleCredentials"
+                "$ref": "#/components/schemas/GoogleSignInCredentials"
               }
             }
           },

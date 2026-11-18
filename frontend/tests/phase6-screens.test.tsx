@@ -462,7 +462,7 @@ describe("Phase 6 screen journeys with isolated API doubles", () => {
     );
     await userEvent.click(screen.getByText("Back to sign in"));
     await userEvent.click(screen.getByText("Verify email"));
-    expect(screen.getByLabelText("Token from your email")).toBeRequired();
+    expect(screen.getByLabelText("Code from your email")).toBeRequired();
     await userEvent.click(screen.getByText("Back to sign in"));
     await userEvent.click(screen.getByText("Forgot password?"));
     expect(screen.getByLabelText("Email address")).toBeRequired();

@@ -1,4 +1,4 @@
-import { GoogleSignIn, useAuthConfiguration } from "./google-signin";
+import { GoogleSignIn } from "./google-signin";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -82,7 +82,7 @@ export function Auth() {
   const [mode, setMode] = useState<
     "login" | "register" | "verify" | "reset-request" | "reset"
   >("login");
-  const config = useAuthConfiguration();
+  const [knownEmail, setKnownEmail] = useState(false);
   const [googleVerification, setGoogleVerification] = useState(false);
   const [verificationEmail, setVerificationEmail] = useState("");
   const [resendWait, setResendWait] = useState(0);
@@ -162,7 +162,9 @@ export function Auth() {
         return;
       }
       if (error instanceof ApiError && error.code === "ERR_EMAIL_UNVERIFIED") {
+        setKnownEmail(true);
         setVerificationEmail(getValues("email"));
+        mutation.reset();
         setNotice(
           "Verify your email using the browser where you signed up. You can request a new code below.",
         );
@@ -173,6 +175,8 @@ export function Auth() {
       if (mode === "login")
         void queryClient.invalidateQueries({ queryKey: keys.session });
       else {
+        setKnownEmail(true);
+        setValue("password", "");
         setVerificationEmail(values.email);
         setNotice(
           "Your account is pending verification. Check your email, or try resending shortly.",
@@ -255,6 +259,10 @@ export function Auth() {
     reset: "Choose a new password.",
   };
   const change = (next: typeof mode) => {
+    if (next === "verify") {
+      setKnownEmail(false);
+      setVerificationEmail("");
+    }
     setMode(next);
     setValue("password", "");
     setToken("");
@@ -356,7 +364,7 @@ export function Auth() {
                     />
                   </Field>
                 ) : (
-                  <Field label="Token from your email">
+                  <Field label="Code from your email">
                     <input
                       value={token}
                       onChange={(e) => setToken(e.target.value)}
@@ -396,6 +404,7 @@ export function Auth() {
                     autoComplete="email"
                     required
                     value={verificationEmail}
+                    readOnly={knownEmail}
                     onChange={(e) => setVerificationEmail(e.target.value)}
                   />
                 </Field>
@@ -427,7 +436,15 @@ export function Auth() {
           </div>
           {!passwordVerification &&
             (mode === "login" || mode === "register") && (
-              <GoogleSignIn onVerificationChange={setGoogleVerification} />
+              <GoogleSignIn
+                mode={mode}
+                onVerificationChange={setGoogleVerification}
+                onRegistered={() => {
+                  change("login");
+                  setGoogleVerification(false);
+                  setNotice("Your account is ready. Sign in to continue.");
+                }}
+              />
             )}
           {passwordVerification && (
             <SignInVerification

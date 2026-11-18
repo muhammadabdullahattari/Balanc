@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { api, keys, queryClient, result } from "../api/runtime";
+import { api, ApiError, keys, queryClient, result } from "../api/runtime";
 import { Badge, Button, ErrorNotice, Field, Table } from "../components/ui";
-import { today, useBusiness } from "./context";
+import { today, useAccess, useBusiness } from "./context";
 
 export function QuickBooksImport() {
   const b = useBusiness();
@@ -21,6 +21,18 @@ export function QuickBooksImport() {
     "VendorCredit",
   ]);
 
+  const access = useAccess();
+  const connect = useMutation({
+    mutationFn: () =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/quickbooks/authorize", {
+          params: { path },
+        }),
+      ),
+    onSuccess: (data) => {
+      if (data.url) window.location.assign(data.url);
+    },
+  });
   const previewQuery = useQuery({
     queryKey: [...keys.business(b.id), "quickbooks", "preview"],
     queryFn: ({ signal }) =>
@@ -111,6 +123,33 @@ export function QuickBooksImport() {
 
   const unmapped = dryRunData?.unmapped_accounts || [];
 
+  if (!previewQuery.data) {
+    const disconnected =
+      previewQuery.error instanceof ApiError &&
+      previewQuery.error.code === "ERR_QUICKBOOKS_DISCONNECTED";
+    return (
+      <section>
+        <h2>QuickBooks import</h2>
+        {previewQuery.isPending && (
+          <p role="status">Checking the QuickBooks connection…</p>
+        )}
+        {disconnected && (
+          <p>Connect your QuickBooks company to preview records for import.</p>
+        )}
+        {disconnected &&
+          (access?.role === "owner" ? (
+            <Button busy={connect.isPending} onClick={() => connect.mutate()}>
+              Connect QuickBooks
+            </Button>
+          ) : (
+            <p>Ask your workspace owner to connect QuickBooks.</p>
+          ))}
+        <ErrorNotice
+          error={connect.error || (!disconnected && previewQuery.error)}
+        />
+      </section>
+    );
+  }
   return (
     <div className="quickbooks-import">
       <h2>QuickBooks Online Migration & Import</h2>
@@ -127,11 +166,7 @@ export function QuickBooksImport() {
       <div className="review-summary" style={{ marginBottom: "1.5rem" }}>
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
           <strong>Sandbox Connector:</strong>
-          {previewQuery.data ? (
-            <Badge>CONNECTED</Badge>
-          ) : (
-            <Badge>SANDBOX READY</Badge>
-          )}
+          <Badge>CONNECTED</Badge>
         </div>
       </div>
 

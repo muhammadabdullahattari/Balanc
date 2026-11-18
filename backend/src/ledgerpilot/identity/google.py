@@ -18,8 +18,15 @@ from ledgerpilot.config import Settings
 from ledgerpilot.database import set_context
 from ledgerpilot.identity import repository, service
 from ledgerpilot.identity.models import GoogleChallenge, GoogleIdentity, User
-from ledgerpilot.identity.schemas import GoogleCredentials
-from ledgerpilot.identity.security import canonical_email, digest, hash_password, now, opaque
+from ledgerpilot.identity.schemas import GoogleCredentials, GoogleSignInCredentials
+from ledgerpilot.identity.security import (
+    canonical_email,
+    digest,
+    hash_password,
+    normalized_password,
+    now,
+    opaque,
+)
 from ledgerpilot.shared.errors import DomainError
 
 SLOTS = BoundedSemaphore(2)
@@ -116,11 +123,17 @@ def consume_proof(
 
 
 def authenticate(
-    db: Session, settings: Settings, data: GoogleCredentials, csrf: str
+    db: Session, settings: Settings, data: GoogleSignInCredentials, csrf: str
 ) -> tuple[User, bool]:
     claims = consume_proof(db, settings, data, csrf)
     mapping = db.get(GoogleIdentity, claims["sub"])
     if mapping:
+        if data.signup_password is not None:
+            raise DomainError(
+                "ERR_GOOGLE_REGISTERED",
+                "This Google account is already registered. Return to sign in.",
+                409,
+            )
         set_context(db, mapping.user_id)
         user = db.scalar(select(User).where(User.id == mapping.user_id).with_for_update())
         if user is None or user.suspended:
@@ -146,10 +159,17 @@ def authenticate(
                 "Create and verify an email/password account first, then link Google in Settings.",
                 409,
             )
+        if data.signup_password is None:
+            raise DomainError(
+                "ERR_GOOGLE_SIGNUP",
+                "Choose Create an account, then continue with Google to set your password.",
+                409,
+            )
+        password = normalized_password(data.signup_password.get_secret_value(), email)
         user = User(
             id=uuid4(),
             email=email,
-            password_hash=hash_password(opaque()),
+            password_hash=hash_password(password),
             verified=email.lower().endswith("@gmail.com") or bool(claims.get("hd")),
             suspended=False,
         )
@@ -158,6 +178,7 @@ def authenticate(
         db.flush()
         db.add(GoogleIdentity(subject=claims["sub"], user_id=user.id))
         record(db, user.id, "identity.google_registered")
+        return user, False
     if not user.verified:
         raise DomainError(
             "ERR_GOOGLE_EMAIL_VERIFICATION_REQUIRED",
