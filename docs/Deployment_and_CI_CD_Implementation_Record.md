@@ -435,8 +435,20 @@ To deliver verification and password reset emails to any recipient (such as `the
 
 ### D. Verification Evidence
 * **Live In-Cloud Email Delivery Verification**:
-  * Tested live on Railway production (`https://balanc-production.up.railway.app/health/test-email?to=gamehalludba@gmail.com`).
+  * Tested live on Railway production with Brevo integration enabled (`https://balanc-production.up.railway.app/health/test-email?to=theab9098@gmail.com`).
   * Live response confirmed:
+    ```json
+    {
+      "status": "ok",
+      "delivered_to": "theab9098@gmail.com",
+      "resend_enabled": true,
+      "brevo_enabled": true,
+      "sendgrid_enabled": false
+    }
+    ```
+  * Verification email successfully accepted and delivered by Brevo HTTPS API to `theab9098@gmail.com` with HTTP 200.
+  * Verified delivery to `muhammadabdullahattari.jk@gmail.com` with HTTP 200.
+  * Earlier test using Resend testing domain (`gamehalludba@gmail.com`):
     ```json
     {
       "status": "ok",
@@ -445,7 +457,6 @@ To deliver verification and password reset emails to any recipient (such as `the
       "brevo_enabled": false
     }
     ```
-  * Verification email successfully arrived in destination inbox (`gamehalludba@gmail.com`).
 * **Multi-Provider Failover Unit Suite**:
   * File: `backend/tests/test_mail_failover.py`
   * Verified 3/3 tests passing:
