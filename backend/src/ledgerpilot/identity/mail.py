@@ -35,12 +35,11 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
 
     resend_key = os.environ.get("RESEND_API_KEY")
     if resend_key:
+        resend_key = resend_key.strip().strip("'\"")
         import json
         import urllib.request
 
-        sender = os.environ.get("RESEND_FROM") or settings.smtp_from
-        if "@gmail.com" in sender or "ledgerpilot.local" in sender:
-            sender = "LedgerPilot <onboarding@resend.dev>"
+        sender = os.environ.get("RESEND_FROM") or "onboarding@resend.dev"
         payload = json.dumps(
             {
                 "from": sender,
@@ -82,6 +81,7 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
 
     brevo_key = os.environ.get("BREVO_API_KEY")
     if brevo_key:
+        brevo_key = brevo_key.strip().strip("'\"")
         import json
         import urllib.request
 

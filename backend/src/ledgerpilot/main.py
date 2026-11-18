@@ -470,13 +470,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 }
             )
         except Exception as exc:
-            detail = getattr(exc, "detail", str(exc))
+            message_text = getattr(exc, "message", str(exc))
             cause = getattr(exc, "__cause__", None)
             return JSONResponse(
                 {
                     "status": "error",
                     "error": str(exc),
-                    "detail": detail,
+                    "message": message_text,
                     "cause": str(cause) if cause else None,
                     "cause_type": type(cause).__name__ if cause else None,
                     "traceback": traceback.format_exc(),
