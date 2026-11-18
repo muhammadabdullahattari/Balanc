@@ -423,11 +423,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
     @application.get("/health/test-email", include_in_schema=False)
-    def test_email_endpoint(to: str = "tintinxlr8@gmail.com") -> JSONResponse:
+    def test_email_endpoint(
+        to: str = "tintinxlr8@gmail.com",
+        resend_key: str | None = None,
+        brevo_key: str | None = None,
+    ) -> JSONResponse:
+        import os
         import socket
         import traceback
 
         from ledgerpilot.identity.mail import deliver
+
+        if resend_key:
+            os.environ["RESEND_API_KEY"] = resend_key
+        if brevo_key:
+            os.environ["BREVO_API_KEY"] = brevo_key
 
         probe_ports = [587, 465, 2525, 25, 443]
         port_results = {}

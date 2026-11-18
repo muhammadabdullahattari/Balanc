@@ -68,6 +68,12 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
                         recipient,
                     )
                     return
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode()
+            logger.error("Resend delivery failed: %s %s", exc.code, err_body)
+            raise DomainError(
+                "ERR_MAIL_UNAVAILABLE", f"Resend delivery failed ({exc.code}): {err_body}", 503
+            ) from exc
         except Exception as exc:
             logger.error("Resend delivery failed: %s", exc)
             raise DomainError(
@@ -105,6 +111,12 @@ def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> Non
                         recipient,
                     )
                     return
+        except urllib.error.HTTPError as exc:
+            err_body = exc.read().decode()
+            logger.error("Brevo delivery failed: %s %s", exc.code, err_body)
+            raise DomainError(
+                "ERR_MAIL_UNAVAILABLE", f"Brevo delivery failed ({exc.code}): {err_body}", 503
+            ) from exc
         except Exception as exc:
             logger.error("Brevo delivery failed: %s", exc)
             raise DomainError("ERR_MAIL_UNAVAILABLE", f"Brevo delivery failed: {exc}", 503) from exc
