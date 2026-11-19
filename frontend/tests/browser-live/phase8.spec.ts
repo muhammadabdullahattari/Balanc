@@ -41,6 +41,10 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
   );
   await page.getByRole("button", { name: "Verify and sign in" }).click();
   const listed = await (await choices).json();
+  await page.getByLabel("Show portfolio review status").check();
+  await expect(
+    page.getByText("Bills without linked documents").first(),
+  ).toBeVisible();
   const index = listed.items.findIndex(
     (b: { id: string }) => b.id === f.business.id,
   );
@@ -180,6 +184,34 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
       ).json()
     ).items,
   ).toHaveLength(1);
+  await page.getByRole("link", { name: "Reports", exact: true }).click();
+  await page.getByText("Ask about your books", { exact: true }).click();
+  await page
+    .getByLabel("Accounting question")
+    .fill("Which client owes us the most?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(
+    page.getByRole("link", { name: "Source report 1" }),
+  ).toBeVisible();
+  await page.locator("nav summary").filter({ hasText: "Accounting" }).click();
+  await page.getByRole("link", { name: "General ledger", exact: true }).click();
+  await page.getByText("Prepare an accounting entry", { exact: true }).click();
+  await page.getByLabel("Entry type").selectOption("fx");
+  await page.getByLabel("Source reference").fill("Browser FX fixture");
+  await page.getByLabel("Accounting date", { exact: true }).fill("2026-10-30");
+  await page.getByLabel("Foreign amount").fill("10");
+  await page.getByLabel("Transaction currency").selectOption("GBP");
+  await page.getByLabel(/per unit of foreign currency/).fill("1.25");
+  await page.getByLabel("Exchange rate source").fill("Synthetic browser test");
+  await page
+    .getByLabel("Debit account", { exact: true })
+    .selectOption(f.accounts.cost);
+  await page
+    .getByLabel("Credit account", { exact: true })
+    .selectOption(f.accounts.bank);
+  await page.getByRole("button", { name: "Preview entry" }).click();
+  await page.getByRole("button", { name: "Approve and post entry" }).click();
+  await expect(page.getByText(/Posted journal [a-f0-9-]+/)).toBeVisible();
   expect(errors).toEqual([]);
 });
 import { execFileSync } from "node:child_process";

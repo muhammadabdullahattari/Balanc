@@ -86,6 +86,45 @@ export function MFASetup({ onComplete }: { onComplete: () => void }) {
     </section>
   );
 }
+function PortfolioBankReview({ businessId }: { businessId: string }) {
+  const review = useQuery({
+    queryKey: [...keys.business(businessId), "portfolio-bank-review"],
+    queryFn: ({ signal }) =>
+      result(
+        api.GET("/api/v1/businesses/{business_id}/portfolio-status", {
+          signal,
+          params: {
+            path: { business_id: businessId },
+          },
+        }),
+      ),
+    staleTime: 0,
+  });
+  if (review.isPending) return <Loading />;
+  if (review.error)
+    return (
+      <ErrorNotice error={review.error} retry={() => void review.refetch()} />
+    );
+  const status = review.data;
+  return (
+    <dl>
+      <dt>Bank transactions awaiting review</dt>
+      <dd>{status.pending_bank_rows}</dd>
+      {status.oldest_transaction && (
+        <>
+          <dt>Oldest transaction awaiting review</dt>
+          <dd>{status.oldest_transaction}</dd>
+        </>
+      )}
+      <dt>Latest reconciled statement</dt>
+      <dd>{status.last_statement ?? "None recorded"}</dd>
+      <dt>Past-period tasks awaiting review</dt>
+      <dd>{status.pending_period_reviews}</dd>
+      <dt>Bills without linked documents</dt>
+      <dd>{status.bills_without_evidence}</dd>
+    </dl>
+  );
+}
 export function BusinessChooser({
   identity,
   onChoose,
@@ -93,15 +132,16 @@ export function BusinessChooser({
   identity: components["schemas"]["IdentityRead"];
   onChoose: (id: string) => void;
 }) {
+  const [portfolio, setPortfolio] = useState(false);
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState<string | undefined>();
   const businesses = useQuery({
-    queryKey: [...keys.businesses, cursor],
+    queryKey: [...keys.businesses, cursor, portfolio],
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/businesses", {
           signal,
-          params: { query: { limit: 50, cursor } },
+          params: { query: { limit: portfolio ? 5 : 50, cursor } },
         }),
       ),
   });
@@ -156,22 +196,36 @@ export function BusinessChooser({
           void businesses.refetch();
         }}
       />
+      <label>
+        <input
+          type="checkbox"
+          checked={portfolio}
+          onChange={(e) => {
+            setCursor(undefined);
+            setPortfolio(e.target.checked);
+          }}
+        />{" "}
+        Show portfolio review status
+      </label>
       {businesses.isPending ? (
         <Loading />
       ) : (
         <div className="business-grid">
           {businesses.data?.items.map((b) => (
-            <button
-              className="business-card"
-              key={b.id}
-              onClick={() => onChoose(b.id)}
-            >
-              <Building2 />
-              <h3>{b.name}</h3>
-              <Badge>
-                {b.currency} · {b.basis}
-              </Badge>
-            </button>
+            <div key={b.id}>
+              <button
+                className="business-card"
+                key={b.id}
+                onClick={() => onChoose(b.id)}
+              >
+                <Building2 />
+                <h3>{b.name}</h3>
+                <Badge>
+                  {b.currency} · {b.basis}
+                </Badge>
+              </button>
+              {portfolio && <PortfolioBankReview businessId={b.id} />}
+            </div>
           ))}
           <button className="business-card add" onClick={() => setOpen(true)}>
             <Plus />

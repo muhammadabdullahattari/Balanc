@@ -1,3 +1,4 @@
+import { AskBooks } from "./accountant-tools";
 import { LookupMore } from "./lookup-more";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -140,6 +141,7 @@ export function Reports() {
         title="Financial reports"
         description="Review balances, cash forecasts and the entries behind each figure."
       />
+      <AskBooks key={b.id} />
       <SectionTabs
         id="reports"
         label="Financial reports"

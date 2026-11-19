@@ -1,3 +1,4 @@
+import { EntryTools } from "./accountant-tools";
 import { LookupMore } from "./lookup-more";
 import { useState } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
@@ -126,6 +127,7 @@ export function Ledger() {
     accounts.data?.items.find((a) => a.id === id)?.name || id;
   return (
     <>
+      <EntryTools key={b.id} accounts={accounts.data?.items ?? []} />
       <LookupMore resource="accounts" />
       <LookupMore resource="parties" />
       <PageHeading

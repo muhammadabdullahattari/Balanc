@@ -503,6 +503,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(accounting_router, prefix=configured.api_v1_prefix)
     application.include_router(trade_router, prefix=configured.api_v1_prefix)
     application.include_router(banking_router, prefix=configured.api_v1_prefix)
+    from ledgerpilot.reports.accountant_tools import router as accountant_tools_router
+
+    application.include_router(accountant_tools_router, prefix=configured.api_v1_prefix)
     application.include_router(reports_router, prefix=configured.api_v1_prefix)
     application.include_router(workspace_router, prefix=configured.api_v1_prefix)
     application.include_router(close_packages_router, prefix=configured.api_v1_prefix)

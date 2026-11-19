@@ -143,6 +143,59 @@
         "title": "AccountUpdate",
         "type": "object"
       },
+      "Accrual": {
+        "additionalProperties": false,
+        "properties": {
+          "accounting_date": {
+            "format": "date",
+            "title": "Accounting Date",
+            "type": "string"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "credit_account": {
+            "format": "uuid",
+            "title": "Credit Account",
+            "type": "string"
+          },
+          "debit_account": {
+            "format": "uuid",
+            "title": "Debit Account",
+            "type": "string"
+          },
+          "kind": {
+            "const": "accrual",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reference": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "accounting_date",
+          "debit_account",
+          "credit_account",
+          "amount",
+          "kind"
+        ],
+        "title": "Accrual",
+        "type": "object"
+      },
       "ActionId": {
         "additionalProperties": false,
         "properties": {
@@ -492,6 +545,28 @@
           "amount"
         ],
         "title": "AllocationCreate",
+        "type": "object"
+      },
+      "Answer": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "title": "Answer",
+            "type": "string"
+          },
+          "report_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Report Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "answer",
+          "report_ids"
+        ],
+        "title": "Answer",
         "type": "object"
       },
       "AssistantRequest": {
@@ -2655,6 +2730,91 @@
         "title": "ControlRow",
         "type": "object"
       },
+      "Conversion": {
+        "additionalProperties": false,
+        "properties": {
+          "accounting_date": {
+            "format": "date",
+            "title": "Accounting Date",
+            "type": "string"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "credit_account": {
+            "format": "uuid",
+            "title": "Credit Account",
+            "type": "string"
+          },
+          "debit_account": {
+            "format": "uuid",
+            "title": "Debit Account",
+            "type": "string"
+          },
+          "kind": {
+            "const": "fx",
+            "title": "Kind",
+            "type": "string"
+          },
+          "rate": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Rate"
+          },
+          "rate_source": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Rate Source",
+            "type": "string"
+          },
+          "reference": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "source_currency": {
+            "enum": [
+              "USD",
+              "GBP",
+              "PKR",
+              "EUR",
+              "AED"
+            ],
+            "title": "Source Currency",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reference",
+          "accounting_date",
+          "debit_account",
+          "credit_account",
+          "amount",
+          "kind",
+          "source_currency",
+          "rate",
+          "rate_source"
+        ],
+        "title": "Conversion",
+        "type": "object"
+      },
       "Correction": {
         "additionalProperties": false,
         "properties": {
@@ -3018,6 +3178,86 @@
           "execution_enabled"
         ],
         "title": "Decision",
+        "type": "object"
+      },
+      "Depreciation": {
+        "additionalProperties": false,
+        "properties": {
+          "accounting_date": {
+            "format": "date",
+            "title": "Accounting Date",
+            "type": "string"
+          },
+          "amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Amount"
+          },
+          "credit_account": {
+            "format": "uuid",
+            "title": "Credit Account",
+            "type": "string"
+          },
+          "debit_account": {
+            "format": "uuid",
+            "title": "Debit Account",
+            "type": "string"
+          },
+          "installment": {
+            "maximum": 1200.0,
+            "minimum": 1.0,
+            "title": "Installment",
+            "type": "integer"
+          },
+          "kind": {
+            "const": "depreciation",
+            "title": "Kind",
+            "type": "string"
+          },
+          "months": {
+            "maximum": 1200.0,
+            "minimum": 1.0,
+            "title": "Months",
+            "type": "integer"
+          },
+          "reference": {
+            "maxLength": 160,
+            "minLength": 1,
+            "title": "Reference",
+            "type": "string"
+          },
+          "residual": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Residual"
+          }
+        },
+        "required": [
+          "reference",
+          "accounting_date",
+          "debit_account",
+          "credit_account",
+          "amount",
+          "kind",
+          "residual",
+          "months",
+          "installment"
+        ],
+        "title": "Depreciation",
         "type": "object"
       },
       "DiagnosticJob": {
@@ -9462,6 +9702,56 @@
         "title": "PolicyView",
         "type": "object"
       },
+      "PortfolioStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "bills_without_evidence": {
+            "title": "Bills Without Evidence",
+            "type": "integer"
+          },
+          "last_statement": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Statement"
+          },
+          "oldest_transaction": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Oldest Transaction"
+          },
+          "pending_bank_rows": {
+            "title": "Pending Bank Rows",
+            "type": "integer"
+          },
+          "pending_period_reviews": {
+            "title": "Pending Period Reviews",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "pending_bank_rows",
+          "oldest_transaction",
+          "bills_without_evidence",
+          "last_statement",
+          "pending_period_reviews"
+        ],
+        "title": "PortfolioStatus",
+        "type": "object"
+      },
       "PostedRead": {
         "additionalProperties": false,
         "properties": {
@@ -10138,6 +10428,37 @@
           "margin"
         ],
         "title": "ProjectTotals",
+        "type": "object"
+      },
+      "Question": {
+        "additionalProperties": false,
+        "properties": {
+          "as_of": {
+            "format": "date",
+            "title": "As Of",
+            "type": "string"
+          },
+          "basis": {
+            "enum": [
+              "accrual",
+              "cash"
+            ],
+            "title": "Basis",
+            "type": "string"
+          },
+          "question": {
+            "maxLength": 240,
+            "minLength": 1,
+            "title": "Question",
+            "type": "string"
+          }
+        },
+        "required": [
+          "question",
+          "as_of",
+          "basis"
+        ],
+        "title": "Question",
         "type": "object"
       },
       "ReadinessResponse": {
@@ -16632,6 +16953,213 @@
         "summary": "Business",
         "tags": [
           "businesses"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/accounting/entry-preview": {
+      "post": {
+        "operationId": "entry_preview_api_v1_businesses__business_id__accounting_entry_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "accrual": "#/components/schemas/Accrual",
+                    "depreciation": "#/components/schemas/Depreciation",
+                    "fx": "#/components/schemas/Conversion"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/Accrual"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Depreciation"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Conversion"
+                  }
+                ],
+                "title": "Data"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DraftCreate"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Entry Preview",
+        "tags": [
+          "accountant tools"
         ]
       }
     },
@@ -31485,6 +32013,194 @@
         ]
       }
     },
+    "/api/v1/businesses/{business_id}/insights/question": {
+      "post": {
+        "operationId": "insight_api_v1_businesses__business_id__insights_question_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Question"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Answer"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Insight",
+        "tags": [
+          "accountant tools"
+        ]
+      }
+    },
     "/api/v1/businesses/{business_id}/invitations": {
       "post": {
         "operationId": "invite_api_v1_businesses__business_id__invitations_post",
@@ -39572,6 +40288,184 @@
         "summary": "Change Policy",
         "tags": [
           "businesses"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/portfolio-status": {
+      "get": {
+        "operationId": "portfolio_status_api_v1_businesses__business_id__portfolio_status_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PortfolioStatus"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Portfolio Status",
+        "tags": [
+          "accountant tools"
         ]
       }
     },

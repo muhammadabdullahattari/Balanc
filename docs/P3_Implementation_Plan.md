@@ -28,3 +28,10 @@ P3 does not introduce autonomous accounting or AI-authorized payments. Human app
 Accounting, security, privacy/legal, operations and product owners approve each provider and workflow. The release candidate passes deployed integration, recovery, tenant isolation, payment safety, audit, accessibility and measured capacity checks; support/on-call and rollback procedures are staffed.
 
 See [feature-by-feature delivery plan](P3_P4_Feature_Implementation_Plan.md) for the full implementation order, dependencies and acceptance checks.
+
+### Local implementation record — 2026-11-19
+
+- **Portfolio:** Enable “Show portfolio review status” in the business chooser to review five authorized businesses per page. Each card shows bank rows awaiting review, oldest pending transaction, latest statement date, bills without linked evidence, and prepared close tasks awaiting review after period end. Open the business to act. Portfolio-wide sorting, assignment and capacity verification remain open.
+- **Accounting questions:** Reports → Ask about your books answers supported questions about monthly net profit, the largest outstanding customer balance, and monthly expense changes. Answers link to saved tenant-scoped reports. Unsupported questions return guidance. No paid model or external data is used.
+- **Journal preparation:** General ledger → Prepare an accounting entry previews accruals, straight-line depreciation installments and FX conversions before explicit posting. Conversion uses a user-supplied rate and source; supported transaction currencies are USD, PKR, GBP, AED and EUR. The original amount and rate are retained in the journal memo. There is no automatic FX feed, revaluation or fixed-asset register in this increment.
+- **Local evidence:** PostgreSQL integration covers the three question types, report retrieval, portfolio permissions, all three journal calculations and posting retries. The Chromium acceptance flow checks portfolio status, a cited answer and an approved GBP journal after recording a partial invoice payment. These tests use synthetic books; they do not establish accounting-policy or production sign-off.

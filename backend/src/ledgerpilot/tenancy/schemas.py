@@ -11,6 +11,7 @@ from ledgerpilot.shared.schemas import Schema
 # Explicit supported pilot currencies. Foreign-currency journals remain disabled.
 CURRENCIES = {
     "USD": 2,
+    "AED": 2,
     "PKR": 2,
     "EUR": 2,
     "GBP": 2,
