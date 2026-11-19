@@ -193,8 +193,68 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
   await expect(
     page.getByRole("link", { name: "Source report 1" }),
   ).toBeVisible();
+  for (const [question, answer] of [
+    ["What was our net profit last month?", "Net profit from"],
+    ["What about revenue?", "Revenue from"],
+    ["And for November 2025 revenue?", "Revenue from 2025-11-01"],
+    [
+      "Compare that with the previous quarter",
+      "Previous full quarter (2025-07-01 through 2025-09-30)",
+    ],
+    ["Which accounts drove that?", "Contributions to revenue change"],
+    ["I am unsure", "Ask about net profit"],
+    ["And expenses?", "Expenses from 2025-11-01"],
+    ["Show the top 5 expense categories", "Largest account amounts"],
+  ]) {
+    await page.getByLabel("Accounting question").fill(question);
+    await page.getByRole("button", { name: "Ask", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: answer }),
+    ).toBeVisible();
+  }
+  const lastAnswered = page.getByText(/Last answered question:/);
+  const remembered = await lastAnswered.textContent();
+  await page.route("**/insights/question", (route) => route.abort("failed"), {
+    times: 1,
+  });
+  await page.getByLabel("Accounting question").fill("What about revenue?");
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  await expect(page.getByRole("alert").first()).toBeVisible();
+  await expect(lastAnswered).toHaveText(remembered!);
+  await page.getByRole("button", { name: /Business workspace/ }).click();
+  const sameNamed = page.getByRole("button", {
+    name: new RegExp(f.business.name),
+  });
+  await sameNamed.nth(index === 0 ? 1 : 0).click();
+  await page.getByRole("link", { name: "Reports", exact: true }).click();
+  await page.getByText("Ask about your books", { exact: true }).click();
+  await expect(lastAnswered).toHaveCount(0);
+  await page.getByLabel("Accounting question").fill("And expenses?");
+  const otherAnswer = page.waitForResponse((r) =>
+    new URL(r.url()).pathname.endsWith("/insights/question"),
+  );
+  await page.getByRole("button", { name: "Ask", exact: true }).click();
+  const response = await otherAnswer;
+  expect(response.url()).not.toContain(f.business.id);
+  expect((await response.json()).report_ids).toEqual([]);
+  await page.getByRole("button", { name: /Business workspace/ }).click();
+  await sameNamed.nth(index).click();
   await page.locator("nav summary").filter({ hasText: "Accounting" }).click();
   await page.getByRole("link", { name: "General ledger", exact: true }).click();
+  await page.getByText("Fixed asset register", { exact: true }).click();
+  await page
+    .getByLabel("Asset name", { exact: true })
+    .fill("Browser printing press");
+  await page.getByLabel("Acquisition date").fill("2026-10-01");
+  await page.getByLabel("Acquisition cost").fill("1200");
+  await page.getByLabel("Residual value").fill("0");
+  await page.getByLabel("Useful life in months").fill("12");
+  await page.getByRole("button", { name: "Create asset", exact: true }).click();
+  await page
+    .getByLabel("Registered asset")
+    .selectOption({ label: "Browser printing press" });
+  await expect(page.getByText("2026-10-31: 100.00 USD")).toBeVisible();
+  await page.getByText("Fixed asset register", { exact: true }).click();
   await page.getByText("Prepare an accounting entry", { exact: true }).click();
   await page.getByLabel("Entry type").selectOption("fx");
   await page.getByLabel("Source reference").fill("Browser FX fixture");
@@ -203,6 +263,16 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
   await page.getByLabel("Transaction currency").selectOption("GBP");
   await page.getByLabel(/per unit of foreign currency/).fill("1.25");
   await page.getByLabel("Exchange rate source").fill("Synthetic browser test");
+  const savedRate = page.waitForResponse((r) =>
+    r.url().endsWith("/fx-rates/override"),
+  );
+  await page.getByRole("button", { name: "Save manual rate" }).click();
+  expect((await savedRate).status()).toBe(200);
+  await page.getByLabel(/per unit of foreign currency/).fill("");
+  await page.getByRole("button", { name: "Look up closing rate" }).click();
+  await expect(page.getByLabel(/per unit of foreign currency/)).toHaveValue(
+    "1.25000000",
+  );
   await page
     .getByLabel("Debit account", { exact: true })
     .selectOption(f.accounts.cost);

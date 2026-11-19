@@ -43,6 +43,14 @@ class Conversion(EntryInputs):
 Entry = Annotated[Accrual | Depreciation | Conversion, Field(discriminator="kind")]
 
 
+def straight_line_installment(base: Decimal, months: int, index: int, unit: Decimal) -> Decimal:
+    """Difference of rounded cumulative amounts allocates the residual cent."""
+    portion = base / months
+    return (portion * index).quantize(unit, ROUND_HALF_EVEN) - (
+        portion * (index - 1)
+    ).quantize(unit, ROUND_HALF_EVEN)
+
+
 def journal_preview(entry: Entry, currency: str, precision: int) -> DraftCreate:
     unit = Decimal(1).scaleb(-precision)
     amount = entry.amount
@@ -57,11 +65,7 @@ def journal_preview(entry: Entry, currency: str, precision: int) -> DraftCreate:
         base = amount - entry.residual
         if base != base.quantize(unit):
             raise DomainError("ERR_PRECISION", "Use the business currency precision.", 422)
-        portion = base / entry.months
-        # Differences between rounded cumulative balances allocate every final cent.
-        amount = (portion * entry.installment).quantize(unit, ROUND_HALF_EVEN) - (
-            portion * (entry.installment - 1)
-        ).quantize(unit, ROUND_HALF_EVEN)
+        amount = straight_line_installment(base, entry.months, entry.installment, unit)
         memo += (
             f"; straight-line {entry.installment}/{entry.months}; cost {entry.amount}; "
             f"residual {entry.residual}"
@@ -93,3 +97,21 @@ def journal_preview(entry: Entry, currency: str, precision: int) -> DraftCreate:
             LineCreate(account_id=entry.credit_account, credit=value),
         ],
     )
+
+
+def revaluation_delta(
+    foreign_units: Decimal, closing_rate: Decimal, carrying_value: Decimal, precision: int
+) -> Decimal:
+    """Signed functional-currency adjustment; debit balances are positive.
+
+    A zero foreign balance may still have a residual carrying value. Round the
+    target carrying value before subtracting so repeat valuation has zero delta.
+    """
+    if not all(value.is_finite() for value in (foreign_units, closing_rate, carrying_value)):
+        raise DomainError("ERR_AMOUNT", "Use finite amounts and rates.", 422)
+    if closing_rate <= 0 or precision not in range(7):
+        raise DomainError("ERR_CURRENCY", "Check the closing rate and currency precision.", 422)
+    unit = Decimal(1).scaleb(-precision)
+    if carrying_value != carrying_value.quantize(unit):
+        raise DomainError("ERR_PRECISION", "Check the carrying balance precision.", 422)
+    return (foreign_units * closing_rate).quantize(unit, ROUND_HALF_EVEN) - carrying_value

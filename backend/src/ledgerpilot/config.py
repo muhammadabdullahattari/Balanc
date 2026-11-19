@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     )
 
     app_env: Literal["local", "test", "demo", "staging", "production"] = "local"
+    fx_provider_url: str = ""
     app_name: str = "LedgerPilot API"
     api_v1_prefix: str = "/api/v1"
     app_db_user: str = "ledgerpilot_app"

@@ -40,14 +40,102 @@ def test_month_boundaries_and_final_cent() -> None:
 
 @pytest.mark.skipif(os.environ.get("RUN_PHASE2_INTEGRATION") != "1", reason="Local PostgreSQL")
 async def test_accountant_tools(
+    monkeypatch: pytest.MonkeyPatch,
     client: httpx.AsyncClient,  # noqa: F811
     database_settings: FileSettings,  # noqa: F811
 ) -> None:
     async with accountant_context(client, database_settings) as (bid, api):
         base, accounts, party = await setup(api, bid)
+        listing = await api.get(
+            "/api/v1/businesses", params={"sort": "name", "search": "unmatched%_"}
+        )
+        assert listing.status_code == 200 and not listing.json()["items"]
+        listing = await api.get("/api/v1/businesses", params={"sort": "name", "limit": 1})
+        assert listing.status_code == 200 and len(listing.json()["items"]) == 1
+        quote = {"day": "2026-12-31", "currency": "GBP"}
+        from ledgerpilot.reports import accountant_tools
+
+        calls = []
+
+        def provider(url, lookup, currency):
+            calls.append(currency)
+            return Decimal("1.25")
+
+        monkeypatch.setattr(accountant_tools, "fetch_quote", provider)
+        for _ in range(2):
+            rate = await api.post(base + "/accounting/fx-rates/lookup", json=quote)
+            assert rate.status_code == 200, rate.text
+            assert Decimal(rate.json()["rate"]) == Decimal("1.25")
+        assert len(calls) == 1
+        overridden = await api.post(
+            base + "/accounting/fx-rates/override",
+            json={**quote, "source": "Documented closing rate", "rate": "1.26"},
+        )
+        assert overridden.status_code == 200
+        rate = await api.post(base + "/accounting/fx-rates/lookup", json=quote)
+        assert Decimal(rate.json()["rate"]) == Decimal("1.26")
+        proposal = {
+            "period_end": "2026-12-31",
+            "currency": "GBP",
+            "foreign_units": "100",
+            "closing_rate": "1.26",
+            "carrying_balance": "120",
+            "rate_source": "Documented closing rate",
+            "monetary_account": accounts["bank"],
+            "gain_account": accounts["income"],
+            "loss_account": accounts["cost"],
+        }
+        first = await api.post(base + "/accounting/revaluation-preview", json=proposal)
+        assert first.status_code == 200, first.text
+        second = await api.post(base + "/accounting/revaluation-preview", json=proposal)
+        assert second.json() == first.json()
+        assert Decimal(first.json()["lines"][0]["debit"]) == 6
+        assert (
+            await api.post(
+                base + "/accounting/revaluation-preview", json={**proposal, "closing_rate": "1.29"}
+            )
+        ).status_code == 409
+        created = await api.post(
+            base + "/accounting/assets",
+            json={
+                "name": "Press",
+                "acquired": "2024-02-29",
+                "cost": "150.00",
+                "residual": "30",
+                "months": 12,
+            },
+        )
+        assert created.status_code == 201, created.text
+        asset_id = created.json()["id"]
+        assets = (await api.get(base + "/accounting/assets")).json()
+        assert assets[0]["id"] == asset_id
+        schedule = (await api.get(base + "/accounting/assets/" + asset_id + "/schedule")).json()
+        assert schedule[0]["date"] == "2024-02-29"
+        assert sum(Decimal(item["amount"]) for item in schedule) == Decimal("120")
+        disposed = await api.patch(
+            base + "/accounting/assets/" + asset_id,
+            json={"name": "Press", "expected_version": 1, "disposed_on": "2026-10-31"},
+        )
+        assert disposed.status_code == 200, disposed.text
         for kind in ("bill", "invoice"):
             issued = await invoice(api, base, accounts, party, kind)
             assert issued.status_code == 201
+            if kind == "bill":
+                doc = issued.json()["id"]
+                assignee = (await api.get("/api/v1/auth/me")).json()["id"]
+                endpoint = f"{base}/portfolio-exceptions/bill/{doc}"
+                for previous, target in [(None, assignee), (assignee, None)]:
+                    changed = await api.post(
+                        endpoint + "/assignment",
+                        json={"assignee": target, "expected_assignee": previous},
+                    )
+                    assert changed.status_code == 200, changed.text
+                    assert changed.json()["assignee"] == target
+                history = (await api.get(endpoint + "/assignment-history")).json()
+                assert [(event["previous_user"], event["assigned_user"]) for event in history] == [
+                    (assignee, None),
+                    (None, assignee),
+                ]
         summary = await api.get(base + "/portfolio-status")
         assert summary.status_code == 200
         assert summary.json()["bills_without_evidence"] == 1
@@ -56,6 +144,17 @@ async def test_accountant_tools(
             ("What was our net profit last month?", "Net profit"),
             ("Which client owes us the most?", "Synthetic multi-role party"),
             ("Show me why expenses spiked in October", "Largest increase"),
+            ("show me revenue in October", "Revenue from 2026-10-01"),
+            (
+                "explain net profit change versus previous month in October",
+                "Contributions to net profit change",
+            ),
+            ("show me expenses in October", "Expenses from 2026-10-01"),
+            (
+                "compare revenue with previous quarter in January 2026",
+                "2025-10-01 through 2025-12-31",
+            ),
+            ("show top expense accounts in February 2024", "2024-02-29"),
         ]:
             answer = await api.post(
                 base + "/insights/question",
@@ -95,3 +194,35 @@ async def test_accountant_tools(
             posted = await api.post(base + "/journals", json=payload)
             assert posted.status_code == 201, posted.text
             assert (await api.post(base + "/journals", json=payload)).json() == posted.json()
+
+
+@pytest.mark.parametrize(
+    "units,rate,carrying,expected",
+    [
+        ("100", "1.25", "120", "5"),
+        ("-100", "1.25", "-120", "-5"),
+        ("0", "1.25", "0.01", "-0.01"),
+        ("100", "1.25", "125", "0"),
+    ],
+)
+def test_revaluation_amount(units: str, rate: str, carrying: str, expected: str) -> None:
+    from ledgerpilot.accounting.entry_tools import revaluation_delta
+
+    assert revaluation_delta(Decimal(units), Decimal(rate), Decimal(carrying), 2) == Decimal(
+        expected
+    )
+
+
+def test_quote_outage(monkeypatch: pytest.MonkeyPatch) -> None:
+    from ledgerpilot.reports.accountant_tools import QuoteLookup, fetch_quote
+    from ledgerpilot.shared.errors import DomainError
+
+    def offline(*args, **kwargs):
+        raise httpx.ConnectTimeout("offline")
+
+    monkeypatch.setattr(httpx, "get", offline)
+    with pytest.raises(DomainError, match="ERR_PROVIDER") as error:
+        fetch_quote(
+            "https://provider.invalid", QuoteLookup(day=date(2024, 2, 29), currency="GBP"), "USD"
+        )
+    assert error.value.status == 503 and "Could not verify" in error.value.message

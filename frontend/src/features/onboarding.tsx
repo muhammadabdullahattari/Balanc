@@ -1,3 +1,4 @@
+import { PortfolioTriage } from "./portfolio-triage";
 import { QRCodeSVG } from "qrcode.react";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
@@ -132,16 +133,24 @@ export function BusinessChooser({
   identity: components["schemas"]["IdentityRead"];
   onChoose: (id: string) => void;
 }) {
+  const [search, setSearch] = useState("");
   const [portfolio, setPortfolio] = useState(false);
   const [open, setOpen] = useState(false);
   const [cursor, setCursor] = useState<string | undefined>();
   const businesses = useQuery({
-    queryKey: [...keys.businesses, cursor, portfolio],
+    queryKey: [...keys.businesses, cursor, portfolio, search],
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/businesses", {
           signal,
-          params: { query: { limit: portfolio ? 5 : 50, cursor } },
+          params: {
+            query: {
+              limit: portfolio ? 5 : 50,
+              cursor,
+              sort: portfolio ? "name" : "id",
+              search: portfolio ? search : "",
+            },
+          },
         }),
       ),
   });
@@ -207,6 +216,25 @@ export function BusinessChooser({
         />{" "}
         Show portfolio review status
       </label>
+      {portfolio && (
+        <Field label="Find a business by name">
+          <input
+            type="search"
+            maxLength={100}
+            value={search}
+            onChange={(e) => {
+              setCursor(undefined);
+              setSearch(e.target.value);
+            }}
+          />
+        </Field>
+      )}
+      {portfolio && (
+        <details>
+          <summary>Review and assign portfolio exceptions</summary>
+          <PortfolioTriage />
+        </details>
+      )}
       {businesses.isPending ? (
         <Loading />
       ) : (

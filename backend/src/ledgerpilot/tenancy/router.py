@@ -1,15 +1,16 @@
 """Business selection is always authorized against durable membership."""
 
-from typing import cast
+from typing import Literal, cast
 from uuid import UUID
 
 from fastapi import APIRouter, Query, Request
-from sqlalchemy import Date, func, select, text
+from sqlalchemy import Date, func, select, text, tuple_
 
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.identity.schemas import TokenRequest
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.responses import BusinessRead, BusinessSummary, Identifier, Page
+from ledgerpilot.shared.schemas import Schema
 from ledgerpilot.tenancy import service
 from ledgerpilot.tenancy.models import Business, PolicyHistory
 from ledgerpilot.tenancy.schemas import BusinessCreate, InviteCreate, PolicyChange
@@ -24,7 +25,12 @@ def create(data: BusinessCreate, identity: Identity, db: DB) -> dict[str, str]:
 
 @router.get("/businesses", response_model=Page[BusinessSummary])
 def businesses(
-    identity: Identity, db: DB, limit: int = Query(50, ge=1, le=200), cursor: UUID | None = None
+    identity: Identity,
+    db: DB,
+    limit: int = Query(50, ge=1, le=200),
+    cursor: UUID | None = None,
+    sort: Literal["id", "name"] = "id",
+    search: str = Query("", max_length=100),
 ) -> dict[str, object]:
     active_basis = (
         select(PolicyHistory.basis)
@@ -36,13 +42,19 @@ def businesses(
         .limit(1)
         .scalar_subquery()
     )
-    query = (
-        select(Business, func.coalesce(active_basis, Business.basis))
-        .order_by(Business.id)
-        .limit(limit + 1)
-    )
-    if cursor:
-        query = query.where(Business.id > cursor)
+    query = select(Business, func.coalesce(active_basis, Business.basis)).limit(limit + 1)
+    name = func.lower(Business.name)
+    if search.strip():
+        query = query.where(name.contains(search.strip().lower(), autoescape=True))
+    if sort == "name":
+        query = query.order_by(name, Business.id)
+        if cursor:
+            anchor = select(name).where(Business.id == cursor).correlate(None).scalar_subquery()
+            query = query.where(tuple_(name, Business.id) > tuple_(anchor, cursor))
+    else:
+        query = query.order_by(Business.id)
+        if cursor:
+            query = query.where(Business.id > cursor)
     rows = [(cast(Business, row[0]), str(row[1])) for row in db.execute(query)]
     return {
         "items": [
@@ -163,3 +175,57 @@ def change_policy(
         },
     ).scalar_one()
     return {"policy_version": version}
+
+
+class PortfolioRow(Schema):
+    business_id: UUID
+    business_name: str
+    exceptions: int
+    severity: int
+    assignees: list[UUID]
+
+
+@router.get("/portfolio", response_model=list[PortfolioRow])
+def portfolio(
+    identity: Identity,
+    db: DB,
+    sort: Literal["exceptions", "status", "severity", "assignee"] = "exceptions",
+    status: Literal["all", "clear", "open"] = "all",
+    severity: int | None = Query(None, ge=0, le=3),
+    assignee: UUID | None = None,
+    minimum: int = Query(0, ge=0),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+) -> list[dict[str, object]]:
+    from ledgerpilot.shared.errors import DomainError
+
+    if not identity.family.mfa:
+        raise DomainError("ERR_MFA_REQUIRED", "Verify your sign-in to open the portfolio.", 403)
+    order = {
+        "exceptions": "exceptions DESC",
+        "status": "(exceptions>0) DESC",
+        "severity": "severity DESC",
+        "assignee": "assignees[1] NULLS LAST",
+    }[sort]
+    rows = db.execute(
+        text(
+            """
+        SELECT * FROM app.portfolio_counts() WHERE exceptions>=:minimum
+        AND (:status='all' OR (:status='clear' AND exceptions=0) OR (
+          :status='open' AND exceptions>0))
+        AND (CAST(:level AS integer) IS NULL OR severity=:level)
+        AND (CAST(:assignee AS uuid) IS NULL OR :assignee=ANY(assignees))
+        ORDER BY """
+            + order
+            + ",business_name,business_id LIMIT :limit OFFSET :offset"
+        ),
+        {
+            "minimum": minimum,
+            "status": status,
+            "level": severity,
+            "assignee": assignee,
+            "limit": limit,
+            "offset": offset,
+        },
+    )
+    return [dict(row) for row in rows.mappings()]
