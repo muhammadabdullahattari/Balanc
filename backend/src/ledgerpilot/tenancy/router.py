@@ -18,8 +18,8 @@ router = APIRouter(tags=["businesses"])
 
 
 @router.post("/businesses", status_code=201, response_model=Identifier)
-def create(data: BusinessCreate, identity: Identity, db: DB) -> dict[str, str]:
-    return {"id": str(service.create(db, identity, data))}
+def create(data: BusinessCreate, request: Request, identity: Identity, db: DB) -> dict[str, str]:
+    return {"id": str(service.create(db, identity, data, request.app.state.settings))}
 
 
 @router.get("/businesses", response_model=Page[BusinessSummary])
@@ -64,6 +64,8 @@ def business(business_id: UUID, request: Request, identity: Identity, db: DB) ->
     service.authorize(db, identity, business_id)
     b = service.get_business(db, business_id)
     policy = service.effective_policy(db, b)
+    settings = request.app.state.settings
+    paid = settings.app_env != "demo" and service.has_paid_subscription(db, b.id)
     return {
         "id": str(b.id),
         "name": b.name,
@@ -75,13 +77,13 @@ def business(business_id: UUID, request: Request, identity: Identity, db: DB) ->
         "policy_version": policy.version if policy else 1,
         "fiscal_month": b.fiscal_month,
         "jurisdiction": policy.jurisdiction if policy else b.jurisdiction,
-        "p2_projects_available": request.app.state.settings.allows_p2_projects(b.id),
-        "p2_insights_available": request.app.state.settings.allows_p2_insights(b.id),
-        "p2_retention_available": request.app.state.settings.allows_p2_retention(b.id),
-        "p2_audit_available": request.app.state.settings.allows_p2_audit(b.id),
-        "p2_reconciliation_available": request.app.state.settings.allows_p2_reconciliation(b.id),
-        "p2_micro_close_available": request.app.state.settings.allows_p2_micro_close(b.id),
-        "p2_prepaids_available": request.app.state.settings.allows_p2_prepaids(b.id),
+        "p2_projects_available": paid or settings.allows_p2_projects(b.id),
+        "p2_insights_available": paid or settings.allows_p2_insights(b.id),
+        "p2_retention_available": paid or settings.allows_p2_retention(b.id),
+        "p2_audit_available": paid or settings.allows_p2_audit(b.id),
+        "p2_reconciliation_available": paid or settings.allows_p2_reconciliation(b.id),
+        "p2_micro_close_available": paid or settings.allows_p2_micro_close(b.id),
+        "p2_prepaids_available": paid or settings.allows_p2_prepaids(b.id),
     }
 
 

@@ -30,12 +30,13 @@ def get_redis_client(settings: Settings) -> Redis | None:
     global _REDIS_CLIENT
     if _REDIS_CLIENT is not None:
         return _REDIS_CLIENT
-    if settings.rate_redis_url:
+    rate_redis_url = getattr(settings, "rate_redis_url", None)
+    if rate_redis_url:
         try:
             _REDIS_CLIENT = Redis.from_url(
-                settings.rate_redis_url.get_secret_value(),
+                rate_redis_url.get_secret_value(),
                 decode_responses=True,
-                socket_timeout=settings.rate_redis_timeout_seconds,
+                socket_timeout=getattr(settings, "rate_redis_timeout_seconds", 1.0),
             )
             return _REDIS_CLIENT
         except Exception as exc:
@@ -91,8 +92,21 @@ def evaluate_verification_cooldown(
         started_at = instant
         blocked_until = None
 
+    daily_limit = getattr(settings, "verification_daily_limit", 3)
+    if not isinstance(daily_limit, int):
+        daily_limit = 3
+    gap_1 = getattr(settings, "verification_gap_1_seconds", 900)
+    if not isinstance(gap_1, int):
+        gap_1 = 900
+    gap_2 = getattr(settings, "verification_gap_2_seconds", 1800)
+    if not isinstance(gap_2, int):
+        gap_2 = 1800
+    gap_3 = getattr(settings, "verification_gap_3_seconds", 3600)
+    if not isinstance(gap_3, int):
+        gap_3 = 3600
+
     # 4. Enforce daily limit (Max 3 emails per 24 hours)
-    if attempts >= settings.verification_daily_limit:
+    if attempts >= daily_limit:
         window_end = started_at + daily_window
         wait = max(1, math.ceil((window_end - instant).total_seconds()))
         raise DomainError(
@@ -118,14 +132,14 @@ def evaluate_verification_cooldown(
     # 6. Request is permitted: advance attempt counter and calculate next cooldown gap
     new_attempts = attempts + 1
     if new_attempts == 1:
-        gap_seconds = settings.verification_gap_1_seconds
+        gap_seconds = gap_1
     elif new_attempts == 2:
-        gap_seconds = settings.verification_gap_2_seconds
+        gap_seconds = gap_2
     else:
-        gap_seconds = settings.verification_gap_3_seconds
+        gap_seconds = gap_3
 
     next_blocked = instant + timedelta(seconds=gap_seconds)
-    if new_attempts >= settings.verification_daily_limit:
+    if new_attempts >= daily_limit:
         # Cap at end of 24-hour window
         next_blocked = max(next_blocked, started_at + daily_window)
 

@@ -163,7 +163,29 @@ class ErrorBoundary extends Component<
   }
 }
 function Workspace() {
-  const [businessId, setBusinessId] = useState<string>();
+  const [onboardingReturn, setOnboardingReturn] = useState<{
+    sessionId?: string;
+    canceled?: boolean;
+  }>(() => {
+    if (typeof window === "undefined") return {};
+    const params = new URLSearchParams(window.location.search);
+    const state = params.get("onboarding_checkout");
+    if (state === "success") {
+      return { sessionId: params.get("session_id") || undefined };
+    }
+    if (state === "canceled") {
+      return { canceled: true };
+    }
+    return {};
+  });
+  const [businessId, setBusinessId] = useState<string | undefined>(() => {
+    if (typeof window === "undefined") return undefined;
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("onboarding_checkout")) return undefined;
+    const returnedBid = params.get("business_id");
+    if (returnedBid && params.has("billing")) return returnedBid;
+    return undefined;
+  });
   const [mobile, setMobile] = useState(false);
   const [narrow, setNarrow] = useState(
     () =>
@@ -343,10 +365,25 @@ function Workspace() {
   if (!session.data) return <Auth />;
   if (location.pathname === "/audit-access")
     return <AuditRecipient accountId={session.data.id} />;
+  const clearOnboardingReturn = () => {
+    setOnboardingReturn({});
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has("onboarding_checkout") || params.has("session_id")) {
+        params.delete("onboarding_checkout");
+        params.delete("session_id");
+        const clean = params.toString();
+        window.history.replaceState({}, "", "/" + (clean ? `?${clean}` : ""));
+      }
+    }
+  };
   if (!businessId)
     return (
       <BusinessChooser
         identity={session.data}
+        initialOnboardingSessionId={onboardingReturn.sessionId}
+        initialOnboardingCanceled={onboardingReturn.canceled}
+        onClearOnboardingReturn={clearOnboardingReturn}
         onChoose={(id) => {
           setBusinessId(id);
           navigate("/");
@@ -589,6 +626,10 @@ function Workspace() {
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route
+                    path="/settings/billing"
+                    element={<Settings initialSection="billing" />}
+                  />
                   <Route
                     path="*"
                     element={

@@ -482,6 +482,26 @@ class Settings(BaseSettings):
         return self.frontend_origins.split(",")
 
     @property
+    def stripe_billing_configured(self) -> bool:
+        key = self.stripe_secret_key.get_secret_value() if self.stripe_secret_key else ""
+        return (
+            key.startswith(("sk_test_", "rk_test_"))
+            and any(
+                p.startswith("price_")
+                for p in (
+                    self.stripe_starter_price_id,
+                    self.stripe_growth_price_id,
+                    self.stripe_enterprise_price_id,
+                )
+            )
+            and urlsplit(self.billing_return_url).scheme == "https"
+        )
+
+    @property
+    def require_plan_before_business(self) -> bool:
+        return self.app_env != "test" and self.stripe_billing_configured
+
+    @property
     def total_db_connection_budget(self) -> int:
         """Global connection budget across API replicas, worker replicas, and admin headroom."""
         per_api_replica = self.db_pool_size + self.db_max_overflow + self.rate_db_pool_size

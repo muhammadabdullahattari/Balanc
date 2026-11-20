@@ -113,14 +113,16 @@ def verification_delivery(db: Session, settings: Settings, user_id: UUID, email:
 
 def dispatch_identity_email(settings: Settings, recipient: str, purpose: str, token: str) -> None:
     """Dispatch email asynchronously via Celery if available, with synchronous fallback."""
-    try:
-        from ledgerpilot.identity.tasks import send_verification_email_task
+    app_env = getattr(settings, "app_env", "test")
+    if isinstance(app_env, str) and app_env != "test":
+        try:
+            from ledgerpilot.identity.tasks import send_verification_email_task
 
-        send_verification_email_task.delay(recipient, purpose, token)
-        logger.info("Queued %s email to %s via Celery task", purpose, recipient)
-        return
-    except Exception as exc:
-        logger.debug("Celery queue dispatch failed (%s); using direct delivery", exc)
+            send_verification_email_task.delay(recipient, purpose, token)
+            logger.info("Queued %s email to %s via Celery task", purpose, recipient)
+            return
+        except Exception as exc:
+            logger.debug("Celery queue dispatch failed (%s); using direct delivery", exc)
     mail.deliver(settings, recipient, purpose, token)
 
 
@@ -138,7 +140,10 @@ def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purp
         from ledgerpilot.identity.verification_limiter import evaluate_verification_cooldown
 
         evaluate_verification_cooldown(settings, user, email, instant)
-        if user.verification_attempts >= settings.verification_daily_limit:
+        daily_limit = getattr(settings, "verification_daily_limit", 3)
+        if not isinstance(daily_limit, int):
+            daily_limit = 3
+        if user.verification_attempts >= daily_limit:
             record(db, user_id, "identity.verification_limited")
     # Only the newest token of this purpose can be consumed.
     db.execute(

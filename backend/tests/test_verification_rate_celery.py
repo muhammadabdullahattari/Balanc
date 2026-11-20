@@ -15,6 +15,7 @@ from ledgerpilot.shared.errors import DomainError
 
 def dummy_settings(**kwargs) -> Settings:
     defaults = {
+        "app_env": "local",
         "auth_delivery_enabled": True,
         "verification_gap_1_seconds": 900,  # 15 mins
         "verification_gap_2_seconds": 1800,  # 30 mins

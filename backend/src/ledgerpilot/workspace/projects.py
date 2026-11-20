@@ -14,7 +14,7 @@ from ledgerpilot.config import Settings
 from ledgerpilot.identity.dependencies import Principal
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
-from ledgerpilot.tenancy.service import get_business
+from ledgerpilot.tenancy.service import allows_feature, get_business
 from ledgerpilot.trade import repository
 from ledgerpilot.trade.schemas import DocumentCreate, SourceLine, exact_amount
 
@@ -85,8 +85,13 @@ class ProjectTotals(Schema):
     margin: str
 
 
-def gate(settings: Settings, bid: UUID) -> None:
-    if not settings.allows_p2_projects(bid):
+def gate(settings: Settings, bid: UUID, db: Session | None = None) -> None:
+    allowed = (
+        allows_feature(db, settings, bid, "projects")
+        if db is not None
+        else settings.allows_p2_projects(bid)
+    )
+    if not allowed:
         raise DomainError("ERR_NOT_FOUND", "Projects are unavailable in this workspace.", 404)
 
 

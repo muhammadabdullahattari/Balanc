@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 191,
-  "distinct_operations": 153,
+  "call_sites": 198,
+  "distinct_operations": 159,
   "operations": [
     {
       "file": "App.tsx",
@@ -201,7 +201,27 @@
     {
       "file": "features/billing.tsx",
       "method": "GET",
+      "path": "/api/v1/billing/plans"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "GET",
       "path": "/api/v1/businesses/{business_id}/billing/subscription"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/billing/invoices"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/billing/reconcile"
+    },
+    {
+      "file": "features/billing.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/billing/checkout"
     },
     {
       "file": "features/billing.tsx",
@@ -216,7 +236,7 @@
     {
       "file": "features/billing.tsx",
       "method": "POST",
-      "path": "/api/v1/businesses/{business_id}/billing/checkout"
+      "path": "/api/v1/businesses/{business_id}/billing/subscription/resume"
     },
     {
       "file": "features/cleanup.tsx",
@@ -592,6 +612,21 @@
       "file": "features/onboarding.tsx",
       "method": "GET",
       "path": "/api/v1/businesses"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "GET",
+      "path": "/api/v1/billing/plans"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "GET",
+      "path": "/api/v1/billing/onboarding/status"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "POST",
+      "path": "/api/v1/billing/onboarding/checkout"
     },
     {
       "file": "features/onboarding.tsx",

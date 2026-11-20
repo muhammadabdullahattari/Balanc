@@ -18,14 +18,26 @@ import {
 } from "../components/ui";
 import { useBusiness, useAccess } from "./context";
 import type { components } from "../api/generated/schema";
-export function Settings() {
+export function Settings({ initialSection }: { initialSection?: string } = {}) {
   const b = useBusiness();
   const access = useAccess();
   const role = access?.role ?? "";
   const isOwner = role === "owner";
   const canManageTeam = role === "owner" || role === "accountant";
   const path = { business_id: b.id };
-  const [section, setSection] = useState("business");
+  const [section, setSection] = useState(() => {
+    if (initialSection) return initialSection;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (
+        window.location.pathname.endsWith("/billing") ||
+        params.has("billing")
+      ) {
+        return "billing";
+      }
+    }
+    return "business";
+  });
   const members = useQuery({
     queryKey: [...keys.business(b.id), "members"],
     enabled: section === "team",

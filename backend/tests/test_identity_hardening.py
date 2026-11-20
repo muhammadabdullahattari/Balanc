@@ -127,31 +127,58 @@ async def auth_client(database_settings: FileSettings):
 
 @REAL
 async def test_resend_replaces_codes_and_three_issuances_pause_new_requests(
-    auth_client: httpx.AsyncClient,
+    auth_client: httpx.AsyncClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    from ledgerpilot.identity import service
+
     api = auth_client
     email = uuid4().hex + "@example.com"
     first = "Initial account phrase 7! " + uuid4().hex
     second = "Updated account phrase 7! " + uuid4().hex
+    t0 = service.now()
+    monkeypatch.setattr(service, "now", lambda: t0)
     assert (
         await api.post("/api/v1/auth/register", json={"email": email, "password": first})
     ).status_code == 202
     code1 = await mail_token(email)
+    # Immediate resend is blocked by the 15-minute cooldown gap.
+    early = await api.post("/api/v1/auth/register", json={"email": email, "password": second})
+    assert early.status_code == 429 and early.json()["error"]["code"] == "ERR_VERIFICATION_COOLDOWN"
+    # After 16 minutes, 2nd issuance succeeds and supersedes code1.
+    t1 = t0 + timedelta(minutes=16)
+    monkeypatch.setattr(service, "now", lambda: t1)
     assert (
         await api.post("/api/v1/auth/register", json={"email": email, "password": second})
     ).status_code == 202
     code2 = await mail_token(email)
     assert code1 != code2
     assert (await api.post("/api/v1/auth/verify", json={"token": code1})).status_code == 410
+    # After 31 minutes more, 3rd issuance succeeds and supersedes code2.
+    t2 = t1 + timedelta(minutes=31)
+    monkeypatch.setattr(service, "now", lambda: t2)
     assert (
         await api.post("/api/v1/auth/verification-request", json={"email": email})
     ).status_code == 202
     code3 = await mail_token(email)
     assert (await api.post("/api/v1/auth/verify", json={"token": code2})).status_code == 410
+    # 4th issuance within 24 hours is blocked by the daily cap.
     denied = await api.post("/api/v1/auth/verification-request", json={"email": email})
     assert denied.status_code == 429 and denied.json()["error"]["code"] == "ERR_VERIFICATION_LIMIT"
-    assert 86000 <= int(denied.headers["Retry-After"]) <= 86400
+    assert 80000 <= int(denied.headers["Retry-After"]) <= 86400
     assert (await api.post("/api/v1/auth/verify", json={"token": code3})).status_code == 200
+    # Clear the 1-minute per-email rate bucket consumed by the extra cooldown probe above.
+    from sqlalchemy import text
+
+    from ledgerpilot.identity.security import digest
+
+    with api._transport.app.state.rate_sessions.begin() as db:
+        db.execute(
+            text(
+                "UPDATE app.auth_rate_buckets SET started_at=now()-interval '2 minutes',"
+                "attempts=0,blocked_until=NULL WHERE key=:key"
+            ),
+            {"key": digest("identity:" + email.casefold())},
+        )
     authenticated = await api.post("/api/v1/auth/login", json={"email": email, "password": second})
     assert authenticated.status_code == 200, authenticated.text
     assert (await api.get("/api/v1/auth/me")).json()["verified"]
@@ -262,9 +289,8 @@ async def test_parallel_registration_cannot_bypass_daily_limit_and_expiry_restor
     responses = await asyncio.gather(
         *(api.post("/api/v1/auth/register", json=body) for _ in range(3))
     )
-    # Bounded hash/lock/mail admission can reject a concurrent attempt safely.
-    # Assert the durable security invariant, not unlimited concurrent availability.
-    assert all(r.status_code in {202, 503} for r in responses)
+    # Bounded hash/lock/mail admission and cooldown guards reject concurrent duplicates safely.
+    assert all(r.status_code in {202, 429, 503} for r in responses)
     for response in responses:
         if response.status_code == 503:
             assert response.json()["error"]["code"] in {
@@ -280,8 +306,11 @@ async def test_parallel_registration_cannot_bypass_daily_limit_and_expiry_restor
         assert user is not None
         set_context(db, user.id)
         assert user.verification_attempts == accepted
-        assert (user.verification_blocked_until is not None) == (accepted == 3)
-    for _ in range(3 - accepted):
+        assert user.verification_blocked_until is not None
+    current_time = service.now()
+    for step in range(3 - accepted):
+        current_time = current_time + timedelta(minutes=16 if step == 0 else 31)
+        monkeypatch.setattr(service, "now", lambda t=current_time: t)
         retry = await api.post("/api/v1/auth/register", json=body)
         assert retry.status_code == 202, retry.text
     # The following checks cover the daily policy, independently of the separate
@@ -361,9 +390,8 @@ async def test_verification_cannot_activate_another_browsers_pending_password(
             failed.status_code == 410
             and failed.json()["error"]["code"] == "ERR_VERIFICATION_SESSION"
         )
-        assert (
-            await other.post("/api/v1/auth/verification-request", json={"email": email})
-        ).status_code == 202
+        other_req = await other.post("/api/v1/auth/verification-request", json={"email": email})
+        assert other_req.status_code == 429
         assert await mail_token(email) == token
     assert (await api.post("/api/v1/auth/verify", json={"token": token})).status_code == 200
 

@@ -28,7 +28,7 @@ from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.operations import account
 from ledgerpilot.shared.responses import Page
-from ledgerpilot.tenancy.service import authorize, get_business
+from ledgerpilot.tenancy.service import allows_feature, authorize, get_business
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["banking"])
 
@@ -339,7 +339,7 @@ def shadow_evaluation(
     db: DB,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Rule shadow evaluation is unavailable.", 404)
     return shadow.evaluate(db, business_id, rule(db, business_id, rule_id), start, end, max_amount)
 
@@ -355,7 +355,7 @@ def get_controlled_posting_control(
     db: DB,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
     return shadow.get_workspace_posting_control(db, business_id)
 
@@ -373,7 +373,7 @@ def set_controlled_posting_pause(
     reason: str | None = None,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
     get_business(db, business_id, lock=True)
     return shadow.set_workspace_posting_control(
@@ -403,7 +403,7 @@ def rule_controlled_posting(
     expected_preview_hash: Annotated[str | None, Query(pattern=r"^[a-f0-9]{64}$")] = None,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"}, posting=not dry_run)
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Controlled posting is unavailable.", 404)
     if not dry_run:
         get_business(db, business_id, lock=True)
@@ -628,7 +628,7 @@ def statement_preview(
     from ledgerpilot.banking.reconciliation import preview
 
     authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
-    if not request.app.state.settings.allows_p2_reconciliation(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "reconciliation"):
         raise DomainError("ERR_NOT_FOUND", "Statement preview is unavailable.", 404)
     return preview(db, get_business(db, business_id), data)
 

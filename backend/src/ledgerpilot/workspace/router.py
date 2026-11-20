@@ -14,7 +14,7 @@ from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.notifications import email_operations, email_outbox
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
-from ledgerpilot.tenancy.service import authorize, get_business
+from ledgerpilot.tenancy.service import allows_feature, authorize, get_business
 from ledgerpilot.trade.models import Operation, TradeDocument
 from ledgerpilot.workspace import (
     beneficiaries,
@@ -58,15 +58,21 @@ from ledgerpilot.workspace.schemas import (
 router = APIRouter(prefix="/businesses/{business_id}", tags=["workspace"])
 
 
-def require_prepaids(request: Request, business_id: UUID) -> None:
-    if not request.app.state.settings.allows_p2_prepaids(business_id):
+def require_prepaids(request: Request, business_id: UUID, db: DB | None = None) -> None:
+    settings = request.app.state.settings
+    allowed = (
+        allows_feature(db, settings, business_id, "prepaids")
+        if db is not None
+        else settings.allows_p2_prepaids(business_id)
+    )
+    if not allowed:
         raise DomainError("ERR_NOT_FOUND", "Prepaid schedules are unavailable.", 404)
 
 
 @router.get("/prepaids", response_model=prepaids.Schedules)
 def prepaid_list(business_id: UUID, request: Request, identity: Identity, db: DB) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    require_prepaids(request, business_id)
+    require_prepaids(request, business_id, db)
     return {"items": prepaids.schedules(db, business_id)}
 
 
@@ -75,7 +81,7 @@ def prepaid_sources(
     business_id: UUID, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, prepaids.WRITERS)
-    require_prepaids(request, business_id)
+    require_prepaids(request, business_id, db)
     return {"items": prepaids.sources(db, business_id)}
 
 
@@ -84,7 +90,7 @@ def prepaid_prepare(
     business_id: UUID, request: Request, identity: Identity, db: DB, data: prepaids.Prepare
 ) -> dict[str, str]:
     authorize(db, identity, business_id, prepaids.WRITERS)
-    require_prepaids(request, business_id)
+    require_prepaids(request, business_id, db)
     return {"id": str(prepaids.prepare(db, identity, business_id, data))}
 
 
@@ -98,7 +104,7 @@ def prepaid_recognize(
     data: prepaids.Recognize,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, prepaids.WRITERS, posting=True)
-    require_prepaids(request, business_id)
+    require_prepaids(request, business_id, db)
     return prepaids.recognize(
         db,
         identity,
@@ -112,7 +118,7 @@ def projects_list(
     business_id: UUID, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     return {"items": projects.list_projects(db, business_id)}
 
 
@@ -121,7 +127,7 @@ def project_create(
     business_id: UUID, data: projects.ProjectCreate, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, projects.WRITERS)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     return projects.create_project(db, identity, business_id, data)
 
 
@@ -130,7 +136,7 @@ def project_ledger_lines(
     business_id: UUID, request: Request, identity: Identity, db: DB, start: date, end: date
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     return {"items": projects.ledger_lines(db, business_id, start, end)}
 
 
@@ -145,7 +151,7 @@ def project_totals(
     end: date,
 ) -> dict[str, str]:
     authorize(db, identity, business_id)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     return projects.profitability(db, business_id, project_id, start, end)
 
 
@@ -159,7 +165,7 @@ def project_line_tag(
     db: DB,
 ) -> dict[str, str]:
     authorize(db, identity, business_id, projects.WRITERS)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     projects.tag_line(db, identity, business_id, line_id, data)
     return {"status": "tagged"}
 
@@ -173,7 +179,7 @@ def project_billable_draft(
     business_id: UUID, data: projects.RebillDraft, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, projects.WRITERS)
-    projects.gate(request.app.state.settings, business_id)
+    projects.gate(request.app.state.settings, business_id, db)
     return projects.draft_invoice(db, identity, business_id, data)
 
 
@@ -981,7 +987,7 @@ def answer(
 ) -> dict[str, Any]:
     result = report(business_id, data.report_id, identity, db)
     if data.metric in {"forecast_first_shortfall", "forecast_closing_cash"}:
-        if not request.app.state.settings.allows_p2_insights(business_id):
+        if not allows_feature(db, request.app.state.settings, business_id, "insights"):
             raise DomainError("ERR_NOT_FOUND", "Forecast answers are unavailable.", 404)
         if result.get("basis") != "deterministic_cash_plan" or not result.get("weeks"):
             raise DomainError("ERR_METRIC", "Choose a saved cash forecast for this question.")
@@ -1373,7 +1379,7 @@ def micro_close_workpaper(
     business_id: UUID, as_of: date, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    if not request.app.state.settings.allows_p2_micro_close(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "micro_close"):
         raise DomainError("ERR_NOT_FOUND", "Nightly close is unavailable.", 404)
     workpaper = micro_close.lookup(db, business_id, as_of)
     return {
