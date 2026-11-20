@@ -163,9 +163,11 @@ export function QuickBooksImport() {
               alignItems: "center",
               gap: "0.5rem",
               padding: "0.5rem",
-              background: "var(--surface-raised, #1a1a24)",
+              background: "var(--surface-alt)",
+              border: "1px solid var(--line)",
               borderRadius: "4px",
               cursor: "pointer",
+              color: "var(--ink)",
             }}
           >
             <input

@@ -6194,6 +6194,11 @@ export interface components {
             can_invite: boolean;
             /** Can Post */
             can_post: boolean;
+            /**
+             * Email
+             * @description Member's email address (populated when caller has directory access)
+             */
+            email?: string | null;
             /** Role */
             role: string;
             /**

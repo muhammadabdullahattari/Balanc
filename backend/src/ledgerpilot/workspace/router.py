@@ -889,7 +889,8 @@ def current_membership(business_id: UUID, identity: Identity, db: DB) -> dict[st
     response_model_exclude_unset=True,
 )
 def members(business_id: UUID, identity: Identity, db: DB) -> dict[str, Any]:
-    authorize(db, identity, business_id, {"owner", "accountant"})
+    # Any active member may read the team directory; the SQL function enforces scope.
+    authorize(db, identity, business_id)
     rows = db.execute(text("SELECT * FROM app.list_members(:bid) LIMIT 201"), {"bid": business_id})
     result: list[dict[str, Any]] = [dict(r) for r in rows.mappings()]
     if len(result) > 200:

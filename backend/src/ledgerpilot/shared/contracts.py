@@ -535,6 +535,7 @@ Comparison = obj(
 Member = obj(
     "MembershipRead",
     user_id=UUID,
+    email=opt(str),
     role=str,
     active=bool,
     can_post=bool,

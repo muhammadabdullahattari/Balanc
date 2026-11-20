@@ -1021,12 +1021,27 @@ summary {
 }
 .recovery-codes {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
   padding: 16px;
   background: var(--surface-alt);
   border-radius: 12px;
   margin: 24px 0;
+  overflow: hidden;
+}
+.recovery-codes code {
+  display: block;
+  word-break: break-all;
+  overflow-wrap: anywhere;
+  font-family: monospace;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  text-align: center;
+  color: var(--ink);
 }
 .setup-key {
   display: block;
@@ -1037,12 +1052,15 @@ summary {
   margin: 16px 0;
 }
 .setup-card {
-  max-width: 550px;
+  max-width: 580px;
+  width: 100%;
+  box-sizing: border-box;
   margin: 10vh auto;
   padding: 36px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 20px;
+  overflow: hidden;
 }
 .setup-card > svg {
   color: var(--accent);
@@ -1781,4 +1799,122 @@ details > form {
     align-items: start;
     padding: 24px 14px 36px;
   }
+}
+
+
+/* ── Info callout (neutral, non-error notice) ─────────────────────────── */
+.info-callout {
+  padding: 14px 18px;
+  background: var(--accent-soft);
+  border: 1px solid var(--accent);
+  border-radius: 10px;
+  margin: 12px 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.info-callout p {
+  margin: 0;
+}
+
+/* ── Team member display ──────────────────────────────────────────────── */
+.member-email {
+  font-weight: 500;
+  color: var(--ink);
+}
+.member-id {
+  font-family: monospace;
+  font-size: 0.85rem;
+}
+
+/* ── Role Permissions tab ─────────────────────────────────────────────── */
+.role-permissions {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.perm-summary-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+.perm-card {
+  padding: 20px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+}
+.perm-card h3 {
+  margin: 0 0 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+.perm-card ul {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+  line-height: 1.8;
+  color: var(--ink);
+}
+.perm-allowed {
+  background: var(--accent-soft);
+  border-color: var(--accent);
+}
+.perm-allowed h3 {
+  color: var(--accent);
+}
+.perm-restricted {
+  background: var(--danger-soft);
+  border-color: var(--danger);
+}
+.perm-restricted h3 {
+  color: var(--danger);
+}
+.perm-matrix-heading {
+  margin: 0;
+  font-size: 1rem;
+}
+.perm-table-wrap {
+  overflow-x: auto;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+}
+.perm-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+.perm-table th,
+.perm-table td {
+  padding: 10px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+}
+.perm-table th {
+  background: var(--surface-alt);
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+.perm-table th.perm-active-col {
+  color: var(--accent);
+}
+.perm-table td.perm-cell {
+  text-align: center;
+}
+.perm-table td.perm-active-col {
+  background: var(--accent-soft);
+}
+.perm-row-restricted td {
+  opacity: 0.55;
+}
+.perm-table tbody tr:last-child td {
+  border-bottom: none;
+}
+.perm-check {
+  color: var(--accent);
+}
+.perm-cross {
+  color: var(--danger);
 }
