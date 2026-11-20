@@ -65,13 +65,17 @@ def test_diagnostic_logs_preserve_context_without_exception_messages(caplog, mon
 
 @REAL
 async def test_smtp_outage_keeps_pending_signup_and_rotates_codes_safely(
-    client: httpx.AsyncClient, database_settings: FileSettings
+    client: httpx.AsyncClient, database_settings: FileSettings, monkeypatch: pytest.MonkeyPatch
 ):
+    from datetime import timedelta
+
     app = client._transport.app
     offline = database_settings.model_copy(update={"smtp_port": 1})
     email = uuid4().hex + "@example.com"
     registration = Registration(email=email, password="Private phrase 7! " + uuid4().hex)
     csrf = uuid4().hex
+    t0 = service.now()
+    monkeypatch.setattr(service, "now", lambda: t0)
     with app.state.sessions.begin() as db:
         service.register(db, offline, registration, csrf)
     with app.state.sessions.begin() as db:
@@ -90,6 +94,9 @@ async def test_smtp_outage_keeps_pending_signup_and_rotates_codes_safely(
         assert denied.value.code == "ERR_AUTH"  # Never reveal account state without its password.
         service.request_action(db, database_settings, email, "verify", csrf)
     first = await mail_token(email)
+    # Advance past the 15-minute cooldown so we specifically exercise SMTP failure rollback.
+    t1 = t0 + timedelta(minutes=16)
+    monkeypatch.setattr(service, "now", lambda: t1)
     with app.state.sessions.begin() as db:
         set_context(db, uid)
         service.request_action(db, offline, email, "verify", csrf)
