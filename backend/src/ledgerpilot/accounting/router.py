@@ -5,7 +5,7 @@ from decimal import Decimal, localcontext
 from uuid import UUID
 
 from fastapi import APIRouter, Query
-from sqlalchemy import select, tuple_
+from sqlalchemy import select, text, tuple_
 
 from ledgerpilot.accounting import drafts, repository, service, tax
 from ledgerpilot.accounting.models import Account, Journal, JournalLine, Period
@@ -247,12 +247,24 @@ def journal(business_id: UUID, journal_id: UUID, identity: Identity, db: DB) -> 
     item = repository.journal(db, business_id, journal_id)
     if not item:
         raise DomainError("ERR_NOT_FOUND", "Record not found.", 404)
+    asset_id = None
+    if item.idempotency_key.startswith("asset."):
+        try:
+            candidate = UUID(item.idempotency_key.split(".")[1])
+            if db.scalar(
+                text("SELECT id FROM app.fixed_assets WHERE business_id=:b AND id=:id"),
+                {"b": business_id, "id": candidate},
+            ):
+                asset_id = str(candidate)
+        except (ValueError, IndexError):
+            pass
     reversed_by = repository.reversal_id(db, business_id, journal_id)
     return {
         "id": str(item.id),
         "accounting_date": item.accounting_date.isoformat(),
         "memo": item.memo,
         "currency": item.currency,
+        "asset_id": asset_id,
         "reversal_of": str(item.reversal_of) if item.reversal_of else None,
         "status": "reversed" if reversed_by else item.status,
         "reversed_by": str(reversed_by) if reversed_by else None,

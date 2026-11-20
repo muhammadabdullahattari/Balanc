@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 212,
-  "distinct_operations": 171,
+  "call_sites": 214,
+  "distinct_operations": 173,
   "operations": [
     {
       "file": "App.tsx",
@@ -30,6 +30,11 @@
     },
     {
       "file": "features/accountant-tools.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/history"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/override"
     },
@@ -37,6 +42,11 @@
       "file": "features/accountant-tools.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/lookup"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/lifecycle-preview"
     },
     {
       "file": "features/accountant-tools.tsx",

@@ -82,6 +82,7 @@ export function PortfolioTriage() {
 function Assignments({ id, changed }: { id: string; changed: () => void }) {
   const [offset, page] = useState(0),
     [source, choose] = useState("");
+  const [before, setBefore] = useState<number>();
   const path = { business_id: id };
   const items = useQuery({
     queryKey: ["exceptions", id, offset],
@@ -103,14 +104,17 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
   });
   const item = items.data?.find((x) => x.source_id === source);
   const history = useQuery({
-    queryKey: ["assign-history", id, source],
+    queryKey: ["assign-history", id, source, before],
     enabled: !!item,
     queryFn: () =>
       result(
         api.GET(
           "/api/v1/businesses/{business_id}/portfolio-exceptions/{kind}/{source_id}/assignment-history",
           {
-            params: { path: { ...path, kind: item!.kind, source_id: source } },
+            params: {
+              path: { ...path, kind: item!.kind, source_id: source },
+              query: { before },
+            },
           },
         ),
       ),
@@ -130,6 +134,7 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
         ),
       ),
     onSuccess: async () => {
+      setBefore(undefined);
       await Promise.all([items.refetch(), history.refetch()]);
       changed();
     },
@@ -141,7 +146,13 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
         error={items.error || members.error || history.error || assign.error}
       />
       <Field label="Exception">
-        <select value={source} onChange={(e) => choose(e.target.value)}>
+        <select
+          value={source}
+          onChange={(e) => {
+            choose(e.target.value);
+            setBefore(undefined);
+          }}
+        >
           <option value="">Select an exception</option>
           {items.data?.map((x) => (
             <option key={x.source_id} value={x.source_id}>
@@ -187,6 +198,20 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
             </select>
           </Field>
           <h4>Assignment history</h4>
+          {before !== undefined && (
+            <Button onClick={() => setBefore(undefined)}>
+              Latest assignments
+            </Button>
+          )}
+          <Button
+            disabled={history.isFetching || history.data?.length !== 100}
+            onClick={() => {
+              const last = history.data?.at(-1);
+              if (last) setBefore(Number(last.event_id));
+            }}
+          >
+            Earlier assignments
+          </Button>
           {history.data?.map((h) => (
             <p key={String(h.event_id)}>
               {String(h.changed_at)} · {String(h.actor)}:{" "}

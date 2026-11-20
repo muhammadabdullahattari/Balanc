@@ -7,7 +7,9 @@ import { useBusiness } from "./context";
 export function AssetRegister() {
   const b = useBusiness(),
     path = { business_id: b.id };
-  const [selected, select] = useState(""),
+  const [selected, select] = useState(
+      new URLSearchParams(window.location.search).get("asset") ?? "",
+    ),
     [after, page] = useState<string>();
   const rows = useQuery({
     queryKey: ["asset-register", b.id, after],
@@ -186,10 +188,10 @@ export function AssetRegister() {
               </li>
             ))}
           </ol>
-          <h4>Posted installments</h4>
+          <h4>Linked acquisition, depreciation and disposal journals</h4>
           {journals.data?.length === 0 && <p>No posted installments.</p>}
           {journals.data?.map((j) => (
-            <a key={j.id} href={`/api/v1/businesses/${b.id}/journals/${j.id}`}>
+            <a key={j.id} href={`/ledger?journal=${j.id}`}>
               {j.date} · {j.memo}
             </a>
           ))}

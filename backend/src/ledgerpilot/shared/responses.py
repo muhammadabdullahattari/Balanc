@@ -64,6 +64,7 @@ class JournalLineRead(Schema):
 
 
 class JournalRead(Identifier):
+    asset_id: UUID | None = None
     accounting_date: Date
     memo: str
     currency: str

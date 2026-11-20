@@ -254,6 +254,20 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
     .getByLabel("Registered asset")
     .selectOption({ label: "Browser printing press" });
   await expect(page.getByText("2026-10-31: 100.00 USD")).toBeVisible();
+  await page
+    .getByLabel("Asset name", { exact: true })
+    .fill("Updated printing press");
+  await page.getByRole("button", { name: "Save asset changes" }).click();
+  await expect(
+    page.getByLabel("Registered asset").locator("option:checked"),
+  ).toHaveText("Updated printing press");
+  await page.getByLabel("Disposal date (optional)").fill("2026-11-01");
+  await page.getByRole("button", { name: "Save asset changes" }).click();
+  await expect(
+    page.getByRole("button", { name: "Save asset changes" }),
+  ).toBeDisabled();
+  await expect(page.getByText("2026-10-31: 100.00 USD")).toBeVisible();
+  await expect(page.getByText("2026-11-30: 100.00 USD")).toHaveCount(0);
   await page.getByText("Fixed asset register", { exact: true }).click();
   await page.getByText("Prepare an accounting entry", { exact: true }).click();
   await page.getByLabel("Entry type").selectOption("fx");
@@ -268,6 +282,12 @@ test("real browser posts invoice, receives partial payment, preserves idempotenc
   );
   await page.getByRole("button", { name: "Save manual rate" }).click();
   expect((await savedRate).status()).toBe(200);
+  await page.getByText("Exchange rate history", { exact: true }).click();
+  await expect(
+    page.getByText(
+      /GBP\/USD.*1\.25000000.*Manual override.*Synthetic browser test/,
+    ),
+  ).toBeVisible();
   await page.getByLabel(/per unit of foreign currency/).fill("");
   await page.getByRole("button", { name: "Look up closing rate" }).click();
   await expect(page.getByLabel(/per unit of foreign currency/)).toHaveValue(

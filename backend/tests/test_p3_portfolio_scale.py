@@ -1,7 +1,11 @@
 """Benchmark authorized portfolio endpoints against an isolated, migrated PostgreSQL database."""
 
+import hashlib
+import json
 import os
 import runpy
+from decimal import Decimal
+from statistics import quantiles
 from time import perf_counter
 from uuid import UUID, uuid4
 
@@ -63,10 +67,83 @@ async def test_large_portfolio(client: httpx.AsyncClient, database_settings: Fil
                         (task[0],),
                     )
 
+        # Replay each generated transaction through the real guarded posting function.
+        with connect(admin) as conn, conn.transaction(), conn.cursor() as cur:
+            cur.execute("SELECT set_config('app.user_id',%s,true)", (actor,))
+            for b in businesses:
+                accounts = {name: str(uuid4()) for name in ("bank", "receivables", "revenue")}
+                cur.execute("SELECT set_config('app.business_id',%s,true)", (b["id"],))
+                cur.executemany(
+                    """INSERT INTO app.accounts
+                    (id,business_id,code,name,kind,active,version)
+                    VALUES (%s,%s,%s,%s,%s,true,0)""",
+                    [
+                        (aid, b["id"], name, name, "income" if name == "revenue" else "asset")
+                        for name, aid in accounts.items()
+                    ],
+                )
+                cur.execute(
+                    """INSERT INTO app.policy_history
+                    (id,business_id,version,effective_date,basis,jurisdiction)
+                    VALUES (%s,%s,1,'2024-01-01','accrual','US-test')""",
+                    (uuid4(), b["id"]),
+                )
+                # Generated delayed receipts can fall beyond the source invoice year.
+                cur.execute(
+                    """INSERT INTO app.periods
+                    (id,business_id,start_date,end_date,locked,version)
+                    VALUES (%s,%s,'2026-01-01','2026-12-31',false,0)""",
+                    (uuid4(), b["id"]),
+                )
+                journal_args = []
+                for version, (day, reference, debit, credit, amount) in enumerate(b["journals"]):
+                    lines = json.dumps(
+                        [
+                            {"account_id": accounts[debit], "debit": amount, "credit": "0"},
+                            {"account_id": accounts[credit], "debit": "0", "credit": amount},
+                        ]
+                    )
+                    journal_args.append(
+                        (
+                            b["id"],
+                            day,
+                            reference,
+                            b["currency"],
+                            f"synthetic.{version:06d}",
+                            hashlib.sha256(lines.encode()).hexdigest(),
+                            version,
+                            lines,
+                        ),
+                    )
+                cur.executemany(
+                    "SELECT app.post_journal(%s,%s,%s,%s,%s,%s,%s,%s::jsonb)", journal_args
+                )
+            cur.execute(
+                """SELECT count(*),coalesce(sum(debit-credit),0) FROM app.journal_lines
+                WHERE business_id=ANY(%s::uuid[])""",
+                ([b["id"] for b in businesses],),
+            )
+            count, net = cur.fetchone()
+            assert count > 18000 and Decimal(net) == 0
+            print(f"portfolio_fixture: {len(businesses) + 1} businesses; lines={count}")
+
+        # Fixture replay can outlast the short-lived access cookie.
+        refreshed = await api.post("/api/v1/auth/refresh")
+        assert refreshed.status_code == 200, refreshed.text
+
         async def timed(label, method, url, **kwargs):
-            start = perf_counter()
-            response = await api.request(method, url, **kwargs)
-            print(f"portfolio_500 {label}: {(perf_counter() - start) * 1000:.1f} ms")
+            timings = []
+            for _ in range(20 if method == "GET" else 1):
+                start = perf_counter()
+                response = await api.request(method, url, **kwargs)
+                timings.append((perf_counter() - start) * 1000)
+                assert response.is_success, response.text
+            p95 = (
+                quantiles(timings, n=100, method="inclusive")[94]
+                if len(timings) > 1
+                else timings[0]
+            )
+            print(f"portfolio_500 {label}: p95={p95:.1f} ms; samples={len(timings)}")
             assert response.is_success, response.text
             return response.json()
 

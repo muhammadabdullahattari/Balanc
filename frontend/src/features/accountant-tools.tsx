@@ -1,6 +1,6 @@
 import { AssetRegister } from "./asset-register";
 import { useRef, useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
 import { Button, ErrorNotice, Field } from "../components/ui";
 import { today, useAccess, useBusiness } from "./context";
@@ -83,6 +83,18 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
   const [kind, setKind] = useState("accrual");
   const path = { business_id: b.id };
   const formRef = useRef<HTMLFormElement>(null);
+  const [before, setBefore] = useState<number>();
+  const history = useQuery({
+    queryKey: ["fx-history", b.id, before],
+    enabled: kind === "fx" || kind === "revaluation",
+    queryFn: () =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/accounting/fx-rates/history",
+          { params: { path, query: { before } } },
+        ),
+      ),
+  });
   const quote = useMutation({
     mutationFn: async (manual: boolean) => {
       const form = formRef.current!;
@@ -114,6 +126,8 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
           );
     },
     onSuccess: (data) => {
+      setBefore(undefined);
+      void queryClient.invalidateQueries({ queryKey: ["fx-history", b.id] });
       const form = formRef.current;
       if (!form) return;
       const rate = form.elements.namedItem("rate"),
@@ -140,68 +154,84 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
         credit_account: str("credit"),
       };
       const entry =
-        kind === "registered"
+        kind === "acquisition" || kind === "disposal"
           ? await result(
               api.POST(
-                "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/installment-preview",
+                "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/lifecycle-preview",
                 {
                   params: { path: { ...path, asset_id: str("asset") } },
                   body: {
-                    number: Number(str("number")),
+                    action: kind,
                     debit_account: str("debit"),
                     credit_account: str("credit"),
+                    carrying_value:
+                      kind === "disposal" ? str("carrying") : null,
                   },
                 },
               ),
             )
-          : kind === "revaluation"
+          : kind === "registered"
             ? await result(
                 api.POST(
-                  "/api/v1/businesses/{business_id}/accounting/revaluation-preview",
+                  "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/installment-preview",
                   {
-                    params: { path },
+                    params: { path: { ...path, asset_id: str("asset") } },
                     body: {
-                      period_end: str("date"),
-                      currency: str("foreign") as
-                        "USD" | "GBP" | "EUR" | "AED" | "PKR",
-                      foreign_units: str("amount"),
-                      carrying_balance: str("carrying"),
-                      closing_rate: str("rate"),
-                      rate_source: str("source"),
-                      monetary_account: str("debit"),
-                      gain_account: str("credit"),
-                      loss_account: str("loss"),
+                      number: Number(str("number")),
+                      debit_account: str("debit"),
+                      credit_account: str("credit"),
                     },
                   },
                 ),
               )
-            : await result(
-                api.POST(
-                  "/api/v1/businesses/{business_id}/accounting/entry-preview",
-                  {
-                    params: { path },
-                    body:
-                      kind === "depreciation"
-                        ? {
-                            ...fields,
-                            kind: "depreciation",
-                            residual: str("residual"),
-                            months: Number(str("months")),
-                            installment: Number(str("installment")),
-                          }
-                        : kind === "fx"
+            : kind === "revaluation"
+              ? await result(
+                  api.POST(
+                    "/api/v1/businesses/{business_id}/accounting/revaluation-preview",
+                    {
+                      params: { path },
+                      body: {
+                        period_end: str("date"),
+                        currency: str("foreign") as
+                          "USD" | "GBP" | "EUR" | "AED" | "PKR",
+                        foreign_units: str("amount"),
+                        carrying_balance: str("carrying"),
+                        closing_rate: str("rate"),
+                        rate_source: str("source"),
+                        monetary_account: str("debit"),
+                        gain_account: str("credit"),
+                        loss_account: str("loss"),
+                      },
+                    },
+                  ),
+                )
+              : await result(
+                  api.POST(
+                    "/api/v1/businesses/{business_id}/accounting/entry-preview",
+                    {
+                      params: { path },
+                      body:
+                        kind === "depreciation"
                           ? {
                               ...fields,
-                              kind: "fx",
-                              source_currency: str("foreign") as
-                                "USD" | "AED" | "PKR" | "GBP" | "EUR",
-                              rate: str("rate"),
-                              rate_source: str("source"),
+                              kind: "depreciation",
+                              residual: str("residual"),
+                              months: Number(str("months")),
+                              installment: Number(str("installment")),
                             }
-                          : { ...fields, kind: "accrual" },
-                  },
-                ),
-              );
+                          : kind === "fx"
+                            ? {
+                                ...fields,
+                                kind: "fx",
+                                source_currency: str("foreign") as
+                                  "USD" | "AED" | "PKR" | "GBP" | "EUR",
+                                rate: str("rate"),
+                                rate_source: str("source"),
+                              }
+                            : { ...fields, kind: "accrual" },
+                    },
+                  ),
+                );
       const business = await result(
         api.GET("/api/v1/businesses/{business_id}", { params: { path } }),
       );
@@ -209,11 +239,13 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
         ...entry,
         expected_version: business.version,
         idempotency_key:
-          kind === "registered"
-            ? `asset.${str("asset")}.${str("number")}`
-            : kind === "revaluation"
-              ? `fx.${str("date")}.${str("foreign")}.${str("debit")}`
-              : crypto.randomUUID(),
+          kind === "acquisition" || kind === "disposal"
+            ? `asset.${str("asset")}.${kind}`
+            : kind === "registered"
+              ? `asset.${str("asset")}.${str("number")}`
+              : kind === "revaluation"
+                ? `fx.${str("date")}.${str("foreign")}.${str("debit")}`
+                : crypto.randomUUID(),
       };
     },
   });
@@ -253,6 +285,8 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
           >
             <Field label="Entry type">
               <select value={kind} onChange={(e) => setKind(e.target.value)}>
+                <option value="acquisition">Asset acquisition</option>
+                <option value="disposal">Asset disposal write-off</option>
                 <option value="registered">Registered asset installment</option>
                 <option value="accrual">Accrual</option>
                 <option value="depreciation">Straight-line depreciation</option>
@@ -260,20 +294,27 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
                 <option value="revaluation">Period-end FX adjustment</option>
               </select>
             </Field>
-            {kind === "registered" ? (
+            {["registered", "acquisition", "disposal"].includes(kind) ? (
               <>
                 <Field label="Asset reference">
                   <input name="asset" required />
                 </Field>
-                <Field label="Schedule installment">
-                  <input
-                    name="number"
-                    type="number"
-                    min="1"
-                    max="1200"
-                    required
-                  />
-                </Field>
+                {kind === "registered" && (
+                  <Field label="Schedule installment">
+                    <input
+                      name="number"
+                      type="number"
+                      min="1"
+                      max="1200"
+                      required
+                    />
+                  </Field>
+                )}
+                {kind === "disposal" && (
+                  <Field label="Reviewed disposal carrying value">
+                    <input name="carrying" required inputMode="decimal" />
+                  </Field>
+                )}
               </>
             ) : (
               <>
@@ -355,6 +396,35 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
                   Save manual rate
                 </Button>
                 <ErrorNotice error={quote.error} />
+                <details>
+                  <summary>Exchange rate history</summary>
+                  <ErrorNotice error={history.error} />
+                  {history.isPending && <p role="status">Loading rates�</p>}
+                  {history.data?.length === 0 && <p>No rates recorded yet.</p>}
+                  <ul>
+                    {history.data?.map((row) => (
+                      <li key={String(row.id)}>
+                        {String(row.day)} � {String(row.foreign_currency)}/
+                        {String(row.base_currency)} � {String(row.rate)} �{" "}
+                        {row.manual ? "Manual override" : "Provider"} �{" "}
+                        {String(row.source)}
+                      </li>
+                    ))}
+                  </ul>
+                  {before !== undefined && (
+                    <Button type="button" onClick={() => setBefore(undefined)}>
+                      Latest rates
+                    </Button>
+                  )}
+                  {history.data?.length === 100 && (
+                    <Button
+                      type="button"
+                      onClick={() => setBefore(Number(history.data.at(-1)?.id))}
+                    >
+                      Older rates
+                    </Button>
+                  )}
+                </details>
                 <Field label="Exchange rate source">
                   <input required name="source" maxLength={120} />
                 </Field>

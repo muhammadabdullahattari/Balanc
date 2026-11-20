@@ -255,6 +255,16 @@ export function Ledger() {
                   {detail.data.source_kind} ·{" "}
                   {detail.data.source_id || "Manual entry"}
                 </dd>
+                {detail.data.asset_id && (
+                  <>
+                    <dt>Fixed asset</dt>
+                    <dd>
+                      <a href={`/ledger?asset=${detail.data.asset_id}`}>
+                        View linked asset
+                      </a>
+                    </dd>
+                  </>
+                )}
                 <dt>Approved by</dt>
                 <dd>{detail.data.approved_by || "Not approved"}</dd>
                 <dt>Reversal</dt>

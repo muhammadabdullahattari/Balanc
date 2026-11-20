@@ -95,6 +95,31 @@ async def test_accountant_tools(
                 base + "/accounting/revaluation-preview", json={**proposal, "closing_rate": "1.29"}
             )
         ).status_code == 409
+        # A proposal does not move the ledger. Only explicit approved posting does.
+        before = (await api.get(base + "/trial-balance", params={"as_of": "2026-12-31"})).json()
+        payload = {**first.json(), **await command(api, base)}
+        payload["idempotency_key"] = f"fx.2026-12-31.GBP.{accounts['bank']}"
+        posted = await api.post(base + "/journals", json=payload)
+        assert posted.status_code == 201, posted.text
+        assert (await api.post(base + "/journals", json=payload)).json() == posted.json()
+        journal_id = posted.json()["id"]
+        journal = (await api.get(base + "/journals/" + journal_id)).json()
+        assert sum(Decimal(x["debit"]) - Decimal(x["credit"]) for x in journal["lines"]) == 0
+        reversed_entry = await api.post(
+            base + "/journals/" + journal_id + "/reversal",
+            json={
+                **await command(api, base),
+                "accounting_date": "2026-12-31",
+                "memo": "Reverse synthetic FX valuation",
+            },
+        )
+        assert reversed_entry.status_code == 201, reversed_entry.text
+        after = (await api.get(base + "/trial-balance", params={"as_of": "2026-12-31"})).json()
+        assert {x["account_id"]: Decimal(x["balance"]) for x in before["items"]} == {
+            x["account_id"]: Decimal(x["balance"]) for x in after["items"]
+        }
+        denied = await api.get(f"/api/v1/businesses/{uuid4()}/journals/{journal_id}")
+        assert denied.status_code == 404
         created = await api.post(
             base + "/accounting/assets",
             json={
@@ -117,6 +142,33 @@ async def test_accountant_tools(
             json={"name": "Press", "expected_version": 1, "disposed_on": "2026-10-31"},
         )
         assert disposed.status_code == 200, disposed.text
+        period = await api.post(
+            base + "/periods", json={"start_date": "2024-01-01", "end_date": "2024-12-31"}
+        )
+        assert period.status_code == 201, period.text
+        for action in ("acquisition", "disposal"):
+            proposed = await api.post(
+                base + f"/accounting/assets/{asset_id}/lifecycle-preview",
+                json={
+                    "action": action,
+                    "debit_account": accounts["bank"]
+                    if action == "acquisition"
+                    else accounts["cost"],
+                    "credit_account": accounts["income"]
+                    if action == "acquisition"
+                    else accounts["bank"],
+                    "carrying_value": "30" if action == "disposal" else None,
+                },
+            )
+            assert proposed.status_code == 200, proposed.text
+            approved = {**proposed.json(), **await command(api, base)}
+            approved["idempotency_key"] = f"asset.{asset_id}.{action}"
+            entry = await api.post(base + "/journals", json=approved)
+            assert entry.status_code == 201, entry.text
+            detail = (await api.get(base + "/journals/" + entry.json()["id"])).json()
+            assert detail["asset_id"] == asset_id
+        linked = (await api.get(base + f"/accounting/assets/{asset_id}/journals")).json()
+        assert len(linked) == 2
         for kind in ("bill", "invoice"):
             issued = await invoice(api, base, accounts, party, kind)
             assert issued.status_code == 201

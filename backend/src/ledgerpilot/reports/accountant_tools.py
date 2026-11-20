@@ -741,7 +741,7 @@ def asset_journals(
         .where(
             Journal.business_id == business_id,
             Journal.idempotency_key.startswith(f"asset.{asset_id}."),
-            Journal.memo.startswith(f"Accrual — Asset {asset_id} installment "),
+            Journal.memo.startswith(f"Accrual — Asset {asset_id} "),
         )
         .order_by(Journal.accounting_date)
     )
@@ -760,3 +760,43 @@ def quote_history(
         {"b": business_id, "before": before},
     )
     return [dict(r) for r in rows.mappings()]
+
+
+class AssetLifecycleEntry(Schema):
+    action: Literal["acquisition", "disposal"]
+    debit_account: UUID
+    credit_account: UUID
+    carrying_value: Decimal | None = Field(default=None, gt=0, max_digits=18, decimal_places=6)
+
+
+@router.post("/accounting/assets/{asset_id}/lifecycle-preview")
+def asset_lifecycle_preview(
+    business_id: UUID, asset_id: UUID, data: AssetLifecycleEntry, identity: Identity, db: DB
+) -> DraftCreate:
+    authorize(db, identity, business_id, {"owner", "accountant"})
+    asset = db.execute(
+        text("""SELECT acquired, cost, disposed_on FROM app.fixed_assets
+        WHERE id=:id AND business_id=:b"""),
+        {"id": asset_id, "b": business_id},
+    ).one_or_none()
+    if asset is None:
+        raise DomainError("ERR_NOT_FOUND", "Asset not found.", 404)
+    if data.action == "disposal" and (asset.disposed_on is None or data.carrying_value is None):
+        raise DomainError(
+            "ERR_ASSET", "Record the disposal date and reviewed carrying value first.", 422
+        )
+    if data.action == "acquisition" and data.carrying_value is not None:
+        raise DomainError("ERR_ASSET", "Acquisition uses the registered acquisition cost.", 422)
+    business = get_business(db, business_id)
+    return journal_preview(
+        Accrual(
+            kind="accrual",
+            reference=f"Asset {asset_id} {data.action}",
+            accounting_date=asset.acquired if data.action == "acquisition" else asset.disposed_on,
+            amount=asset.cost if data.action == "acquisition" else data.carrying_value,
+            debit_account=data.debit_account,
+            credit_account=data.credit_account,
+        ),
+        business.currency,
+        business.currency_precision,
+    )
