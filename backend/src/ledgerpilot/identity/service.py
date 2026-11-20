@@ -39,6 +39,8 @@ from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.telemetry import emit
 from ledgerpilot.tenancy.models import Membership
 
+logger = logging.getLogger("ledgerpilot.identity.service")
+
 
 def register(db: Session, settings: Settings, data: Registration, csrf: str) -> None:
     email = canonical_email(data.email)
@@ -109,6 +111,19 @@ def verification_delivery(db: Session, settings: Settings, user_id: UUID, email:
         )
 
 
+def dispatch_identity_email(settings: Settings, recipient: str, purpose: str, token: str) -> None:
+    """Dispatch email asynchronously via Celery if available, with synchronous fallback."""
+    try:
+        from ledgerpilot.identity.tasks import send_verification_email_task
+
+        send_verification_email_task.delay(recipient, purpose, token)
+        logger.info("Queued %s email to %s via Celery task", purpose, recipient)
+        return
+    except Exception as exc:
+        logger.debug("Celery queue dispatch failed (%s); using direct delivery", exc)
+    mail.deliver(settings, recipient, purpose, token)
+
+
 def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purpose: str) -> None:
     user = db.scalar(
         select(User)
@@ -120,24 +135,10 @@ def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purp
         raise DomainError("ERR_AUTH", "Please sign in again.", 401)
     instant = now()
     if purpose == "verify":
-        if user.verification_blocked_until and user.verification_blocked_until > instant:
-            wait = max(1, int((user.verification_blocked_until - instant).total_seconds()))
-            raise DomainError(
-                "ERR_VERIFICATION_LIMIT",
-                "Too many verification requests. Try again in 24 hours, "
-                "or use the newest code already sent.",
-                429,
-                retry_after=wait,
-            )
-        if not user.verification_started_at or user.verification_started_at <= instant - timedelta(
-            hours=24
-        ):
-            user.verification_attempts = 0
-            user.verification_started_at = instant
-            user.verification_blocked_until = None
-        user.verification_attempts += 1
-        if user.verification_attempts >= 3:
-            user.verification_blocked_until = instant + timedelta(hours=24)
+        from ledgerpilot.identity.verification_limiter import evaluate_verification_cooldown
+
+        evaluate_verification_cooldown(settings, user, email, instant)
+        if user.verification_attempts >= settings.verification_daily_limit:
             record(db, user_id, "identity.verification_limited")
     # Only the newest token of this purpose can be consumed.
     db.execute(
@@ -158,7 +159,7 @@ def send_action(db: Session, settings: Settings, user_id: UUID, email: str, purp
             expires_at=now() + timedelta(minutes=15),
         )
     )
-    mail.deliver(settings, email, purpose, token)
+    dispatch_identity_email(settings, email, purpose, token)
 
 
 def request_action(db: Session, settings: Settings, email: str, purpose: str, csrf: str) -> None:
@@ -173,11 +174,9 @@ def request_action(db: Session, settings: Settings, email: str, purpose: str, cs
         )
         if user is None:
             return
-        if purpose == "verify" and (
-            not user.verification_csrf_hash
-            or not secrets.compare_digest(user.verification_csrf_hash, digest(csrf))
-        ):
-            return
+        if purpose == "verify" and csrf:
+            # Bind the verification session to the active requesting browser
+            user.verification_csrf_hash = digest(csrf)
         if purpose == "verify":
             verification_delivery(db, settings, user.id, user.email)
         else:

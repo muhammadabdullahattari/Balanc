@@ -78,6 +78,12 @@ class Settings(BaseSettings):
     rate_auth_identity_budget: int = Field(default=5, ge=1, le=1000000)
     rate_window_seconds: int = Field(default=60, ge=1, le=3600)
     rate_cooldown_max_seconds: int = Field(default=60, ge=1, le=3600)
+    verification_gap_1_seconds: int = Field(default=900, ge=0, le=86400)
+    verification_gap_2_seconds: int = Field(default=1800, ge=0, le=86400)
+    verification_gap_3_seconds: int = Field(default=3600, ge=0, le=86400)
+    verification_daily_limit: int = Field(default=3, ge=1, le=100)
+    celery_broker_url: SecretStr | None = None
+    celery_result_backend: SecretStr | None = None
     jobs_default_max_attempts: int = Field(default=5, ge=1, le=20)
     jobs_default_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     jobs_poll_interval_seconds: float = Field(default=1.0, ge=0.05, le=60.0)
