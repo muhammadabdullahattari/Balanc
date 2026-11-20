@@ -58,7 +58,7 @@ def preview_exports(
     business_id: UUID, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     on_hold = held(db, business_id)
     rows = db.execute(
         select(ExportSnapshot.id, ExportSnapshot.expires_at)
@@ -90,7 +90,7 @@ def dispose_exports(
     business_id: UUID, data: DisposalSelection, request: Request, identity: Identity, db: DB
 ) -> dict[str, list[UUID]]:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     if not execution_enabled(request):
         raise DomainError("ERR_DISPOSAL_DISABLED", "Export disposal has not been enabled.", 409)
     get_business(db, business_id, lock=True)

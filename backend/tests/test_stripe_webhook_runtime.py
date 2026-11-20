@@ -185,3 +185,15 @@ async def test_onboarding_checkout_and_business_creation_under_real_postgres_rls
             assert sub.json()["status"] == "active"
             assert sub.json()["paid_access"] is True
             assert sub.json()["plan"] == "growth"
+
+            for suffix in (
+                "/retention",
+                "/retention/cleanup/policies",
+                "/retention/cleanup/requests",
+                "/retention/disposal/exports",
+                "/audit-grants",
+                "/projects",
+                "/prepaids",
+            ):
+                feat_res = await api.get(f"/api/v1/businesses/{new_bid}{suffix}")
+                assert feat_res.status_code == 200, (suffix, feat_res.text)
