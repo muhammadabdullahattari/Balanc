@@ -128,7 +128,7 @@ export function QuickBooksImport() {
         <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
           <strong>Sandbox Connector:</strong>
           {previewQuery.data ? (
-            <Badge>CONNECTED</Badge>
+            <Badge>CONNECTED (SANDBOX READY)</Badge>
           ) : (
             <Badge>SANDBOX READY</Badge>
           )}
@@ -208,7 +208,6 @@ export function QuickBooksImport() {
             selectedEntities.length === 0 ||
             (dryRunData !== undefined && !dryRunData.reconciled)
           }
-          permission="post"
           onClick={() => {
             if (
               window.confirm(

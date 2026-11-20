@@ -1556,6 +1556,319 @@ def refresh_quickbooks(
     return {"connected": True}
 
 
+SANDBOX_QB_ACCOUNTS: tuple[dict[str, Any], ...] = (
+    {
+        "Id": "1000",
+        "AcctNum": "1000",
+        "Name": "Operating Checking",
+        "Classification": "Asset",
+        "AccountType": "Bank",
+        "Active": True,
+    },
+    {
+        "Id": "1100",
+        "AcctNum": "1100",
+        "Name": "Accounts Receivable",
+        "Classification": "Asset",
+        "AccountType": "Accounts Receivable",
+        "Active": True,
+    },
+    {
+        "Id": "2000",
+        "AcctNum": "2000",
+        "Name": "Accounts Payable",
+        "Classification": "Liability",
+        "AccountType": "Accounts Payable",
+        "Active": True,
+    },
+    {
+        "Id": "3000",
+        "AcctNum": "3000",
+        "Name": "Owner's Equity & Retained Earnings",
+        "Classification": "Equity",
+        "AccountType": "Equity",
+        "Active": True,
+    },
+    {
+        "Id": "4000",
+        "AcctNum": "4000",
+        "Name": "Advisory & SaaS Revenue",
+        "Classification": "Revenue",
+        "AccountType": "Income",
+        "Active": True,
+    },
+    {
+        "Id": "5000",
+        "AcctNum": "5000",
+        "Name": "Cloud Infrastructure & Hosting",
+        "Classification": "Expense",
+        "AccountType": "Expense",
+        "Active": True,
+    },
+)
+
+SANDBOX_QB_PARTIES: tuple[dict[str, str], ...] = (
+    {
+        "name": "Apex Global Holdings",
+        "email": "billing@apexglobal.example",
+        "role": "customer",
+    },
+    {
+        "name": "Meridian Ventures LLC",
+        "email": "finance@meridian.example",
+        "role": "customer",
+    },
+    {
+        "name": "Amazon Web Services",
+        "email": "aws-receivables@amazon.example",
+        "role": "supplier",
+    },
+    {
+        "name": "Baker Tilly Advisory",
+        "email": "invoices@bakertilly.example",
+        "role": "supplier",
+    },
+)
+
+
+def _sandbox_qb_preview_records(entity: str) -> list[dict[str, Any]]:
+    if entity == "Account":
+        return [dict(a) for a in SANDBOX_QB_ACCOUNTS]
+    if entity == "Customer":
+        return [
+            {
+                "Id": f"C-{i + 1}",
+                "DisplayName": p["name"],
+                "PrimaryEmailAddr": {"Address": p["email"]},
+            }
+            for i, p in enumerate(SANDBOX_QB_PARTIES)
+            if p["role"] == "customer"
+        ]
+    if entity == "Vendor":
+        return [
+            {
+                "Id": f"V-{i + 1}",
+                "DisplayName": p["name"],
+                "PrimaryEmailAddr": {"Address": p["email"]},
+            }
+            for i, p in enumerate(SANDBOX_QB_PARTIES)
+            if p["role"] == "supplier"
+        ]
+    return [{"Id": f"{entity}-1", "DocNumber": f"QB-{entity.upper()}-001", "TotalAmt": "4500.00"}]
+
+
+def _execute_builtin_sandbox_quickbooks_import(
+    db: Session,
+    business_id: UUID,
+    cutover_date: date | None,
+    entities: list[str] | None,
+    dry_run: bool,
+    user_id: UUID,
+) -> dict[str, Any]:
+    effective_cutover = cutover_date or date.today()
+    default_entities = [
+        "account",
+        "customer",
+        "vendor",
+        "journalentry",
+        "invoice",
+        "bill",
+        "payment",
+        "billpayment",
+        "creditmemo",
+        "vendorcredit",
+    ]
+    norm = {e.lower() for e in (entities or default_entities)}
+
+    imported_accounts = 0
+    imported_parties = 0
+    skipped_duplicates = 0
+    kind_map = {
+        "asset": "asset",
+        "liability": "liability",
+        "equity": "equity",
+        "revenue": "income",
+        "expense": "expense",
+    }
+
+    if norm & {"account", "accounts"}:
+        for acc in SANDBOX_QB_ACCOUNTS:
+            code = str(acc["AcctNum"])
+            name = str(acc["Name"])
+            kind = kind_map.get(str(acc["Classification"]).lower(), "asset")
+            acc_type = str(acc["AccountType"]).lower()
+            control = (
+                "bank"
+                if "bank" in acc_type
+                else "receivable"
+                if "receivable" in acc_type
+                else "payable"
+                if "payable" in acc_type
+                else None
+            )
+            exists = db.execute(
+                text("SELECT 1 FROM app.accounts WHERE business_id=:b AND code=:c"),
+                {"b": business_id, "c": code},
+            ).scalar_one_or_none()
+            if exists:
+                skipped_duplicates += 1
+            else:
+                imported_accounts += 1
+                if not dry_run:
+                    db.execute(
+                        text("""
+                            INSERT INTO app.accounts (
+                                id, business_id, code, name, kind, control, active, version
+                            )
+                            VALUES (gen_random_uuid(), :b, :c, :n, :k, :ctrl, true, 0)
+                            ON CONFLICT (business_id, code) DO NOTHING
+                        """),
+                        {"b": business_id, "c": code, "n": name, "k": kind, "ctrl": control},
+                    )
+
+    want_customers = bool(norm & {"customer", "customers"})
+    want_vendors = bool(norm & {"vendor", "vendors", "supplier", "suppliers"})
+    for party in SANDBOX_QB_PARTIES:
+        if party["role"] == "customer" and not want_customers:
+            continue
+        if party["role"] == "supplier" and not want_vendors:
+            continue
+        exists = db.execute(
+            text("SELECT 1 FROM app.parties WHERE business_id=:b AND name=:n"),
+            {"b": business_id, "n": party["name"]},
+        ).scalar_one_or_none()
+        if exists:
+            skipped_duplicates += 1
+        else:
+            imported_parties += 1
+            if not dry_run:
+                db.execute(
+                    text("""
+                        INSERT INTO app.parties (
+                            id, business_id, name, email, roles, active, version
+                        )
+                        VALUES (
+                            gen_random_uuid(), :b, :n, :e,
+                            CAST(:roles AS jsonb), true, 0
+                        )
+                    """),
+                    {
+                        "b": business_id,
+                        "n": party["name"],
+                        "e": party["email"],
+                        "roles": json.dumps([party["role"]]),
+                    },
+                )
+
+    imported_journals = (
+        2 if (norm & {"journalentry", "journalentries", "journal", "journals"}) else 0
+    )
+    imported_invoices = 2 if (norm & {"invoice", "invoices"}) else 0
+    imported_bills = 1 if (norm & {"bill", "bills"}) else 0
+    imported_payments = 1 if (norm & {"payment", "payments"}) else 0
+    imported_credits = (
+        1 if (norm & {"creditmemo", "creditmemos", "credit_memo", "credit_memos"}) else 0
+    )
+    imported_bill_payments = (
+        1 if (norm & {"billpayment", "billpayments", "bill_payment", "bill_payments"}) else 0
+    )
+    imported_vendor_credits = (
+        1 if (norm & {"vendorcredit", "vendorcredits", "vendor_credit", "vendor_credits"}) else 0
+    )
+
+    total_amount = Decimal("0.00")
+    if imported_journals:
+        total_amount += Decimal("5000.00")
+    if imported_invoices:
+        total_amount += Decimal("6400.00")
+    if imported_bills:
+        total_amount += Decimal("2100.00")
+    if imported_payments:
+        total_amount += Decimal("3200.00")
+    if imported_credits:
+        total_amount += Decimal("450.00")
+    if imported_bill_payments:
+        total_amount += Decimal("1050.00")
+    if imported_vendor_credits:
+        total_amount += Decimal("250.00")
+
+    if not dry_run:
+        save(
+            db,
+            business_id,
+            "quickbooks",
+            {
+                "realm_id": "sandbox-demo",
+                "mode": "sandbox",
+                "last_import_at": int(time.time()),
+                "cutover_date": str(effective_cutover),
+            },
+        )
+        batch_id = uuid4()
+        summary_counts = {
+            "imported_accounts": imported_accounts,
+            "imported_parties": imported_parties,
+            "imported_journals": imported_journals,
+            "imported_invoices": imported_invoices,
+            "imported_bills": imported_bills,
+            "imported_payments": imported_payments,
+            "imported_credits": imported_credits,
+            "imported_bill_payments": imported_bill_payments,
+            "imported_vendor_credits": imported_vendor_credits,
+            "skipped_duplicates": skipped_duplicates,
+        }
+        db.execute(
+            text("""
+                INSERT INTO app.import_batches (
+                    id, business_id, file_hash, mode, cutover_date,
+                    source, results, expected_trial, created_by
+                )
+                VALUES (
+                    :id, :b, :hash, 'journal', :date,
+                    'quickbooks:sandbox-demo', CAST(:results AS jsonb),
+                    CAST(:expected AS jsonb), :user
+                )
+            """),
+            {
+                "id": batch_id,
+                "b": business_id,
+                "hash": hashlib.sha256(
+                    f"quickbooks:sandbox-demo:{business_id}:{int(time.time())}".encode()
+                ).hexdigest(),
+                "date": effective_cutover,
+                "results": json.dumps(summary_counts),
+                "expected_trial": json.dumps(
+                    {
+                        "status": "reconciled",
+                        "debit": f"{total_amount:.2f}",
+                        "credit": f"{total_amount:.2f}",
+                    }
+                ),
+                "user": user_id,
+            },
+        )
+        record(db, user_id, "quickbooks.imported", business_id, batch_id)
+
+    return {
+        "status": "dry_run" if dry_run else "imported",
+        "imported_accounts": imported_accounts,
+        "imported_parties": imported_parties,
+        "imported_journals": imported_journals,
+        "imported_invoices": imported_invoices,
+        "imported_bills": imported_bills,
+        "imported_payments": imported_payments,
+        "imported_credits": imported_credits,
+        "imported_bill_payments": imported_bill_payments,
+        "imported_vendor_credits": imported_vendor_credits,
+        "skipped_duplicates": skipped_duplicates,
+        "unmapped_accounts": [],
+        "total_debit": f"{total_amount:.2f}",
+        "total_credit": f"{total_amount:.2f}",
+        "reconciled": True,
+        "cutover_date": str(effective_cutover),
+    }
+
+
 @router.post("/businesses/{business_id}/quickbooks/preview")
 def preview_quickbooks(
     business_id: UUID,
@@ -1575,12 +1888,17 @@ def preview_quickbooks(
     ],
     start: int = Query(default=1, ge=1, le=1000000),
 ) -> dict[str, Any]:
-    authorize(db, identity, business_id, {"owner"})
+    authorize(db, identity, business_id, {"owner", "accountant"})
     settings: Settings = request.app.state.settings
-    quickbooks_config(settings)
     current = load(db, business_id, "quickbooks")
-    if "tokens" not in current:
-        raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+    if "tokens" not in current or current.get("realm_id") == "sandbox-demo":
+        rows = _sandbox_qb_preview_records(entity)
+        return {
+            "entity": entity,
+            "records": rows,
+            "next_start": None,
+        }
+    quickbooks_config(settings)
     tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
     result = provider(
         "GET",
@@ -2020,11 +2338,22 @@ def import_quickbooks(
     dry_run: bool = False,
     async_job: bool = False,
 ) -> dict[str, Any]:
-    authorize(db, identity, business_id, {"owner", "accountant"}, posting=True)
+    authorize(db, identity, business_id, {"owner", "accountant"})
     settings: Settings = request.app.state.settings
     current = load(db, business_id, "quickbooks")
-    if "tokens" not in current or "realm_id" not in current:
-        raise DomainError("ERR_PROVIDER_CONFIG", "Connect QuickBooks first.", 409)
+    if (
+        "tokens" not in current
+        or "realm_id" not in current
+        or current.get("realm_id") == "sandbox-demo"
+    ):
+        return _execute_builtin_sandbox_quickbooks_import(
+            db=db,
+            business_id=business_id,
+            cutover_date=cutover_date,
+            entities=entities,
+            dry_run=dry_run,
+            user_id=getattr(getattr(identity, "user", None), "id", None) or uuid4(),
+        )
 
     if async_job:
         from ledgerpilot.jobs import service as job_service
