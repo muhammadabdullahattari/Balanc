@@ -483,18 +483,22 @@ class Settings(BaseSettings):
 
     @property
     def stripe_billing_configured(self) -> bool:
-        key = self.stripe_secret_key.get_secret_value() if self.stripe_secret_key else ""
+        key = (
+            self.stripe_secret_key.get_secret_value().strip().strip("'\"")
+            if self.stripe_secret_key
+            else ""
+        )
         return (
             key.startswith(("sk_test_", "rk_test_"))
             and any(
-                p.startswith("price_")
+                p.strip().strip("'\"").startswith("price_")
                 for p in (
                     self.stripe_starter_price_id,
                     self.stripe_growth_price_id,
                     self.stripe_enterprise_price_id,
                 )
             )
-            and urlsplit(self.billing_return_url).scheme == "https"
+            and urlsplit(self.billing_return_url.strip().strip("'\"")).scheme == "https"
         )
 
     @property

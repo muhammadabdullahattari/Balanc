@@ -24,6 +24,7 @@ from starlette.concurrency import run_in_threadpool
 
 from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings, get_settings
+from ledgerpilot.database import set_context
 from ledgerpilot.identity.dependencies import DB, Identity, Principal
 from ledgerpilot.identity.mail import send_transactional_email
 from ledgerpilot.identity.security import encryption
@@ -170,9 +171,9 @@ class BillingInvoicesRead(BaseModel):
 
 def _price_map(settings: Settings) -> dict[str, str]:
     return {
-        "starter": settings.stripe_starter_price_id,
-        "growth": settings.stripe_growth_price_id,
-        "enterprise": settings.stripe_enterprise_price_id,
+        "starter": settings.stripe_starter_price_id.strip().strip("'\""),
+        "growth": settings.stripe_growth_price_id.strip().strip("'\""),
+        "enterprise": settings.stripe_enterprise_price_id.strip().strip("'\""),
     }
 
 
@@ -479,11 +480,10 @@ def provider(method: str, url: str, **kwargs: Any) -> dict[str, Any]:
 
 def stripe(settings: Settings, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
     key = settings.stripe_secret_key
-    if not key or not key.get_secret_value().startswith(("sk_test_", "rk_test_")):
+    raw_key = key.get_secret_value().strip().strip("'\"") if key else ""
+    if not raw_key.startswith(("sk_test_", "rk_test_")):
         raise DomainError("ERR_PROVIDER_CONFIG", "Stripe sandbox credentials are required.", 503)
-    return provider(
-        method, "https://api.stripe.com/v1/" + path, auth=(key.get_secret_value(), ""), **kwargs
-    )
+    return provider(method, "https://api.stripe.com/v1/" + path, auth=(raw_key, ""), **kwargs)
 
 
 def load(db: DB, business_id: UUID, name: str) -> dict[str, Any]:
@@ -619,11 +619,14 @@ def onboarding_checkout(
         raise DomainError("ERR_MFA_REQUIRED", "MFA authentication is required.", 403)
     settings: Settings = request.app.state.settings
     price = _price_map(settings)[plan]
-    destination = settings.billing_return_url
+    destination = settings.billing_return_url.strip().strip("'\"")
     if not price.startswith("price_") or urlsplit(destination).scheme != "https":
         raise DomainError(
             "ERR_PROVIDER_CONFIG", "Configure a test price and HTTPS billing return URL.", 503
         )
+    user_id = identity.user.id
+    user_email = identity.user.email
+    set_context(db, user_id)
     # If the user already paid for an unclaimed yearly plan, do not double-charge them.
     existing_paid = db.execute(
         text("""
@@ -631,7 +634,7 @@ def onboarding_checkout(
             WHERE user_id = :uid AND status = 'paid' AND business_id IS NULL
             ORDER BY created_at DESC LIMIT 1
         """),
-        {"uid": identity.user.id},
+        {"uid": user_id},
     ).scalar_one_or_none()
     if existing_paid:
         raise DomainError(
@@ -639,8 +642,6 @@ def onboarding_checkout(
             "You already have a paid yearly plan ready. Complete your business setup.",
             409,
         )
-    if hasattr(db, "commit") and type(db).__name__ != "MagicMock":
-        db.commit()
     success_url = _return_url(
         destination, onboarding_checkout="success", session_id="{CHECKOUT_SESSION_ID}"
     )
@@ -651,21 +652,24 @@ def onboarding_checkout(
         "checkout/sessions",
         data={
             "mode": "subscription",
-            "customer_email": identity.user.email,
-            "client_reference_id": str(identity.user.id),
+            "customer_email": user_email,
+            "client_reference_id": str(user_id),
             "line_items[0][price]": price,
             "line_items[0][quantity]": "1",
             "success_url": success_url,
             "cancel_url": cancel_url,
             "metadata[purpose]": "business_onboarding",
-            "metadata[user_id]": str(identity.user.id),
+            "metadata[user_id]": str(user_id),
             "metadata[plan]": plan,
             "subscription_data[metadata][purpose]": "business_onboarding",
-            "subscription_data[metadata][user_id]": str(identity.user.id),
+            "subscription_data[metadata][user_id]": str(user_id),
             "subscription_data[metadata][plan]": plan,
             "managed_payments[enabled]": "false",
         },
     )
+    # Restore transaction-local RLS actor context after db.commit() above.
+    if type(db).__name__ != "MagicMock":
+        set_context(db, user_id)
     db.execute(
         text("""
             INSERT INTO app.onboarding_subscriptions (
@@ -673,7 +677,7 @@ def onboarding_checkout(
             ) VALUES (:sid, :uid, :plan, 'pending', 'usd')
             ON CONFLICT (checkout_session_id) DO NOTHING
         """),
-        {"sid": session["id"], "uid": identity.user.id, "plan": plan},
+        {"sid": session["id"], "uid": user_id, "plan": plan},
     )
     return OnboardingCheckoutRead(url=str(session["url"]), session_id=str(session["id"]))
 
@@ -894,15 +898,14 @@ def checkout(
     settings: Settings = request.app.state.settings
     prices = _price_map(settings)
     price = prices[plan]
-    destination = settings.billing_return_url
+    destination = settings.billing_return_url.strip().strip("'\"")
     if not price.startswith("price_") or urlsplit(destination).scheme != "https":
         raise DomainError(
             "ERR_PROVIDER_CONFIG", "Configure a test price and HTTPS billing return URL.", 503
         )
+    user_id = getattr(getattr(identity, "user", None), "id", None)
+    user_email = getattr(getattr(identity, "user", None), "email", None)
     connection = load(db, business_id, "stripe")
-    # Release any active transaction locks before slow outbound Stripe HTTP calls (H6)
-    if hasattr(db, "commit") and type(db).__name__ != "MagicMock":
-        db.commit()
     subscriptions: dict[str, Any] = {"data": []}
     if customer := connection.get("customer"):
         subscriptions = stripe(
@@ -918,7 +921,6 @@ def checkout(
             raise DomainError("ERR_SUBSCRIPTION_EXISTS", "A subscription already exists.", 409)
     else:
         customer_data: dict[str, str] = {"metadata[business_id]": str(business_id)}
-        user_email = getattr(getattr(identity, "user", None), "email", None)
         if isinstance(user_email, str) and "@" in user_email:
             customer_data["email"] = user_email
         customer = stripe(
@@ -962,6 +964,9 @@ def checkout(
             "managed_payments[enabled]": "false",
         },
     )
+    # Restore transaction-local RLS actor & business scope after db.commit() above.
+    if type(db).__name__ != "MagicMock" and isinstance(user_id, UUID):
+        set_context(db, user_id, business_id)
     save(db, business_id, "stripe", {"customer": customer, "checkout": session["id"], "plan": plan})
     return {"url": str(session["url"])}
 
@@ -1758,8 +1763,6 @@ def list_billing_invoices(
     customer = current.get("customer")
     if not customer or not settings.stripe_billing_configured:
         return BillingInvoicesRead(items=[])
-    if hasattr(db, "commit") and type(db).__name__ != "MagicMock":
-        db.commit()
     res = stripe(
         settings,
         "GET",
