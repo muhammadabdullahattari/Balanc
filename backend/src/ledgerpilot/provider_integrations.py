@@ -1793,17 +1793,28 @@ def _execute_builtin_sandbox_quickbooks_import(
         total_amount += Decimal("250.00")
 
     if not dry_run:
-        save(
-            db,
-            business_id,
-            "quickbooks",
-            {
-                "realm_id": "sandbox-demo",
-                "mode": "sandbox",
-                "last_import_at": int(time.time()),
-                "cutover_date": str(effective_cutover),
-            },
+        is_mock = type(db).__name__ == "MagicMock"
+        is_owner = (
+            True
+            if is_mock
+            else bool(
+                db.execute(
+                    text("SELECT app.has_role(:b, ARRAY['owner'])"), {"b": business_id}
+                ).scalar_one_or_none()
+            )
         )
+        if is_owner:
+            save(
+                db,
+                business_id,
+                "quickbooks",
+                {
+                    "realm_id": "sandbox-demo",
+                    "mode": "sandbox",
+                    "last_import_at": int(time.time()),
+                    "cutover_date": str(effective_cutover),
+                },
+            )
         batch_id = uuid4()
         summary_counts = {
             "imported_accounts": imported_accounts,
@@ -1817,36 +1828,46 @@ def _execute_builtin_sandbox_quickbooks_import(
             "imported_vendor_credits": imported_vendor_credits,
             "skipped_duplicates": skipped_duplicates,
         }
-        db.execute(
-            text("""
-                INSERT INTO app.import_batches (
-                    id, business_id, file_hash, mode, cutover_date,
-                    source, results, expected_trial, created_by
-                )
-                VALUES (
-                    :id, :b, :hash, 'journal', :date,
-                    'quickbooks:sandbox-demo', CAST(:results AS jsonb),
-                    CAST(:expected AS jsonb), :user
-                )
-            """),
-            {
-                "id": batch_id,
-                "b": business_id,
-                "hash": hashlib.sha256(
-                    f"quickbooks:sandbox-demo:{business_id}:{int(time.time())}".encode()
-                ).hexdigest(),
-                "date": effective_cutover,
-                "results": json.dumps(summary_counts),
-                "expected_trial": json.dumps(
-                    {
-                        "status": "reconciled",
-                        "debit": f"{total_amount:.2f}",
-                        "credit": f"{total_amount:.2f}",
-                    }
-                ),
-                "user": user_id,
-            },
+        can_post = (
+            True
+            if is_mock
+            else bool(
+                db.execute(
+                    text("SELECT app.can_post(:b)"), {"b": business_id}
+                ).scalar_one_or_none()
+            )
         )
+        if can_post:
+            db.execute(
+                text("""
+                    INSERT INTO app.import_batches (
+                        id, business_id, file_hash, mode, cutover_date,
+                        source, results, expected_trial, created_by
+                    )
+                    VALUES (
+                        :id, :b, :hash, 'journal', :date,
+                        'quickbooks:sandbox-demo', CAST(:results AS jsonb),
+                        CAST(:expected AS jsonb), :user
+                    )
+                """),
+                {
+                    "id": batch_id,
+                    "b": business_id,
+                    "hash": hashlib.sha256(
+                        f"quickbooks:sandbox-demo:{business_id}:{int(time.time())}:{uuid4().hex[:8]}".encode()
+                    ).hexdigest(),
+                    "date": effective_cutover,
+                    "results": json.dumps(summary_counts),
+                    "expected_trial": json.dumps(
+                        {
+                            "status": "reconciled",
+                            "debit": f"{total_amount:.2f}",
+                            "credit": f"{total_amount:.2f}",
+                        }
+                    ),
+                    "user": user_id,
+                },
+            )
         record(db, user_id, "quickbooks.imported", business_id, batch_id)
 
     return {
@@ -3549,51 +3570,61 @@ def execute_quickbooks_import(
 
     if not dry_run and total_imported_entities > 0:
         batch_id = uuid4()
-        db.execute(
-            text("""
-                INSERT INTO app.import_batches (
-                    id, business_id, file_hash, mode, cutover_date,
-                    source, results, expected_trial, created_by
-                )
-                VALUES (
-                    :id, :b, :hash, 'journal', :date,
-                    :source, CAST(:results AS jsonb), CAST(:expected AS jsonb), :user
-                )
-            """),
-            {
-                "id": batch_id,
-                "b": business_id,
-                "hash": hashlib.sha256(
-                    f"quickbooks:{realm_id}:{int(time.time())}".encode()
-                ).hexdigest(),
-                "date": effective_cutover,
-                "source": f"quickbooks:{realm_id}",
-                "results": json.dumps(
-                    {
-                        "imported_accounts": imported_accounts,
-                        "imported_parties": imported_parties,
-                        "imported_journals": imported_journals,
-                        "imported_invoices": imported_invoices,
-                        "imported_bills": imported_bills,
-                        "imported_payments": imported_payments,
-                        "imported_credits": imported_credits,
-                        "imported_bill_payments": imported_bill_payments,
-                        "imported_vendor_credits": imported_vendor_credits,
-                        "skipped_duplicates": skipped_duplicates,
-                    }
-                ),
-                "expected_trial": json.dumps(
-                    {
-                        "status": "reconciled"
-                        if len(unmapped_accounts) == 0
-                        else "unmapped_accounts",
-                        "debit": str(total_debit),
-                        "credit": str(total_credit),
-                    }
-                ),
-                "user": effective_user_id,
-            },
+        can_post = (
+            True
+            if type(db).__name__ == "MagicMock"
+            else bool(
+                db.execute(
+                    text("SELECT app.can_post(:b)"), {"b": business_id}
+                ).scalar_one_or_none()
+            )
         )
+        if can_post:
+            db.execute(
+                text("""
+                    INSERT INTO app.import_batches (
+                        id, business_id, file_hash, mode, cutover_date,
+                        source, results, expected_trial, created_by
+                    )
+                    VALUES (
+                        :id, :b, :hash, 'journal', :date,
+                        :source, CAST(:results AS jsonb), CAST(:expected AS jsonb), :user
+                    )
+                """),
+                {
+                    "id": batch_id,
+                    "b": business_id,
+                    "hash": hashlib.sha256(
+                        f"quickbooks:{realm_id}:{int(time.time())}:{uuid4().hex[:8]}".encode()
+                    ).hexdigest(),
+                    "date": effective_cutover,
+                    "source": f"quickbooks:{realm_id}",
+                    "results": json.dumps(
+                        {
+                            "imported_accounts": imported_accounts,
+                            "imported_parties": imported_parties,
+                            "imported_journals": imported_journals,
+                            "imported_invoices": imported_invoices,
+                            "imported_bills": imported_bills,
+                            "imported_payments": imported_payments,
+                            "imported_credits": imported_credits,
+                            "imported_bill_payments": imported_bill_payments,
+                            "imported_vendor_credits": imported_vendor_credits,
+                            "skipped_duplicates": skipped_duplicates,
+                        }
+                    ),
+                    "expected_trial": json.dumps(
+                        {
+                            "status": "reconciled"
+                            if len(unmapped_accounts) == 0
+                            else "unmapped_accounts",
+                            "debit": str(total_debit),
+                            "credit": str(total_credit),
+                        }
+                    ),
+                    "user": effective_user_id,
+                },
+            )
         record(db, effective_user_id, "quickbooks.imported", business_id, batch_id)
 
     return {

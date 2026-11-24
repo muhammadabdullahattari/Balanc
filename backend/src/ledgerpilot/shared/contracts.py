@@ -549,7 +549,9 @@ responses: dict[str, Any] = {
     "identity.google_challenge": obj("GoogleChallengeRead", nonce=str),
     "identity.google_login": obj("GoogleLoginRead", status=str),
     "identity.csrf": obj("CSRFRead", csrf_token=str),
-    "identity.me": obj("IdentityRead", id=UUID, email=str, verified=bool, mfa=bool),
+    "identity.me": obj(
+        "IdentityRead", id=UUID, email=str, verified=bool, mfa=bool, google_linked=opt(bool)
+    ),
     "identity.enroll": obj("MFAEnrollment", secret=str, provisioning_uri=str),
     "identity.confirm": obj("MFARecoveryCodes", recovery_codes=many(str)),
     "tenancy.accept": obj("AcceptedInvitation", business_id=UUID),
