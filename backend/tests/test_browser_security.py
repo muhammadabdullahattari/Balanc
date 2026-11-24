@@ -76,7 +76,7 @@ async def test_credentials_excluded_from_responses_logs_and_plain_storage(
         )
         assert access and refresh and csrf
         me = await client.get("/api/v1/auth/me")
-        assert set(me.json()) == {"id", "email", "verified", "mfa"}
+        assert set(me.json()) == {"id", "email", "verified", "mfa", "google_linked"}
         reply = await client.post("/api/v1/auth/refresh")
         assert reply.status_code == 200 and reply.json() == {"status": "refreshed"}
         assert "no-store" in reply.headers["Cache-Control"]

@@ -32,15 +32,14 @@ from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings, get_settings
+from ledgerpilot.identity.dependencies import DB, Principal
 from ledgerpilot.identity.dependencies import Identity as CurrentUser
-from ledgerpilot.identity.dependencies import Principal, db_session
 from ledgerpilot.identity.mail import send_transactional_email
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema as StrictModel
 from ledgerpilot.tenancy.service import authorize
 
 router = APIRouter(tags=["p3-automation"])
-DB = Annotated[Session, Depends(db_session)]
 
 
 def require_role(db: Session, user: Principal, business_id: UUID, roles: tuple[str, ...]) -> None:
