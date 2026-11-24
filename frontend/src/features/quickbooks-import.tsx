@@ -61,6 +61,8 @@ export function QuickBooksImport() {
   });
 
   const toggleEntity = (entity: string) => {
+    importDryRun.reset();
+    importLive.reset();
     setSelectedEntities((prev) =>
       prev.includes(entity)
         ? prev.filter((e) => e !== entity)
@@ -206,7 +208,10 @@ export function QuickBooksImport() {
           busy={importLive.isPending}
           disabled={
             selectedEntities.length === 0 ||
-            (dryRunData !== undefined && !dryRunData.reconciled)
+            !cutoverDate ||
+            importDryRun.isPending ||
+            !dryRunData?.reconciled ||
+            importLive.isSuccess
           }
           onClick={() => {
             if (
