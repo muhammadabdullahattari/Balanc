@@ -4,6 +4,11 @@ import { AuditShares } from "./audit-access";
 import { BillingSettings } from "./billing";
 import { QuickBooksImport } from "./quickbooks-import";
 import { RolePermissions } from "./role-permissions";
+import {
+  HumanApprovedSupplierPayments,
+  MultichannelReminders,
+  SupplierPortalConnectors,
+} from "./p3-automation";
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
@@ -137,6 +142,9 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
           ["permissions", "Permissions"],
           ["billing", "Billing"],
           ["integrations", "Integrations"],
+          ["reminders", "WhatsApp & Slack"],
+          ["portals", "Supplier Portals"],
+          ["payments", "Supplier Payments"],
           ["security", "Security"],
           ["privacy", "Privacy"],
         ]}
@@ -262,6 +270,9 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
         {section === "billing" && <BillingSettings />}
         {section === "permissions" && <RolePermissions />}
         {section === "integrations" && <QuickBooksImport />}
+        {section === "reminders" && <MultichannelReminders />}
+        {section === "portals" && <SupplierPortalConnectors />}
+        {section === "payments" && <HumanApprovedSupplierPayments />}
         {section === "security" && (
           <>
             <h2>Keep your workspace protected.</h2>

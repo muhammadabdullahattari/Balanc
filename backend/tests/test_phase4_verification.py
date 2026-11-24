@@ -339,7 +339,7 @@ async def test_synthetic_backup_restores_rows_grants_rls_and_financial_reads(
                     "SELECT rolsuper OR rolbypassrls FROM pg_roles WHERE rolname=current_user"
                 ).fetchone() == (False,)
                 assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == (
-                    "0036",
+                    "0039",
                 )
             restored_root = tmp_path / "restored-evidence"
             shutil.copytree(evidence_backup, restored_root)

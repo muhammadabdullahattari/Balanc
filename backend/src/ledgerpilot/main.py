@@ -384,7 +384,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one_or_none()
-                if version != "0036":
+                if version != "0039":
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
@@ -515,6 +515,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(audit_access_router, prefix=configured.api_v1_prefix)
     application.include_router(provider_router, prefix=configured.api_v1_prefix)
     application.include_router(evidence_router, prefix=configured.api_v1_prefix)
+    from ledgerpilot.workspace.p3_automation import router as p3_automation_router
+
+    application.include_router(p3_automation_router, prefix=configured.api_v1_prefix)
     application.include_router(observability_router)
     return application
 

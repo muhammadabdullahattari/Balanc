@@ -51,6 +51,17 @@ class Settings(BaseSettings):
     quickbooks_client_id: str = ""
     quickbooks_client_secret: SecretStr | None = None
     quickbooks_redirect_uri: str = ""
+    slack_app_id: str = ""
+    slack_client_id: str = ""
+    slack_client_secret: SecretStr | None = None
+    slack_signing_secret: SecretStr | None = None
+    slack_bot_token: SecretStr | None = None
+    slack_webhook_url: SecretStr | None = None
+    slack_default_channel: str = "#all-balanc"
+    whatsapp_phone_number_id: str = ""
+    whatsapp_business_account_id: str = ""
+    whatsapp_access_token: SecretStr | None = None
+    whatsapp_default_recipient: str = ""
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     db_pool_size: int = Field(default=5, ge=1, le=20)
     db_max_overflow: int = Field(default=5, ge=0, le=20)

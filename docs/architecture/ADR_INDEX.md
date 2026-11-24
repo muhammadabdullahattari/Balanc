@@ -27,6 +27,7 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-018](ADR-018-cloud-networking-database-migrations-and-https-email-delivery.md) | Cloud networking, managed database migrations, and HTTPS email delivery | Accepted |
 | [ADR-019](ADR-019-universal-email-delivery-multi-provider-failover-and-sandbox-remediation.md) | Universal email delivery, multi-provider HTTPS failover, and third-party sandbox remediation | Accepted |
 | [ADR-020](ADR-020-verification-rate-limiting-cooldown-and-celery-queuing.md) | Verification rate limiting, progressive cooldown, and Celery queuing | Accepted |
+| [ADR-021](ADR-021-p3-multichannel-reminders-portal-totp-and-approved-payments.md) | P3 multichannel WhatsApp/Slack reminders, RFC 6238 32-char TOTP supplier portal connectors, and human-approved supplier payments | Accepted (P3 branch) |
 
 ## Changing a decision
 

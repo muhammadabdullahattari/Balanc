@@ -123,6 +123,11 @@ const Close = lazy(() =>
 const Settings = lazy(() =>
   import("./features/settings").then((m) => ({ default: m.Settings })),
 );
+const P3AutomationHub = lazy(() =>
+  import("./features/p3-automation").then((m) => ({
+    default: m.P3AutomationHub,
+  })),
+);
 const navigation = [
   { to: "/drafts", label: "Draft review", icon: FileText },
   { to: "/refunds", label: "Payments & refunds", icon: ArrowLeftRight },
@@ -131,6 +136,9 @@ const navigation = [
   { to: "/openings", label: "Opening balances", icon: BookOpen },
   { to: "/activity", label: "Activity", icon: CheckSquare },
   { to: "/search", label: "Search", icon: SearchIcon },
+  { to: "/reminders", label: "WhatsApp & Slack", icon: CheckSquare },
+  { to: "/supplier-portals", label: "Supplier portals", icon: FolderOpen },
+  { to: "/supplier-payments", label: "Supplier payments", icon: Landmark },
   { to: "/reconciliation", label: "Reconciliation", icon: CheckSquare },
   { to: "/ledger", label: "General ledger", icon: BookOpen },
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -517,7 +525,15 @@ function Workspace() {
                 },
                 {
                   title: "Manage",
-                  paths: ["/rules", "/openings", "/activity", "/search"],
+                  paths: [
+                    "/rules",
+                    "/openings",
+                    "/reminders",
+                    "/supplier-portals",
+                    "/supplier-payments",
+                    "/activity",
+                    "/search",
+                  ],
                 },
               ].map((group) => (
                 <div key={group.title} className="nav-group">
@@ -655,6 +671,18 @@ function Workspace() {
                   <Route path="/prepaids" element={<Prepaids />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
+                  <Route
+                    path="/reminders"
+                    element={<P3AutomationHub initialTab="reminders" />}
+                  />
+                  <Route
+                    path="/supplier-portals"
+                    element={<P3AutomationHub initialTab="portals" />}
+                  />
+                  <Route
+                    path="/supplier-payments"
+                    element={<P3AutomationHub initialTab="payments" />}
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/billing"
