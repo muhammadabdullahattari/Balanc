@@ -942,16 +942,20 @@ def dispatch_multichannel_reminder(
     # 2. Recheck payment / evidence resolution state before send
     is_resolved = payload.is_resolved_override
     if not is_resolved and payload.target_id is not None:
-        doc_state = db.execute(
+        doc_resolved = db.execute(
             text(
                 """
-                SELECT status FROM app.trade_documents
-                WHERE business_id = :bid AND id = :tid
+                SELECT (d.disputed OR coalesce(sum(a.amount), 0) >= d.total) AS resolved
+                FROM app.trade_documents d
+                LEFT JOIN app.allocations a
+                  ON a.business_id = d.business_id AND a.document_id = d.id
+                WHERE d.business_id = :bid AND d.id = :tid
+                GROUP BY d.id, d.total, d.disputed
                 """
             ),
             {"bid": business_id, "tid": payload.target_id},
         ).scalar_one_or_none()
-        if doc_state in ("settled", "paid", "void", "cancelled"):
+        if doc_resolved:
             is_resolved = True
         if not is_resolved and payload.target_kind == "evidence":
             has_ev = db.execute(
@@ -1549,36 +1553,15 @@ def _get_or_init_payment_controls(db: Session, business_id: UUID, actor_id: UUID
     )
     if row:
         return dict(row)
-    db.execute(
-        text(
-            """
-            INSERT INTO app.supplier_payment_controls (
-              business_id, kill_switch_active, kill_switch_reason,
-              single_payment_limit, dual_approval_threshold, default_rail, updated_by
-            ) VALUES (
-              :bid, false, '', 50000.000000, 5000.000000, 'stripe_live', :actor
-            )
-            ON CONFLICT (business_id) DO NOTHING
-            """
-        ),
-        {"bid": business_id, "actor": actor_id},
-    )
-    row2 = (
-        db.execute(
-            text(
-                """
-            SELECT business_id, kill_switch_active, kill_switch_reason,
-                   single_payment_limit, dual_approval_threshold, default_rail, updated_at
-            FROM app.supplier_payment_controls
-            WHERE business_id = :bid
-            """
-            ),
-            {"bid": business_id},
-        )
-        .mappings()
-        .one()
-    )
-    return dict(row2)
+    return {
+        "business_id": business_id,
+        "kill_switch_active": False,
+        "kill_switch_reason": "",
+        "single_payment_limit": Decimal("50000.00"),
+        "dual_approval_threshold": Decimal("5000.00"),
+        "default_rail": "stripe_live",
+        "updated_at": datetime.now(UTC),
+    }
 
 
 @router.get("/businesses/{business_id}/p3/supplier-payments")
