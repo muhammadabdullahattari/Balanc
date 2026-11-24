@@ -46,9 +46,9 @@ Entry = Annotated[Accrual | Depreciation | Conversion, Field(discriminator="kind
 def straight_line_installment(base: Decimal, months: int, index: int, unit: Decimal) -> Decimal:
     """Difference of rounded cumulative amounts allocates the residual cent."""
     portion = base / months
-    return (portion * index).quantize(unit, ROUND_HALF_EVEN) - (
-        portion * (index - 1)
-    ).quantize(unit, ROUND_HALF_EVEN)
+    return (portion * index).quantize(unit, ROUND_HALF_EVEN) - (portion * (index - 1)).quantize(
+        unit, ROUND_HALF_EVEN
+    )
 
 
 def journal_preview(entry: Entry, currency: str, precision: int) -> DraftCreate:

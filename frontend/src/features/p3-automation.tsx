@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { keys, queryClient } from "../api/runtime";
+import { api, keys, queryClient, result } from "../api/runtime";
 import {
   Badge,
   Button,
@@ -11,32 +11,6 @@ import {
   Table,
 } from "../components/ui";
 import { useAccess, useBusiness } from "./context";
-
-async function p3Fetch<T>(url: string, options?: RequestInit): Promise<T> {
-  const csrf =
-    document.cookie
-      .split("; ")
-      .find((row) => row.startsWith("lp_csrf="))
-      ?.split("=")[1] || "";
-  const resp = await fetch(url, {
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {}),
-      ...(options?.headers || {}),
-    },
-    ...options,
-  });
-  const body = await resp.json().catch(() => ({}));
-  if (!resp.ok) {
-    const msg =
-      body?.error?.message ||
-      body?.detail ||
-      `Request failed with status ${resp.status}`;
-    throw new Error(msg);
-  }
-  return body as T;
-}
 
 interface RemindersData {
   channels_status: {
@@ -159,6 +133,7 @@ interface PaymentsData {
 
 export function MultichannelReminders() {
   const b = useBusiness();
+  const path = { business_id: b.id };
   const [targetKind, setTargetKind] = useState<
     "bill" | "invoice" | "evidence" | "approval"
   >("bill");
@@ -176,28 +151,40 @@ export function MultichannelReminders() {
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-reminders"],
-    queryFn: () =>
-      p3Fetch<RemindersData>(`/api/v1/businesses/${b.id}/p3/reminders`),
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/reminders", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as RemindersData,
   });
 
   const dispatchMutation = useMutation({
-    mutationFn: (overrideChannel?: "auto" | "whatsapp" | "slack" | "email") =>
-      p3Fetch<{
+    mutationFn: async (
+      overrideChannel?: "auto" | "whatsapp" | "slack" | "email",
+    ) =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/reminders/dispatch", {
+          params: { path },
+          body: {
+            target_kind: targetKind,
+            target_label: targetLabel,
+            recipient_key: recipientKey,
+            channel: overrideChannel || channel,
+            template_name: "hello_world",
+            custom_message: customMessage,
+            idempotency_key: "",
+            is_resolved_override: false,
+          },
+        }),
+      )) as unknown as {
         id: string;
         status: string;
         channel: string;
         destination: string;
         provider_message_id: string;
-      }>(`/api/v1/businesses/${b.id}/p3/reminders/dispatch`, {
-        method: "POST",
-        body: JSON.stringify({
-          target_kind: targetKind,
-          target_label: targetLabel,
-          recipient_key: recipientKey,
-          channel: overrideChannel || channel,
-          custom_message: customMessage,
-        }),
-      }),
+      },
     onSuccess: (res) => {
       setLastResult(
         `Dispatched via ${res.channel.toUpperCase()} to ${res.destination} — Status: ${res.status} (${res.provider_message_id || "recorded"})`,
@@ -211,25 +198,31 @@ export function MultichannelReminders() {
   const prefMutation = useMutation({
     mutationFn: (form: HTMLFormElement) => {
       const fd = new FormData(form);
-      return p3Fetch(`/api/v1/businesses/${b.id}/p3/reminders/preferences`, {
-        method: "POST",
-        body: JSON.stringify({
-          recipient_key: String(fd.get("recipient_key") || "ap-finance-owner"),
-          recipient_name: String(
-            fd.get("recipient_name") || "Finance Approver",
-          ),
-          whatsapp_phone: String(fd.get("whatsapp_phone") || "+923412685261"),
-          slack_channel: String(fd.get("slack_channel") || "#all-balanc"),
-          email_address: String(fd.get("email_address") || ""),
-          whatsapp_opt_in: fd.get("whatsapp_opt_in") === "on",
-          slack_opt_in: fd.get("slack_opt_in") === "on",
-          email_fallback: true,
-          quiet_start_hour: Number(fd.get("quiet_start_hour") || 22),
-          quiet_end_hour: Number(fd.get("quiet_end_hour") || 7),
-          max_attempts: Number(fd.get("max_attempts") || 3),
-          opted_out: fd.get("opted_out") === "on",
+      return result(
+        api.POST("/api/v1/businesses/{business_id}/p3/reminders/preferences", {
+          params: { path },
+          body: {
+            recipient_key: String(
+              fd.get("recipient_key") || "ap-finance-owner",
+            ),
+            recipient_name: String(
+              fd.get("recipient_name") || "Finance Approver",
+            ),
+            whatsapp_phone: String(fd.get("whatsapp_phone") || "+923412685261"),
+            slack_channel: String(fd.get("slack_channel") || "#all-balanc"),
+            email_address: String(fd.get("email_address") || ""),
+            whatsapp_opt_in: fd.get("whatsapp_opt_in") === "on",
+            slack_opt_in: fd.get("slack_opt_in") === "on",
+            email_fallback: true,
+            quiet_start_hour: Number(fd.get("quiet_start_hour") || 22),
+            quiet_end_hour: Number(fd.get("quiet_end_hour") || 7),
+            timezone: "Asia/Karachi",
+            locale: "en_US",
+            max_attempts: Number(fd.get("max_attempts") || 3),
+            opted_out: fd.get("opted_out") === "on",
+          },
         }),
-      });
+      );
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -282,10 +275,7 @@ export function MultichannelReminders() {
               onChange={(e) =>
                 setTargetKind(
                   e.target.value as
-                    | "bill"
-                    | "invoice"
-                    | "evidence"
-                    | "approval",
+                    "bill" | "invoice" | "evidence" | "approval",
                 )
               }
             >
@@ -317,7 +307,8 @@ export function MultichannelReminders() {
               }
             >
               <option value="whatsapp">
-                WhatsApp Cloud API ({cs?.default_whatsapp_recipient || "+923412685261"})
+                WhatsApp Cloud API (
+                {cs?.default_whatsapp_recipient || "+923412685261"})
               </option>
               <option value="slack">
                 Slack Channel ({cs?.default_slack_channel || "#all-balanc"})
@@ -357,7 +348,11 @@ export function MultichannelReminders() {
           </Button>
         </div>
         {lastResult && (
-          <p role="status" className="success-text" style={{ marginTop: "10px" }}>
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "10px" }}
+          >
             {lastResult}
           </p>
         )}
@@ -494,6 +489,7 @@ export function MultichannelReminders() {
 
 export function SupplierPortalConnectors() {
   const b = useBusiness();
+  const path = { business_id: b.id };
   const [vendorName, setVendorName] = useState("K-Electric / AWS Cloud Portal");
   const [portalKind, setPortalKind] = useState<
     | "web_totp"
@@ -509,9 +505,7 @@ export function SupplierPortalConnectors() {
     "billing-viewer@balanc.local",
   );
   const [password, setPassword] = useState("ViewerSubUser#2026");
-  const [totpSeed, setTotpSeed] = useState(
-    "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP",
-  );
+  const [totpSeed, setTotpSeed] = useState("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
   const [liveTotpInfo, setLiveTotpInfo] = useState<{
     code: string;
     remaining: number;
@@ -520,19 +514,29 @@ export function SupplierPortalConnectors() {
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-portals"],
-    queryFn: () =>
-      p3Fetch<PortalsData>(`/api/v1/businesses/${b.id}/p3/supplier-portals`),
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/supplier-portals", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as PortalsData,
   });
 
   const generateSeedMutation = useMutation({
-    mutationFn: () =>
-      p3Fetch<{
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-portals/generate-totp-seed",
+          {
+            params: { path },
+          },
+        ),
+      )) as unknown as {
         totp_seed: string;
         current_6_digit_code: string;
         seconds_remaining: number;
-      }>(`/api/v1/businesses/${b.id}/p3/supplier-portals/generate-totp-seed`, {
-        method: "POST",
-      }),
+      },
     onSuccess: (res) => {
       setTotpSeed(res.totp_seed);
       setLiveTotpInfo({
@@ -543,25 +547,27 @@ export function SupplierPortalConnectors() {
   });
 
   const createPortalMutation = useMutation({
-    mutationFn: () =>
-      p3Fetch<{
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/supplier-portals", {
+          params: { path },
+          body: {
+            vendor_name: vendorName,
+            portal_kind: portalKind,
+            portal_url: portalUrl,
+            login_username: loginUsername,
+            password,
+            totp_enabled: true,
+            totp_seed: totpSeed,
+            schedule_frequency: "monthly",
+          },
+        }),
+      )) as unknown as {
         id: string;
         vendor_name: string;
         current_6_digit_code: string;
         seconds_remaining: number;
-      }>(`/api/v1/businesses/${b.id}/p3/supplier-portals`, {
-        method: "POST",
-        body: JSON.stringify({
-          vendor_name: vendorName,
-          portal_kind: portalKind,
-          portal_url: portalUrl,
-          login_username: loginUsername,
-          password,
-          totp_enabled: true,
-          totp_seed: totpSeed,
-          schedule_frequency: "monthly",
-        }),
-      }),
+      },
     onSuccess: (res) => {
       setLiveTotpInfo({
         code: res.current_6_digit_code,
@@ -574,8 +580,25 @@ export function SupplierPortalConnectors() {
   });
 
   const syncPortalMutation = useMutation({
-    mutationFn: (connectionId: string) =>
-      p3Fetch<{
+    mutationFn: async (connectionId: string) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-portals/{connection_id}/sync",
+          {
+            params: {
+              path: { business_id: b.id, connection_id: connectionId },
+            },
+            body: {
+              external_invoice_id: "",
+              invoice_number: "",
+              total_amount: "425.00",
+              tax_amount: "25.00",
+              currency: "USD",
+              simulate_portal_changed: false,
+            },
+          },
+        ),
+      )) as unknown as {
         id: string;
         status: string;
         invoice_number: string;
@@ -583,10 +606,7 @@ export function SupplierPortalConnectors() {
         currency: string;
         totp_6_digit_code_used: string;
         trade_draft_id: string | null;
-      }>(`/api/v1/businesses/${b.id}/p3/supplier-portals/${connectionId}/sync`, {
-        method: "POST",
-        body: JSON.stringify({}),
-      }),
+      },
     onSuccess: (res) => {
       setSyncMessage(
         `Portal authenticated with 2FA code ${res.totp_6_digit_code_used || "API"} -> Ingested Invoice ${res.invoice_number} (${res.currency} ${res.total_amount}) into OCR Purchase Bill Draft (${res.status})!`,
@@ -599,9 +619,15 @@ export function SupplierPortalConnectors() {
 
   const revokeMutation = useMutation({
     mutationFn: (connectionId: string) =>
-      p3Fetch(
-        `/api/v1/businesses/${b.id}/p3/supplier-portals/${connectionId}/revoke`,
-        { method: "POST" },
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-portals/{connection_id}/revoke",
+          {
+            params: {
+              path: { business_id: b.id, connection_id: connectionId },
+            },
+          },
+        ),
       ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
@@ -618,8 +644,8 @@ export function SupplierPortalConnectors() {
           Connect read-only vendor billing sub-users (Method B: Utilities,
           Telecom, Software portals with 32-character Google Authenticator TOTP
           seed, or Method A: Stripe Vendor Invoices API). Credentials and TOTP
-          seeds are Fernet-encrypted at rest; fetched invoices go through OCR into
-          Purchase Bill Drafts for human review.
+          seeds are Fernet-encrypted at rest; fetched invoices go through OCR
+          into Purchase Bill Drafts for human review.
         </p>
       </div>
 
@@ -726,7 +752,9 @@ export function SupplierPortalConnectors() {
       {query.data && (
         <div className="panel">
           <h3>2. Authorized Portal Connections</h3>
-          <ErrorNotice error={syncPortalMutation.error || revokeMutation.error} />
+          <ErrorNotice
+            error={syncPortalMutation.error || revokeMutation.error}
+          />
           {syncMessage && (
             <p role="status" className="success-text">
               {syncMessage}
@@ -813,7 +841,9 @@ export function SupplierPortalConnectors() {
                 label: "Review Draft ID",
                 render: (i) => (
                   <code style={{ fontSize: "0.78rem" }}>
-                    {i.trade_draft_id ? i.trade_draft_id.slice(0, 12) + "…" : "—"}
+                    {i.trade_draft_id
+                      ? i.trade_draft_id.slice(0, 12) + "…"
+                      : "—"}
                   </code>
                 ),
               },
@@ -827,9 +857,9 @@ export function SupplierPortalConnectors() {
 
 export function HumanApprovedSupplierPayments() {
   const b = useBusiness();
+  const path = { business_id: b.id };
   const access = useAccess();
-  const canApprove =
-    access?.role === "owner" || access?.role === "accountant";
+  const canApprove = access?.role === "owner" || access?.role === "accountant";
 
   const [supplierName, setSupplierName] = useState("Amazon Web Services Inc.");
   const [holderName, setHolderName] = useState("Amazon Web Services Treasury");
@@ -849,26 +879,36 @@ export function HumanApprovedSupplierPayments() {
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-payments"],
-    queryFn: () =>
-      p3Fetch<PaymentsData>(`/api/v1/businesses/${b.id}/p3/supplier-payments`),
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/supplier-payments", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as PaymentsData,
   });
 
   const toggleKillSwitch = useMutation({
     mutationFn: (active: boolean) =>
-      p3Fetch(`/api/v1/businesses/${b.id}/p3/supplier-payments/controls`, {
-        method: "POST",
-        body: JSON.stringify({
-          kill_switch_active: active,
-          kill_switch_reason: active
-            ? "Paused by Owner/Accountant via Emergency Kill Switch"
-            : "",
-          single_payment_limit:
-            query.data?.controls.single_payment_limit || "50000.00",
-          dual_approval_threshold:
-            query.data?.controls.dual_approval_threshold || "5000.00",
-          default_rail: query.data?.controls.default_rail || "stripe_live",
-        }),
-      }),
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-payments/controls",
+          {
+            params: { path },
+            body: {
+              kill_switch_active: active,
+              kill_switch_reason: active
+                ? "Paused by Owner/Accountant via Emergency Kill Switch"
+                : "",
+              single_payment_limit:
+                query.data?.controls.single_payment_limit || "50000.00",
+              dual_approval_threshold:
+                query.data?.controls.dual_approval_threshold || "5000.00",
+              default_rail: query.data?.controls.default_rail || "stripe_live",
+            },
+          },
+        ),
+      ),
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -877,23 +917,27 @@ export function HumanApprovedSupplierPayments() {
   });
 
   const createBeneficiary = useMutation({
-    mutationFn: () =>
-      p3Fetch<{ id: string }>(
-        `/api/v1/businesses/${b.id}/p3/supplier-payments/beneficiaries`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            supplier_name: supplierName,
-            account_holder_name: holderName,
-            bank_name: bankName,
-            routing_or_swift: routing,
-            account_number: accountNumber,
-            currency: b.currency || "USD",
-            rail,
-            out_of_band_verified: true,
-          }),
-        },
-      ),
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-payments/beneficiaries",
+          {
+            params: { path },
+            body: {
+              supplier_name: supplierName,
+              account_holder_name: holderName,
+              bank_name: bankName,
+              routing_or_swift: routing,
+              account_number: accountNumber,
+              currency: b.currency || "USD",
+              rail,
+              out_of_band_verified: true,
+              verification_reference:
+                "Verified via vendor callback & signed W-9/IBAN letter",
+            },
+          },
+        ),
+      )) as unknown as { id: string },
     onSuccess: (res) => {
       setSelectedBeneficiaryId(res.id);
       void queryClient.invalidateQueries({
@@ -903,25 +947,31 @@ export function HumanApprovedSupplierPayments() {
   });
 
   const preparePayment = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       const benId =
         selectedBeneficiaryId || query.data?.beneficiaries[0]?.id || "";
       const benObj = query.data?.beneficiaries.find((x) => x.id === benId);
-      return p3Fetch<{
+      return (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-payments/prepare",
+          {
+            params: { path },
+            body: {
+              bill_reference: billRef,
+              supplier_name: benObj?.supplier_name || supplierName,
+              beneficiary_id: benId,
+              amount: payAmount,
+              currency: b.currency || "USD",
+              rail,
+              idempotency_key: "",
+            },
+          },
+        ),
+      )) as unknown as {
         id: string;
         state: string;
         requires_dual_approval: boolean;
-      }>(`/api/v1/businesses/${b.id}/p3/supplier-payments/prepare`, {
-        method: "POST",
-        body: JSON.stringify({
-          bill_reference: billRef,
-          supplier_name: benObj?.supplier_name || supplierName,
-          beneficiary_id: benId,
-          amount: payAmount,
-          currency: b.currency || "USD",
-          rail,
-        }),
-      });
+      };
     },
     onSuccess: (res) => {
       setStatusNotice(
@@ -934,23 +984,25 @@ export function HumanApprovedSupplierPayments() {
   });
 
   const approveAndExecute = useMutation({
-    mutationFn: (paymentId: string) =>
-      p3Fetch<{
+    mutationFn: async (paymentId: string) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-payments/{payment_id}/approve-and-execute",
+          {
+            params: { path: { business_id: b.id, payment_id: paymentId } },
+            body: {
+              step_up_code: stepUpCode,
+              approval_note: "Human-approved with step-up 2FA verification",
+            },
+          },
+        ),
+      )) as unknown as {
         id: string;
         state: string;
         provider_reference: string;
         remittance_advice: string;
         message?: string;
-      }>(
-        `/api/v1/businesses/${b.id}/p3/supplier-payments/${paymentId}/approve-and-execute`,
-        {
-          method: "POST",
-          body: JSON.stringify({
-            step_up_code: stepUpCode,
-            approval_note: "Human-approved with step-up 2FA verification",
-          }),
-        },
-      ),
+      },
     onSuccess: (res) => {
       if (res.remittance_advice) {
         setActiveRemittance(res.remittance_advice);
@@ -989,10 +1041,13 @@ export function HumanApprovedSupplierPayments() {
             }}
           >
             <Badge>
-              Kill Switch: {ctrl.kill_switch_active ? "PAUSED (ACTIVE)" : "ARMED (NORMAL)"}
+              Kill Switch:{" "}
+              {ctrl.kill_switch_active ? "PAUSED (ACTIVE)" : "ARMED (NORMAL)"}
             </Badge>
             <Badge>Single Payment Limit: ${ctrl.single_payment_limit}</Badge>
-            <Badge>Dual Approval Threshold: ${ctrl.dual_approval_threshold}</Badge>
+            <Badge>
+              Dual Approval Threshold: ${ctrl.dual_approval_threshold}
+            </Badge>
             <Badge>
               Stripe Live Payment Rail:{" "}
               {ctrl.stripe_live_available ? "CONNECTED" : "SANDBOX"}
@@ -1084,16 +1139,14 @@ export function HumanApprovedSupplierPayments() {
           <Field label="Verified Supplier Beneficiary">
             <select
               value={
-                selectedBeneficiaryId ||
-                query.data?.beneficiaries[0]?.id ||
-                ""
+                selectedBeneficiaryId || query.data?.beneficiaries[0]?.id || ""
               }
               onChange={(e) => setSelectedBeneficiaryId(e.target.value)}
             >
               {(query.data?.beneficiaries || []).map((ben) => (
                 <option key={ben.id} value={ben.id}>
-                  {ben.supplier_name} — {ben.bank_name} ({ben.account_number_masked} v
-                  {ben.version})
+                  {ben.supplier_name} — {ben.bank_name} (
+                  {ben.account_number_masked} v{ben.version})
                 </option>
               ))}
             </select>
@@ -1138,7 +1191,9 @@ export function HumanApprovedSupplierPayments() {
 
       {query.data && (
         <div className="panel">
-          <h3>3. Human Approval & Step-Up 2FA Execution Queue (Checker Step)</h3>
+          <h3>
+            3. Human Approval & Step-Up 2FA Execution Queue (Checker Step)
+          </h3>
           <ErrorNotice error={approveAndExecute.error} />
           {statusNotice && (
             <p role="status" className="success-text">
@@ -1174,7 +1229,9 @@ export function HumanApprovedSupplierPayments() {
                 label: "Live Reference",
                 render: (p) => (
                   <code style={{ fontSize: "0.78rem" }}>
-                    {p.provider_reference || p.failure_reason || "Awaiting Approval"}
+                    {p.provider_reference ||
+                      p.failure_reason ||
+                      "Awaiting Approval"}
                   </code>
                 ),
               },
@@ -1182,8 +1239,7 @@ export function HumanApprovedSupplierPayments() {
                 label: "Human Action",
                 render: (p) => (
                   <div style={{ display: "flex", gap: "8px" }}>
-                    {(p.state === "prepared" ||
-                      p.state === "first_approved") &&
+                    {(p.state === "prepared" || p.state === "first_approved") &&
                       canApprove && (
                         <Button
                           busy={approveAndExecute.isPending}

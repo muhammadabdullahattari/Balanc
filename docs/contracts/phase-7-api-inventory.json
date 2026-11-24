@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 198,
-  "distinct_operations": 159,
+  "call_sites": 234,
+  "distinct_operations": 191,
   "operations": [
     {
       "file": "App.tsx",
@@ -22,6 +22,56 @@
       "file": "App.tsx",
       "method": "POST",
       "path": "/api/v1/auth/logout"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/insights/question"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/history"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/override"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/fx-rates/lookup"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/lifecycle-preview"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/installment-preview"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/revaluation-preview"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/entry-preview"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}"
+    },
+    {
+      "file": "features/accountant-tools.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/journals"
     },
     {
       "file": "features/activity.tsx",
@@ -92,6 +142,31 @@
       "file": "features/advances.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/advances"
+    },
+    {
+      "file": "features/asset-register.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets"
+    },
+    {
+      "file": "features/asset-register.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/schedule"
+    },
+    {
+      "file": "features/asset-register.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}/journals"
+    },
+    {
+      "file": "features/asset-register.tsx",
+      "method": "PATCH",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets/{asset_id}"
+    },
+    {
+      "file": "features/asset-register.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/accounting/assets"
     },
     {
       "file": "features/audit-access.tsx",
@@ -524,6 +599,11 @@
       "path": "/api/v1/auth/google/login"
     },
     {
+      "file": "features/google-signin.tsx",
+      "method": "POST",
+      "path": "/api/v1/auth/google/login"
+    },
+    {
       "file": "features/ledger.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}"
@@ -611,6 +691,11 @@
     {
       "file": "features/onboarding.tsx",
       "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/portfolio-status"
+    },
+    {
+      "file": "features/onboarding.tsx",
+      "method": "GET",
       "path": "/api/v1/businesses"
     },
     {
@@ -667,6 +752,96 @@
       "file": "features/openings.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/imports/{batch_id}/parallel-comparison"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/reminders"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reminders/dispatch"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reminders/preferences"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals/generate-totp-seed"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals/{connection_id}/sync"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals/{connection_id}/revoke"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-payments"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-payments/controls"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-payments/beneficiaries"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-payments/prepare"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-payments/{payment_id}/approve-and-execute"
+    },
+    {
+      "file": "features/portfolio-triage.tsx",
+      "method": "GET",
+      "path": "/api/v1/portfolio"
+    },
+    {
+      "file": "features/portfolio-triage.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/portfolio-exceptions"
+    },
+    {
+      "file": "features/portfolio-triage.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/memberships"
+    },
+    {
+      "file": "features/portfolio-triage.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/portfolio-exceptions/{kind}/{source_id}/assignment-history"
+    },
+    {
+      "file": "features/portfolio-triage.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/portfolio-exceptions/{kind}/{source_id}/assignment"
     },
     {
       "file": "features/prepaids.tsx",
@@ -942,6 +1117,11 @@
       "file": "features/settings.tsx",
       "method": "POST",
       "path": "/api/v1/auth/logout-all"
+    },
+    {
+      "file": "features/settings.tsx",
+      "method": "GET",
+      "path": "/api/v1/auth/me"
     },
     {
       "file": "features/trade.tsx",

@@ -130,7 +130,7 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
   });
   const isGoogleLinked = Boolean(
     googleLinked ||
-      (session.data as { google_linked?: boolean } | undefined)?.google_linked,
+    (session.data as { google_linked?: boolean } | undefined)?.google_linked,
   );
   return (
     <>
@@ -298,7 +298,9 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
                 mode="link"
                 onLinked={() => {
                   setGoogleLinked(true);
-                  void queryClient.invalidateQueries({ queryKey: keys.session });
+                  void queryClient.invalidateQueries({
+                    queryKey: keys.session,
+                  });
                 }}
               />
             )}

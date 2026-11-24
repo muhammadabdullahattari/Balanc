@@ -1832,9 +1832,7 @@ def _execute_builtin_sandbox_quickbooks_import(
             True
             if is_mock
             else bool(
-                db.execute(
-                    text("SELECT app.can_post(:b)"), {"b": business_id}
-                ).scalar_one_or_none()
+                db.execute(text("SELECT app.can_post(:b)"), {"b": business_id}).scalar_one_or_none()
             )
         )
         if can_post:
@@ -3574,9 +3572,7 @@ def execute_quickbooks_import(
             True
             if type(db).__name__ == "MagicMock"
             else bool(
-                db.execute(
-                    text("SELECT app.can_post(:b)"), {"b": business_id}
-                ).scalar_one_or_none()
+                db.execute(text("SELECT app.can_post(:b)"), {"b": business_id}).scalar_one_or_none()
             )
         )
         if can_post:

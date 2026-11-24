@@ -1,32 +1,21 @@
-"""End-to-end tests for P3 Features C, D, and E:
-- Feature C (P3-B): Multichannel WhatsApp & Slack Reminders (consent, quiet hours, attempt caps, resolution recheck, opt-out, idempotency, live/sandbox providers)
-- Feature D (P3-A): Authorized Supplier Portal Invoice Connectors (Method A Stripe API & Method B Web Login + 32-char RFC 6238 TOTP Seed -> OCR -> Purchase Bill Drafts, duplicate replay guard, changed-portal fallback, credential revocation)
-- Feature E (P3-D): Human-Approved Supplier Payments (Out-of-Band Beneficiary Verification, Account-Takeover Invalidation, RBAC Owner/Accountant gate, Step-Up 2FA, Dual Approval threshold, Emergency Kill Switch, Live Stripe / ACH / SWIFT settlement & remittance advice)
-"""
+"""End-to-end tests for P3 Features C, D, and E."""
+
+# ruff: noqa: E501
 
 from __future__ import annotations
 
 import os
 from decimal import Decimal
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import httpx
 import pytest
-from sqlalchemy import text
+from test_phase2_integration import accountant_context, client, database_settings  # noqa: F401
 
 from ledgerpilot.config import Settings
+from ledgerpilot.local_setup import FileSettings
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.workspace.p3_automation import (
-    PaymentControlsUpdateInput,
-    ReminderDispatchInput,
-    ReminderOptOutInput,
-    ReminderPreferenceInput,
-    SupplierBeneficiaryCreateInput,
-    SupplierBeneficiaryUpdateBankInput,
-    SupplierPaymentApproveInput,
-    SupplierPaymentPrepareInput,
-    SupplierPortalCreateInput,
-    SupplierPortalSyncInput,
     _build_remittance_advice,
     _is_in_quiet_hours,
     _send_slack_reminder_message,
@@ -166,22 +155,12 @@ def test_p3_cde_live_stripe_slack_and_whatsapp_integration_with_totp() -> None:
     os.environ.get("RUN_PHASE2_INTEGRATION") != "1",
     reason="Requires live PostgreSQL RLS database",
 )
-async def test_p3_cde_end_to_end_under_real_postgres_rls() -> None:
-    from test_phase2_integration import accountant_context, database_settings
-    from ledgerpilot.main import create_app
-
-    ds = database_settings()
-    app = create_app(ds)
-    async with (
-        app.router.lifespan_context(app),
-        httpx.AsyncClient(
-            transport=httpx.ASGITransport(app=app),
-            base_url="http://testserver",
-        ) as client,
-        accountant_context(client, ds) as (bid, accountant),
-    ):
-        csrf = accountant.cookies.get("lp_csrf", "")
-        headers = {"X-CSRF-Token": csrf}
+async def test_p3_cde_end_to_end_under_real_postgres_rls(
+    client: httpx.AsyncClient,  # noqa: F811
+    database_settings: FileSettings,  # noqa: F811
+) -> None:
+    async with accountant_context(client, database_settings) as (bid, accountant):
+        headers = {"X-CSRF-Token": accountant.headers.get("X-CSRF-Token", "")}
 
         # =====================================================================
         # 1. Feature C (P3-B): Multichannel WhatsApp & Slack Reminders

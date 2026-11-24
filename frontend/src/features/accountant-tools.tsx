@@ -419,7 +419,9 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
                   {history.data?.length === 100 && (
                     <Button
                       type="button"
-                      onClick={() => setBefore(Number(history.data?.at(-1)?.id))}
+                      onClick={() =>
+                        setBefore(Number(history.data?.at(-1)?.id))
+                      }
                     >
                       Older rates
                     </Button>

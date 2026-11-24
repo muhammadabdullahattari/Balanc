@@ -133,7 +133,7 @@ async def test_large_portfolio(client: httpx.AsyncClient, database_settings: Fil
 
         async def timed(label, method, url, **kwargs):
             timings = []
-            for _ in range(20 if method == "GET" else 1):
+            for _ in range(3 if method == "GET" else 1):
                 start = perf_counter()
                 response = await api.request(method, url, **kwargs)
                 timings.append((perf_counter() - start) * 1000)

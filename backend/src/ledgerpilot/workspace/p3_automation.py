@@ -1,8 +1,10 @@
 """P3 Features C, D, and E:
-- Feature C (P3-B): Multichannel WhatsApp & Slack Reminders with consent, quiet hours, attempt caps, resolution recheck, and email fallback.
-- Feature D (P3-A): Authorized Supplier Portal Invoice Connectors (Method A API/Stripe & Method B Web Login + Encrypted 32-char RFC 6238 TOTP Seed -> OCR -> Purchase Bill Drafts).
-- Feature E (P3-D): Human-Approved Supplier Payments (Out-of-Band Beneficiary Verification, Step-Up Auth, Dual Approval, Emergency Kill Switch, Live Stripe Payment Rail + Built-In ACH/SWIFT Rail).
+- Feature C (P3-B): Multichannel WhatsApp & Slack Reminders.
+- Feature D (P3-A): Authorized Supplier Portal Invoice Connectors (32-char RFC 6238 TOTP Seed).
+- Feature E (P3-D): Human-Approved Supplier Payments (Live Stripe, ACH, and SWIFT Rails).
 """
+
+# ruff: noqa: E501
 
 from __future__ import annotations
 
@@ -30,7 +32,8 @@ from sqlalchemy.orm import Session
 
 from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings, get_settings
-from ledgerpilot.identity.dependencies import Identity as CurrentUser, Principal, db_session
+from ledgerpilot.identity.dependencies import Identity as CurrentUser
+from ledgerpilot.identity.dependencies import Principal, db_session
 from ledgerpilot.identity.mail import send_transactional_email
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema as StrictModel
@@ -149,6 +152,10 @@ def compute_totp_code(
 # ---------------------------------------------------------------------------
 
 
+def _default_channel_order() -> list[Literal["whatsapp", "slack", "email"]]:
+    return ["whatsapp", "slack", "email"]
+
+
 class ReminderPreferenceInput(StrictModel):
     recipient_key: str = Field(min_length=1, max_length=120)
     recipient_name: str = Field(min_length=1, max_length=120)
@@ -159,7 +166,7 @@ class ReminderPreferenceInput(StrictModel):
     slack_opt_in: bool = True
     email_fallback: bool = True
     channel_order: list[Literal["whatsapp", "slack", "email"]] = Field(
-        default_factory=lambda: ["whatsapp", "slack", "email"]
+        default_factory=_default_channel_order
     )
     quiet_start_hour: int = Field(default=22, ge=0, le=23)
     quiet_end_hour: int = Field(default=7, ge=0, le=23)
@@ -196,7 +203,9 @@ class SupplierPortalCreateInput(StrictModel):
     portal_kind: Literal[
         "web_totp", "api_stripe", "utility_portal", "telecom_portal", "cloud_portal"
     ] = "web_totp"
-    portal_url: str = Field(default="https://portal.vendor-billing.example/invoices", max_length=300)
+    portal_url: str = Field(
+        default="https://portal.vendor-billing.example/invoices", max_length=300
+    )
     login_username: str = Field(default="billing-viewer@balanc.local", max_length=160)
     password: str = Field(default="ViewerSubUser#2026", max_length=200)
     totp_enabled: bool = True
@@ -289,7 +298,9 @@ def _send_whatsapp_cloud_message(
 ) -> tuple[str, dict[str, Any]]:
     """Deliver a reminder via Official Meta WhatsApp Cloud API (or deterministic sandbox in offline/test mode)."""
     token = _resolve_env_or_setting(settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN")
-    phone_id = _resolve_env_or_setting(settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID")
+    phone_id = _resolve_env_or_setting(
+        settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"
+    )
     clean_to = "".join(ch for ch in phone_number if ch.isdigit())
     if not clean_to:
         clean_to = "923412685261"
@@ -314,7 +325,9 @@ def _send_whatsapp_cloud_message(
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
-                msg_id = (data.get("messages") or [{}])[0].get("id") or f"wamid.live.{uuid4().hex[:16]}"
+                msg_id = (data.get("messages") or [{}])[0].get(
+                    "id"
+                ) or f"wamid.live.{uuid4().hex[:16]}"
                 return msg_id, {
                     "mode": "meta_cloud_text_live",
                     "http_status": resp.status,
@@ -338,7 +351,9 @@ def _send_whatsapp_cloud_message(
                 )
                 with urllib.request.urlopen(req, timeout=10) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
-                    msg_id = (data.get("messages") or [{}])[0].get("id") or f"wamid.live.{uuid4().hex[:16]}"
+                    msg_id = (data.get("messages") or [{}])[0].get(
+                        "id"
+                    ) or f"wamid.live.{uuid4().hex[:16]}"
                     return msg_id, {
                         "mode": "meta_cloud_template_live",
                         "http_status": resp.status,
@@ -550,11 +565,14 @@ def list_reminders_and_preferences(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
-    require_role(db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor"))
+    require_role(
+        db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor")
+    )
 
-    prefs = db.execute(
-        text(
-            """
+    prefs = (
+        db.execute(
+            text(
+                """
             SELECT id, recipient_key, recipient_name, whatsapp_phone, slack_channel, email_address,
                    whatsapp_opt_in, slack_opt_in, email_fallback, channel_order,
                    quiet_start_hour, quiet_end_hour, timezone, locale, max_attempts,
@@ -563,13 +581,17 @@ def list_reminders_and_preferences(
             WHERE business_id = :bid
             ORDER BY updated_at DESC
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
-    reminders = db.execute(
-        text(
-            """
+    reminders = (
+        db.execute(
+            text(
+                """
             SELECT id, target_kind, target_id, target_label, recipient_key, channel, destination,
                    template_name, message_body, attempt_number, status, provider_message_id,
                    provider_response, idempotency_key, created_at
@@ -578,14 +600,21 @@ def list_reminders_and_preferences(
             ORDER BY created_at DESC
             LIMIT 50
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
     wa_token = _resolve_env_or_setting(settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN")
-    wa_phone_id = _resolve_env_or_setting(settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID")
+    wa_phone_id = _resolve_env_or_setting(
+        settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"
+    )
     wa_recipient = (
-        _resolve_env_or_setting(settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT")
+        _resolve_env_or_setting(
+            settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT"
+        )
         or "+923412685261"
     )
     slack_webhook = _resolve_env_or_setting(settings, "slack_webhook_url", "SLACK_WEBHOOK_URL")
@@ -659,9 +688,10 @@ def upsert_reminder_preference(
 ) -> dict[str, Any]:
     require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
     pref_id = uuid4()
-    row = db.execute(
-        text(
-            """
+    row = (
+        db.execute(
+            text(
+                """
             INSERT INTO app.channel_reminder_preferences (
               id, business_id, recipient_key, recipient_name, whatsapp_phone, slack_channel,
               email_address, whatsapp_opt_in, slack_opt_in, email_fallback, channel_order,
@@ -698,28 +728,31 @@ def upsert_reminder_preference(
                       whatsapp_opt_in, slack_opt_in, email_fallback, channel_order,
                       quiet_start_hour, quiet_end_hour, timezone, locale, max_attempts, opted_out
             """
-        ),
-        {
-            "id": pref_id,
-            "bid": business_id,
-            "rkey": payload.recipient_key.strip(),
-            "rname": payload.recipient_name.strip(),
-            "wa_phone": payload.whatsapp_phone.strip(),
-            "slack_ch": payload.slack_channel.strip(),
-            "email": payload.email_address.strip(),
-            "wa_opt": payload.whatsapp_opt_in,
-            "slack_opt": payload.slack_opt_in,
-            "email_fb": payload.email_fallback,
-            "ch_order": list(payload.channel_order),
-            "qstart": payload.quiet_start_hour,
-            "qend": payload.quiet_end_hour,
-            "tz": payload.timezone,
-            "locale": payload.locale,
-            "max_att": payload.max_attempts,
-            "opted_out": payload.opted_out,
-            "actor": _actor_id(user),
-        },
-    ).mappings().one()
+            ),
+            {
+                "id": pref_id,
+                "bid": business_id,
+                "rkey": payload.recipient_key.strip(),
+                "rname": payload.recipient_name.strip(),
+                "wa_phone": payload.whatsapp_phone.strip(),
+                "slack_ch": payload.slack_channel.strip(),
+                "email": payload.email_address.strip(),
+                "wa_opt": payload.whatsapp_opt_in,
+                "slack_opt": payload.slack_opt_in,
+                "email_fb": payload.email_fallback,
+                "ch_order": list(payload.channel_order),
+                "qstart": payload.quiet_start_hour,
+                "qend": payload.quiet_end_hour,
+                "tz": payload.timezone,
+                "locale": payload.locale,
+                "max_att": payload.max_attempts,
+                "opted_out": payload.opted_out,
+                "actor": _actor_id(user),
+            },
+        )
+        .mappings()
+        .one()
+    )
 
     _record_p3_audit(
         db,
@@ -799,18 +832,22 @@ def dispatch_multichannel_reminder(
     )
 
     # 1. Idempotency check
-    existing = db.execute(
-        text(
-            """
+    existing = (
+        db.execute(
+            text(
+                """
             SELECT id, target_kind, target_id, target_label, recipient_key, channel, destination,
                    template_name, message_body, attempt_number, status, provider_message_id,
                    provider_response, idempotency_key, created_at
             FROM app.channel_reminders
             WHERE business_id = :bid AND idempotency_key = :idem
             """
-        ),
-        {"bid": business_id, "idem": idem_key},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "idem": idem_key},
+        )
+        .mappings()
+        .first()
+    )
     if existing:
         return {
             "id": str(existing["id"]),
@@ -825,21 +862,27 @@ def dispatch_multichannel_reminder(
         }
 
     # Load or synthesize recipient preference
-    pref = db.execute(
-        text(
-            """
+    pref = (
+        db.execute(
+            text(
+                """
             SELECT recipient_key, recipient_name, whatsapp_phone, slack_channel, email_address,
                    whatsapp_opt_in, slack_opt_in, email_fallback, channel_order,
                    quiet_start_hour, quiet_end_hour, max_attempts, opted_out
             FROM app.channel_reminder_preferences
             WHERE business_id = :bid AND recipient_key = :rkey
             """
-        ),
-        {"bid": business_id, "rkey": payload.recipient_key.strip()},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "rkey": payload.recipient_key.strip()},
+        )
+        .mappings()
+        .first()
+    )
 
     default_wa = (
-        _resolve_env_or_setting(settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT")
+        _resolve_env_or_setting(
+            settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT"
+        )
         or "+923412685261"
     )
     default_slack = (
@@ -855,13 +898,16 @@ def dispatch_multichannel_reminder(
     q_start = int(pref["quiet_start_hour"]) if pref else 22
     q_end = int(pref["quiet_end_hour"]) if pref else 7
     ch_order = (
-        list(pref["channel_order"]) if pref and pref["channel_order"] else ["whatsapp", "slack", "email"]
+        list(pref["channel_order"])
+        if pref and pref["channel_order"]
+        else ["whatsapp", "slack", "email"]
     )
 
+    chosen_channel: str
     if payload.channel != "auto":
         chosen_channel = payload.channel
     else:
-        chosen_channel = ch_order[0] if ch_order else "whatsapp"
+        chosen_channel = str(ch_order[0]) if ch_order else "whatsapp"
 
     destination = (
         wa_phone
@@ -1052,11 +1098,14 @@ def list_supplier_portals(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
-    require_role(db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor"))
+    require_role(
+        db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor")
+    )
 
-    connections = db.execute(
-        text(
-            """
+    connections = (
+        db.execute(
+            text(
+                """
             SELECT id, vendor_name, portal_kind, portal_url, login_username,
                    encrypted_totp_seed, totp_enabled, schedule_frequency, status,
                    last_sync_at, last_totp_verified_at, created_at
@@ -1064,13 +1113,17 @@ def list_supplier_portals(
             WHERE business_id = :bid
             ORDER BY created_at DESC
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
-    ingestions = db.execute(
-        text(
-            """
+    ingestions = (
+        db.execute(
+            text(
+                """
             SELECT id, connection_id, external_invoice_id, invoice_number, vendor_name,
                    invoice_date, due_date, currency, total_amount, tax_amount,
                    content_sha256, trade_draft_id, totp_code_used_hash, ocr_confidence,
@@ -1080,9 +1133,12 @@ def list_supplier_portals(
             ORDER BY created_at DESC
             LIMIT 50
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
     conn_list = []
     for c in connections:
@@ -1225,17 +1281,21 @@ def revoke_supplier_portal_connection(
     db: DB,
 ) -> dict[str, Any]:
     require_role(db, user, business_id, ("owner", "accountant"))
-    updated = db.execute(
-        text(
-            """
+    updated = (
+        db.execute(
+            text(
+                """
             UPDATE app.supplier_portal_connections
             SET status = 'revoked', encrypted_password = '', encrypted_totp_seed = ''
             WHERE business_id = :bid AND id = :cid
             RETURNING id, vendor_name, status
             """
-        ),
-        {"bid": business_id, "cid": connection_id},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "cid": connection_id},
+        )
+        .mappings()
+        .first()
+    )
     if not updated:
         raise DomainError("ERR_NOT_FOUND", "Supplier portal connection not found.", 404)
 
@@ -1261,17 +1321,21 @@ def sync_supplier_portal_invoices(
 ) -> dict[str, Any]:
     require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
 
-    conn = db.execute(
-        text(
-            """
+    conn = (
+        db.execute(
+            text(
+                """
             SELECT id, vendor_name, portal_kind, portal_url, login_username,
                    encrypted_password, encrypted_totp_seed, totp_enabled, status
             FROM app.supplier_portal_connections
             WHERE business_id = :bid AND id = :cid
             """
-        ),
-        {"bid": business_id, "cid": connection_id},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "cid": connection_id},
+        )
+        .mappings()
+        .first()
+    )
     if not conn:
         raise DomainError("ERR_NOT_FOUND", "Supplier portal connection not found.", 404)
     if conn["status"] == "revoked":
@@ -1333,14 +1397,13 @@ def sync_supplier_portal_invoices(
             except Exception:
                 stripe_source_note = "stripe_portal_adapter"
 
-    canonical_pdf_text = (
-        f"SUPPLIER_INVOICE|{conn['vendor_name']}|{ext_id}|{inv_num}|{today.isoformat()}|{total_amt:.2f}|{payload.currency}"
-    )
+    canonical_pdf_text = f"SUPPLIER_INVOICE|{conn['vendor_name']}|{ext_id}|{inv_num}|{today.isoformat()}|{total_amt:.2f}|{payload.currency}"
     content_sha = hashlib.sha256(canonical_pdf_text.encode("utf-8")).hexdigest()
 
-    dup = db.execute(
-        text(
-            """
+    dup = (
+        db.execute(
+            text(
+                """
             SELECT id, external_invoice_id, invoice_number, trade_draft_id, status
             FROM app.supplier_portal_ingestions
             WHERE business_id = :bid
@@ -1350,9 +1413,12 @@ def sync_supplier_portal_invoices(
               )
             LIMIT 1
             """
-        ),
-        {"bid": business_id, "cid": connection_id, "ext_id": ext_id, "sha": content_sha},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "cid": connection_id, "ext_id": ext_id, "sha": content_sha},
+        )
+        .mappings()
+        .first()
+    )
 
     if dup:
         return {
@@ -1466,17 +1532,21 @@ def sync_supplier_portal_invoices(
 
 
 def _get_or_init_payment_controls(db: Session, business_id: UUID, actor_id: UUID) -> dict[str, Any]:
-    row = db.execute(
-        text(
-            """
+    row = (
+        db.execute(
+            text(
+                """
             SELECT business_id, kill_switch_active, kill_switch_reason,
                    single_payment_limit, dual_approval_threshold, default_rail, updated_at
             FROM app.supplier_payment_controls
             WHERE business_id = :bid
             """
-        ),
-        {"bid": business_id},
-    ).mappings().first()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .first()
+    )
     if row:
         return dict(row)
     db.execute(
@@ -1493,17 +1563,21 @@ def _get_or_init_payment_controls(db: Session, business_id: UUID, actor_id: UUID
         ),
         {"bid": business_id, "actor": actor_id},
     )
-    row2 = db.execute(
-        text(
-            """
+    row2 = (
+        db.execute(
+            text(
+                """
             SELECT business_id, kill_switch_active, kill_switch_reason,
                    single_payment_limit, dual_approval_threshold, default_rail, updated_at
             FROM app.supplier_payment_controls
             WHERE business_id = :bid
             """
-        ),
-        {"bid": business_id},
-    ).mappings().one()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .one()
+    )
     return dict(row2)
 
 
@@ -1514,12 +1588,15 @@ def list_supplier_payments_and_controls(
     db: DB,
     settings: Annotated[Settings, Depends(get_settings)],
 ) -> dict[str, Any]:
-    require_role(db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor"))
+    require_role(
+        db, user, business_id, ("owner", "accountant", "bookkeeper", "reviewer", "auditor")
+    )
     controls = _get_or_init_payment_controls(db, business_id, _actor_id(user))
 
-    beneficiaries = db.execute(
-        text(
-            """
+    beneficiaries = (
+        db.execute(
+            text(
+                """
             SELECT id, supplier_name, account_holder_name, bank_name, routing_or_swift,
                    account_number_masked, account_fingerprint_sha256, currency, rail,
                    out_of_band_verified, verification_reference, version, created_at
@@ -1527,13 +1604,17 @@ def list_supplier_payments_and_controls(
             WHERE business_id = :bid
             ORDER BY created_at DESC
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
-    payments = db.execute(
-        text(
-            """
+    payments = (
+        db.execute(
+            text(
+                """
             SELECT id, bill_id, bill_reference, supplier_name, beneficiary_id,
                    beneficiary_version, amount, currency, rail, idempotency_key,
                    state, requires_dual_approval, prepared_by, first_approved_by,
@@ -1545,9 +1626,12 @@ def list_supplier_payments_and_controls(
             ORDER BY created_at DESC
             LIMIT 50
             """
-        ),
-        {"bid": business_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    )
 
     stripe_key = _resolve_env_or_setting(settings, "stripe_secret_key", "STRIPE_SECRET_KEY")
 
@@ -1593,8 +1677,12 @@ def list_supplier_payments_and_controls(
                 "state": p["state"],
                 "requires_dual_approval": bool(p["requires_dual_approval"]),
                 "prepared_by": str(p["prepared_by"]),
-                "first_approved_by": str(p["first_approved_by"]) if p["first_approved_by"] else None,
-                "final_approved_by": str(p["final_approved_by"]) if p["final_approved_by"] else None,
+                "first_approved_by": str(p["first_approved_by"])
+                if p["first_approved_by"]
+                else None,
+                "final_approved_by": str(p["final_approved_by"])
+                if p["final_approved_by"]
+                else None,
                 "step_up_verified": bool(p["step_up_verified"]),
                 "step_up_method": p["step_up_method"],
                 "provider_reference": p["provider_reference"],
@@ -1675,7 +1763,7 @@ def create_supplier_beneficiary(
     clean_acct = payload.account_number.strip()
     masked = f"••••{clean_acct[-4:]}"
     fp = hashlib.sha256(
-        f"{payload.routing_or_swift.strip()}:{clean_acct}:{payload.currency.upper()}".encode("utf-8")
+        f"{payload.routing_or_swift.strip()}:{clean_acct}:{payload.currency.upper()}".encode()
     ).hexdigest()
     ben_id = uuid4()
 
@@ -1736,7 +1824,9 @@ def create_supplier_beneficiary(
     }
 
 
-@router.post("/businesses/{business_id}/p3/supplier-payments/beneficiaries/{beneficiary_id}/update-bank")
+@router.post(
+    "/businesses/{business_id}/p3/supplier-payments/beneficiaries/{beneficiary_id}/update-bank"
+)
 def update_supplier_beneficiary_bank(
     business_id: UUID,
     beneficiary_id: UUID,
@@ -1748,11 +1838,12 @@ def update_supplier_beneficiary_bank(
     require_role(db, user, business_id, ("owner", "accountant"))
     clean_acct = payload.account_number.strip()
     masked = f"••••{clean_acct[-4:]}"
-    fp = hashlib.sha256(f"{payload.routing_or_swift.strip()}:{clean_acct}".encode("utf-8")).hexdigest()
+    fp = hashlib.sha256(f"{payload.routing_or_swift.strip()}:{clean_acct}".encode()).hexdigest()
 
-    updated = db.execute(
-        text(
-            """
+    updated = (
+        db.execute(
+            text(
+                """
             UPDATE app.supplier_beneficiaries
             SET routing_or_swift = :routing,
                 account_number_masked = :masked,
@@ -1763,23 +1854,27 @@ def update_supplier_beneficiary_bank(
             WHERE business_id = :bid AND id = :ben_id
             RETURNING id, version, account_number_masked, account_fingerprint_sha256
             """
-        ),
-        {
-            "routing": payload.routing_or_swift.strip(),
-            "masked": masked,
-            "fp": fp,
-            "oob": payload.out_of_band_verified,
-            "vref": payload.verification_reference.strip(),
-            "bid": business_id,
-            "ben_id": beneficiary_id,
-        },
-    ).mappings().first()
+            ),
+            {
+                "routing": payload.routing_or_swift.strip(),
+                "masked": masked,
+                "fp": fp,
+                "oob": payload.out_of_band_verified,
+                "vref": payload.verification_reference.strip(),
+                "bid": business_id,
+                "ben_id": beneficiary_id,
+            },
+        )
+        .mappings()
+        .first()
+    )
     if not updated:
         raise DomainError("ERR_NOT_FOUND", "Supplier beneficiary not found.", 404)
 
-    invalidated_rows = db.execute(
-        text(
-            """
+    invalidated_rows = (
+        db.execute(
+            text(
+                """
             UPDATE app.supplier_payment_executions
             SET state = 'invalidated',
                 failure_reason = 'Beneficiary bank coordinates changed after preparation; re-preparation and human approval required.'
@@ -1788,9 +1883,12 @@ def update_supplier_beneficiary_bank(
               AND state IN ('prepared', 'first_approved', 'approved_ready')
             RETURNING id
             """
-        ),
-        {"bid": business_id, "ben_id": beneficiary_id},
-    ).mappings().all()
+            ),
+            {"bid": business_id, "ben_id": beneficiary_id},
+        )
+        .mappings()
+        .all()
+    )
 
     return {
         "id": str(beneficiary_id),
@@ -1825,17 +1923,21 @@ def prepare_supplier_payment(
             422,
         )
 
-    ben = db.execute(
-        text(
-            """
+    ben = (
+        db.execute(
+            text(
+                """
             SELECT id, supplier_name, account_number_masked, account_fingerprint_sha256,
                    out_of_band_verified, version
             FROM app.supplier_beneficiaries
             WHERE business_id = :bid AND id = :ben_id
             """
-        ),
-        {"bid": business_id, "ben_id": payload.beneficiary_id},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "ben_id": payload.beneficiary_id},
+        )
+        .mappings()
+        .first()
+    )
     if not ben:
         raise DomainError("ERR_NOT_FOUND", "Supplier beneficiary not found.", 404)
     if not ben["out_of_band_verified"]:
@@ -1849,16 +1951,20 @@ def prepare_supplier_payment(
         payload.idempotency_key.strip()
         or f"pay:{payload.beneficiary_id}:{payload.bill_reference}:{payload.amount:.2f}"
     )
-    existing = db.execute(
-        text(
-            """
+    existing = (
+        db.execute(
+            text(
+                """
             SELECT id, state, amount, currency, rail, requires_dual_approval, provider_reference
             FROM app.supplier_payment_executions
             WHERE business_id = :bid AND idempotency_key = :idem
             """
-        ),
-        {"bid": business_id, "idem": idem},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "idem": idem},
+        )
+        .mappings()
+        .first()
+    )
     if existing:
         return {
             "id": str(existing["id"]),
@@ -1950,9 +2056,10 @@ def approve_and_execute_supplier_payment(
             409,
         )
 
-    pay = db.execute(
-        text(
-            """
+    pay = (
+        db.execute(
+            text(
+                """
             SELECT id, bill_id, bill_reference, supplier_name, beneficiary_id,
                    beneficiary_version, beneficiary_fingerprint, amount, currency,
                    rail, idempotency_key, state, requires_dual_approval,
@@ -1960,9 +2067,12 @@ def approve_and_execute_supplier_payment(
             FROM app.supplier_payment_executions
             WHERE business_id = :bid AND id = :pid
             """
-        ),
-        {"bid": business_id, "pid": payment_id},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "pid": payment_id},
+        )
+        .mappings()
+        .first()
+    )
     if not pay:
         raise DomainError("ERR_NOT_FOUND", "Supplier payment draft not found.", 404)
 
@@ -1982,17 +2092,21 @@ def approve_and_execute_supplier_payment(
             409,
         )
 
-    ben = db.execute(
-        text(
-            """
+    ben = (
+        db.execute(
+            text(
+                """
             SELECT id, bank_name, routing_or_swift, account_number_masked,
                    account_fingerprint_sha256, out_of_band_verified, version
             FROM app.supplier_beneficiaries
             WHERE business_id = :bid AND id = :ben_id
             """
-        ),
-        {"bid": business_id, "ben_id": pay["beneficiary_id"]},
-    ).mappings().first()
+            ),
+            {"bid": business_id, "ben_id": pay["beneficiary_id"]},
+        )
+        .mappings()
+        .first()
+    )
     if (
         not ben
         or int(ben["version"]) != int(pay["beneficiary_version"])
@@ -2081,7 +2195,9 @@ def approve_and_execute_supplier_payment(
             "status": "settled",
         }
     else:
-        provider_ref = f"SWIFT-MT103-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        provider_ref = (
+            f"SWIFT-MT103-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        )
         provider_payload = {
             "mode": "swift_mt103_wire",
             "swift_bic": ben["routing_or_swift"],

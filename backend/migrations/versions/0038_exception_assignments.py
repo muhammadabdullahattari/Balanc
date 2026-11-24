@@ -117,4 +117,6 @@ def upgrade() -> None:
 def downgrade() -> None:
     op.execute("DROP INDEX app.portfolio_open_close,app.portfolio_pending_bank,app.portfolio_bills")
     op.execute("DROP FUNCTION app.portfolio_counts()")
-    op.execute("DROP TABLE app.fx_quotes, app.fixed_assets, app.fx_proposals, app.exception_assignments")
+    op.execute(
+        "DROP TABLE app.fx_quotes, app.fixed_assets, app.fx_proposals, app.exception_assignments"
+    )
