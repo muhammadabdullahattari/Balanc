@@ -79,6 +79,12 @@ class Settings(BaseSettings):
     rate_auth_identity_budget: int = Field(default=5, ge=1, le=1000000)
     rate_window_seconds: int = Field(default=60, ge=1, le=3600)
     rate_cooldown_max_seconds: int = Field(default=60, ge=1, le=3600)
+    verification_gap_1_seconds: int = Field(default=900, ge=0, le=86400)
+    verification_gap_2_seconds: int = Field(default=1800, ge=0, le=86400)
+    verification_gap_3_seconds: int = Field(default=3600, ge=0, le=86400)
+    verification_daily_limit: int = Field(default=3, ge=1, le=100)
+    celery_broker_url: SecretStr | None = None
+    celery_result_backend: SecretStr | None = None
     jobs_default_max_attempts: int = Field(default=5, ge=1, le=20)
     jobs_default_timeout_seconds: int = Field(default=300, ge=1, le=3600)
     jobs_poll_interval_seconds: float = Field(default=1.0, ge=0.05, le=60.0)
@@ -475,6 +481,30 @@ class Settings(BaseSettings):
     @property
     def allowed_origins(self) -> list[str]:
         return self.frontend_origins.split(",")
+
+    @property
+    def stripe_billing_configured(self) -> bool:
+        key = (
+            self.stripe_secret_key.get_secret_value().strip().strip("'\"")
+            if self.stripe_secret_key
+            else ""
+        )
+        return (
+            key.startswith(("sk_test_", "rk_test_"))
+            and any(
+                p.strip().strip("'\"").startswith("price_")
+                for p in (
+                    self.stripe_starter_price_id,
+                    self.stripe_growth_price_id,
+                    self.stripe_enterprise_price_id,
+                )
+            )
+            and urlsplit(self.billing_return_url.strip().strip("'\"")).scheme == "https"
+        )
+
+    @property
+    def require_plan_before_business(self) -> bool:
+        return self.app_env != "test" and self.stripe_billing_configured
 
     @property
     def total_db_connection_budget(self) -> int:

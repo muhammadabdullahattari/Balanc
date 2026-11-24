@@ -96,7 +96,7 @@ class EventView(Schema):
 
 def admit(db: DB, identity: Identity, business_id: UUID, request: Request) -> None:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     if request.method != "GET" and not request.url.path.endswith("/execute"):
         get_business(db, business_id, lock=True)
 

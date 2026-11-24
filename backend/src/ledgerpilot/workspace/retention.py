@@ -15,7 +15,7 @@ from ledgerpilot.database import Base
 from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
-from ledgerpilot.tenancy.service import authorize, get_business
+from ledgerpilot.tenancy.service import allows_feature, authorize, get_business
 from ledgerpilot.trade.models import TenantRecord
 
 Category = Literal["journals", "trade_documents", "evidence", "bank_records", "audit_records"]
@@ -118,16 +118,21 @@ class Eligibility(Schema):
 router = APIRouter(prefix="/businesses/{business_id}/retention", tags=["retention"])
 
 
-def gate(request: Request, business_id: UUID) -> None:
+def gate(request: Request, business_id: UUID, db: DB | None = None) -> None:
     settings = request.app.state.settings
-    if not settings.allows_p2_retention(business_id):
+    allowed = (
+        allows_feature(db, settings, business_id, "retention")
+        if db is not None
+        else settings.allows_p2_retention(business_id)
+    )
+    if not allowed:
         raise DomainError("ERR_NOT_FOUND", "Retention controls are unavailable.", 404)
 
 
 @router.get("", response_model=RetentionState)
 def state(business_id: UUID, request: Request, identity: Identity, db: DB) -> RetentionState:
     authorize(db, identity, business_id, ADMINS)
-    gate(request, business_id)
+    gate(request, business_id, db)
     policies = list(
         db.scalars(
             select(RetentionPolicy)
@@ -159,7 +164,7 @@ def configure(
     business_id: UUID, data: PolicyCreate, request: Request, identity: Identity, db: DB
 ) -> PolicyRead:
     authorize(db, identity, business_id, ADMINS)
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     jurisdiction = data.jurisdiction.strip().upper()
     version = (
@@ -204,7 +209,7 @@ def place_hold(
     business_id: UUID, data: HoldCreate, request: Request, identity: Identity, db: DB
 ) -> HoldRead:
     authorize(db, identity, business_id, ADMINS)
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     count = (
         db.scalar(
@@ -231,7 +236,7 @@ def release_hold(
     db: DB,
 ) -> HoldRead:
     authorize(db, identity, business_id, ADMINS)
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     hold = db.scalar(
         select(LegalHold).where(LegalHold.business_id == business_id, LegalHold.id == hold_id)
@@ -252,7 +257,7 @@ def preview(
     business_id: UUID, data: EligibilityInput, request: Request, identity: Identity, db: DB
 ) -> Eligibility:
     authorize(db, identity, business_id, ADMINS)
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     if data.as_of < data.record_date or data.record_date.year > 9899:
         raise DomainError(

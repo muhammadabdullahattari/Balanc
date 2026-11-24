@@ -14,7 +14,7 @@ from ledgerpilot.reports.schemas import ReportExportRequest, ReportExportRespons
 from ledgerpilot.reports.uncertainty import CashInterval, interval
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
-from ledgerpilot.tenancy.service import authorize, get_business
+from ledgerpilot.tenancy.service import allows_feature, authorize, get_business
 from ledgerpilot.workspace.service import save_report
 
 router = APIRouter(prefix="/businesses/{business_id}", tags=["reports"])
@@ -30,7 +30,7 @@ def forecast_interval(
     week: Annotated[int, Query(ge=1, le=13)] = 1,
 ) -> CashInterval:
     authorize(db, identity, business_id)
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Forecast intervals are unavailable.", 404)
     return interval(db, business_id, report_id, week)
 
@@ -43,7 +43,7 @@ def forecast_evaluation(
     business_id: UUID, report_id: UUID, request: Request, identity: Identity, db: DB
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Forecast evaluation is unavailable.", 404)
     return service.evaluate_forecast(db, business_id, report_id)
 
@@ -60,7 +60,7 @@ def profit_variance(
     db: DB,
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    if not request.app.state.settings.allows_p2_insights(business_id):
+    if not allows_feature(db, request.app.state.settings, business_id, "insights"):
         raise DomainError("ERR_NOT_FOUND", "Profit comparisons are unavailable.", 404)
     return service.profit_variance(db, business_id, current_report_id, previous_report_id)
 
@@ -205,7 +205,7 @@ def forecast(
     authorize(db, identity, business_id)
     scenario = None
     if receipt_percent is not None or payment_percent is not None:
-        if not request.app.state.settings.allows_p2_insights(business_id):
+        if not allows_feature(db, request.app.state.settings, business_id, "insights"):
             raise DomainError("ERR_NOT_FOUND", "Cash scenarios are unavailable.", 404)
         scenario = (
             100 if receipt_percent is None else receipt_percent,

@@ -17,7 +17,7 @@ from ledgerpilot.identity.dependencies import DB, Identity
 from ledgerpilot.shared import contracts
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
-from ledgerpilot.tenancy.service import authorize, get_business
+from ledgerpilot.tenancy.service import allows_feature, authorize, get_business
 from ledgerpilot.trade.models import TenantRecord
 from ledgerpilot.workspace.models import ReportRun
 
@@ -58,9 +58,14 @@ class AuditGrantPage(Schema):
 router = APIRouter(tags=["audit-access"])
 
 
-def gate(request: Request, bid: UUID) -> None:
+def gate(request: Request, bid: UUID, db: DB | None = None) -> None:
     settings = request.app.state.settings
-    if not settings.allows_p2_audit(bid):
+    allowed = (
+        allows_feature(db, settings, bid, "audit")
+        if db is not None
+        else settings.allows_p2_audit(bid)
+    )
+    if not allowed:
         raise DomainError("ERR_NOT_FOUND", "Scoped audit sharing is unavailable.", 404)
 
 
@@ -71,7 +76,7 @@ def grant(
     business_id: UUID, data: AuditGrantCreate, request: Request, identity: Identity, db: DB
 ) -> AuditGrantRead:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     ids = list(
         db.scalars(
@@ -118,7 +123,7 @@ def grants(
     limit: int = Query(50, ge=1, le=100),
 ) -> AuditGrantPage:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     query = select(AuditGrant).where(AuditGrant.business_id == business_id)
     if cursor:
         query = query.where(AuditGrant.id > cursor)
@@ -136,7 +141,7 @@ def revoke(
     business_id: UUID, grant_id: UUID, request: Request, identity: Identity, db: DB
 ) -> AuditGrantRead:
     authorize(db, identity, business_id, {"owner", "accountant"})
-    gate(request, business_id)
+    gate(request, business_id, db)
     get_business(db, business_id, lock=True)
     item = db.scalar(
         select(AuditGrant).where(AuditGrant.business_id == business_id, AuditGrant.id == grant_id)
@@ -172,7 +177,7 @@ def read_shared(
     )
     if item is None or report_id not in item.report_ids:
         raise DomainError("ERR_NOT_FOUND", "This report share is unavailable or expired.", 404)
-    gate(request, item.business_id)
+    gate(request, item.business_id, db)
     set_context(db, identity.user.id, item.business_id)
     report = db.scalar(
         select(ReportRun).where(

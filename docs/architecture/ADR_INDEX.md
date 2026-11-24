@@ -26,6 +26,7 @@ This index records LedgerPilot decisions derived from the approved SRS and imple
 | [ADR-017](ADR-017-floci-pilot-target.md) | Floci replaces AWS for Phase 9 pilot hosting | Target accepted; compatibility verification pending |
 | [ADR-018](ADR-018-cloud-networking-database-migrations-and-https-email-delivery.md) | Cloud networking, managed database migrations, and HTTPS email delivery | Accepted |
 | [ADR-019](ADR-019-universal-email-delivery-multi-provider-failover-and-sandbox-remediation.md) | Universal email delivery, multi-provider HTTPS failover, and third-party sandbox remediation | Accepted |
+| [ADR-020](ADR-020-verification-rate-limiting-cooldown-and-celery-queuing.md) | Verification rate limiting, progressive cooldown, and Celery queuing | Accepted |
 
 ## Changing a decision
 

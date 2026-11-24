@@ -206,7 +206,7 @@ def test_previous_supported_schema_upgrades_without_losing_identity(
                 db.execute(
                     "UPDATE app.users SET email=%s WHERE id=%s", ("other@example.com", user_id)
                 )
-            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0036",)
+            assert db.execute("SELECT version_num FROM app.alembic_version").fetchone() == ("0039",)
     finally:
         assert name.startswith("ledgerpilot_upgrade_")
         with connect(admin_url) as db:

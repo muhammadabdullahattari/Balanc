@@ -30,6 +30,7 @@ class BusinessCreate(Schema):
     basis: Literal["cash", "accrual"]
     fiscal_month: int = Field(default=1, ge=1, le=12)
     jurisdiction: str = Field(min_length=1, max_length=100)
+    checkout_session_id: str | None = Field(default=None, max_length=200)
 
     @field_validator("currency")
     @classmethod

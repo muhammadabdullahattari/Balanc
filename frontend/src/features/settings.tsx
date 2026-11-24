@@ -1,7 +1,10 @@
 import { GoogleSignIn } from "./google-signin";
 import { RetentionControls } from "./retention";
 import { AuditShares } from "./audit-access";
-import { lazy, Suspense, useState } from "react";
+import { BillingSettings } from "./billing";
+import { QuickBooksImport } from "./quickbooks-import";
+import { RolePermissions } from "./role-permissions";
+import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
 import {
@@ -9,26 +12,32 @@ import {
   Button,
   ErrorNotice,
   Field,
-  Loading,
   PageHeading,
   SectionTabs,
   Table,
 } from "../components/ui";
-import { useBusiness } from "./context";
+import { useBusiness, useAccess } from "./context";
 import type { components } from "../api/generated/schema";
-const QuickBooksImport = lazy(() =>
-  import("./quickbooks-import").then((module) => ({
-    default: module.QuickBooksImport,
-  })),
-);
-const BillingSettings = lazy(() =>
-  import("./billing").then((module) => ({ default: module.BillingSettings })),
-);
-
-export function Settings() {
+export function Settings({ initialSection }: { initialSection?: string } = {}) {
   const b = useBusiness();
+  const access = useAccess();
+  const role = access?.role ?? "";
+  const isOwner = role === "owner";
+  const canManageTeam = role === "owner" || role === "accountant";
   const path = { business_id: b.id };
-  const [section, setSection] = useState("business");
+  const [section, setSection] = useState(() => {
+    if (initialSection) return initialSection;
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (
+        window.location.pathname.endsWith("/billing") ||
+        params.has("billing")
+      ) {
+        return "billing";
+      }
+    }
+    return "business";
+  });
   const members = useQuery({
     queryKey: [...keys.business(b.id), "members"],
     enabled: section === "team",
@@ -125,6 +134,7 @@ export function Settings() {
         items={[
           ["business", "Business"],
           ["team", "Team"],
+          ["permissions", "Permissions"],
           ["billing", "Billing"],
           ["integrations", "Integrations"],
           ["security", "Security"],
@@ -164,14 +174,33 @@ export function Settings() {
         {section === "team" && (
           <>
             <h2>The right people. The right access.</h2>
-            <ErrorNotice error={members.error || invite.error} />
+            {/* All active members can view the team directory */}
+            <ErrorNotice error={invite.error} />
+            {members.isError && !members.data && (
+              <div className="info-callout">
+                <p>
+                  <strong>Team directory unavailable.</strong> Contact your
+                  workspace owner if you believe this is an error.
+                </p>
+              </div>
+            )}
             {members.data && (
               <Table
                 caption="Business members"
                 rows={members.data.items}
                 rowKey={(m) => m.user_id}
                 columns={[
-                  { label: "Member reference", render: (m) => m.user_id },
+                  {
+                    label: "Member",
+                    render: (m) =>
+                      m.email ? (
+                        <span className="member-email">{m.email}</span>
+                      ) : (
+                        <span className="member-id muted" title={m.user_id}>
+                          {m.user_id.slice(0, 8)}…
+                        </span>
+                      ),
+                  },
                   { label: "Role", render: (m) => <Badge>{m.role}</Badge> },
                   {
                     label: "Can post",
@@ -184,52 +213,55 @@ export function Settings() {
                 ]}
               />
             )}
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                invite.mutate(e.currentTarget);
-              }}
-            >
-              <h3>Invite a teammate</h3>
-              <div className="form-grid">
-                <Field label="Email">
-                  <input name="email" type="email" required />
-                </Field>
-                <Field label="Role">
-                  <select name="role">
-                    {[
-                      "accountant",
-                      "bookkeeper",
-                      "reviewer",
-                      "auditor",
-                      "owner",
-                    ].map((r) => (
-                      <option key={r}>{r}</option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <Button permission="invite" busy={invite.isPending}>
-                Send invitation
-              </Button>
-              {invite.isSuccess && (
-                <p role="status" className="success-text">
-                  Invitation sent. The link is valid for 48 hours.
+            {/* Invite form — owners and accountants with can_invite only */}
+            {isOwner || (canManageTeam && access?.can_invite) ? (
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  invite.mutate(e.currentTarget);
+                }}
+              >
+                <h3>Invite a teammate</h3>
+                <div className="form-grid">
+                  <Field label="Email">
+                    <input name="email" type="email" required />
+                  </Field>
+                  <Field label="Role">
+                    <select name="role">
+                      {[
+                        "accountant",
+                        "bookkeeper",
+                        "reviewer",
+                        "auditor",
+                        ...(isOwner ? ["owner"] : []),
+                      ].map((r) => (
+                        <option key={r}>{r}</option>
+                      ))}
+                    </select>
+                  </Field>
+                </div>
+                <Button permission="invite" busy={invite.isPending}>
+                  Send invitation
+                </Button>
+                {invite.isSuccess && (
+                  <p role="status" className="success-text">
+                    Invitation sent. The link is valid for 48 hours.
+                  </p>
+                )}
+              </form>
+            ) : (
+              <div className="info-callout">
+                <p>
+                  <strong>Invitations are managed by workspace owners.</strong>{" "}
+                  Contact your owner to add or remove team members.
                 </p>
-              )}
-            </form>
+              </div>
+            )}
           </>
         )}
-        {section === "billing" && (
-          <Suspense fallback={<Loading />}>
-            <BillingSettings />
-          </Suspense>
-        )}
-        {section === "integrations" && (
-          <Suspense fallback={<Loading />}>
-            <QuickBooksImport key={b.id} />
-          </Suspense>
-        )}
+        {section === "billing" && <BillingSettings />}
+        {section === "permissions" && <RolePermissions />}
+        {section === "integrations" && <QuickBooksImport />}
         {section === "security" && (
           <>
             <h2>Keep your workspace protected.</h2>

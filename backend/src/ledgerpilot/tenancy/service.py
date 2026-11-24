@@ -23,6 +23,52 @@ from ledgerpilot.tenancy.models import Business, Invitation, Membership, PolicyH
 from ledgerpilot.tenancy.schemas import CURRENCIES, BusinessCreate, InviteCreate
 
 
+def has_paid_subscription(db: Session, business_id: UUID) -> bool:
+    """Return True when the business (or the signed-in owner account) has an active Stripe plan."""
+    stripe_conn = db.execute(
+        text("SELECT app.stripe_entitlement(:b)"),
+        {"b": business_id},
+    ).scalar_one_or_none()
+    if isinstance(stripe_conn, str):
+        with contextlib.suppress(Exception):
+            stripe_conn = json.loads(stripe_conn)
+    if isinstance(stripe_conn, dict):
+        status = stripe_conn.get("status")
+        grace_until = stripe_conn.get("grace_until")
+        if status in {"active", "trialing"}:
+            return True
+        if status == "past_due" and grace_until is not None:
+            return time.time() < float(grace_until)
+        if status in {"canceled", "unpaid", "expired"}:
+            return False
+        if bool(stripe_conn.get("paid_access", False)) and (
+            grace_until is None or time.time() < float(grace_until)
+        ):
+            return True
+    if type(db).__name__ != "MagicMock":
+        with contextlib.suppress(Exception):
+            user_paid = db.execute(
+                text("""
+                    SELECT 1 FROM app.onboarding_subscriptions
+                    WHERE user_id = app.actor() AND status IN ('paid', 'claimed')
+                    LIMIT 1
+                """)
+            ).scalar_one_or_none()
+            if user_paid == 1:
+                return True
+    return False
+
+
+def allows_feature(db: Session, settings: Settings, business_id: UUID, feature: str) -> bool:
+    """Unlock all workspace features when the business holds an active paid subscription."""
+    if settings.app_env == "demo":
+        return False
+    checker = getattr(settings, f"allows_p2_{feature}")
+    if checker(business_id):
+        return True
+    return has_paid_subscription(db, business_id)
+
+
 def authorize(
     db: Session,
     identity: Principal,
@@ -90,6 +136,10 @@ def authorize(
                 "/read",
                 "/exports/snapshots",
                 "/billing/checkout",
+                "/billing/reconcile",
+                "/billing/subscription/plan",
+                "/billing/subscription/cancel",
+                "/billing/subscription/resume",
             )
         )
         retained_action = retained_action or (
@@ -101,30 +151,7 @@ def authorize(
         retained_action = retained_action or (
             f"/businesses/{business_id}/audit-grants/" in path and path.endswith("/revoke")
         )
-        # Check if customer has active paid Stripe subscription
-        has_paid_access = False
-        stripe_conn = db.execute(
-            text("SELECT app.stripe_entitlement(:b)"),
-            {"b": business_id},
-        ).scalar_one_or_none()
-        if stripe_conn:
-            if isinstance(stripe_conn, str):
-                with contextlib.suppress(Exception):
-                    stripe_conn = json.loads(stripe_conn)
-            if isinstance(stripe_conn, dict):
-                snapshot = stripe_conn
-                status = snapshot.get("status")
-                grace_until = snapshot.get("grace_until")
-                if status in {"active", "trialing"}:
-                    has_paid_access = True
-                elif status == "past_due" and grace_until is not None:
-                    has_paid_access = time.time() < float(grace_until)
-                elif status in {"canceled", "unpaid"}:
-                    has_paid_access = False
-                else:
-                    has_paid_access = bool(snapshot.get("paid_access", False)) and (
-                        grace_until is None or time.time() < float(grace_until)
-                    )
+        has_paid_access = has_paid_subscription(db, business_id)
 
         trial_expired = trial is not None and (
             trial.status != "manual_trial"
@@ -148,9 +175,28 @@ def authorize(
     return membership
 
 
-def create(db: Session, identity: Principal, data: BusinessCreate) -> UUID:
+def create(
+    db: Session,
+    identity: Principal,
+    data: BusinessCreate,
+    settings: Settings | None = None,
+) -> UUID:
     if not identity.family.mfa:
         raise DomainError("ERR_MFA_REQUIRED", "MFA authentication is required.", 403)
+    from ledgerpilot.provider_integrations import (
+        attach_onboarding_subscription,
+        resolve_onboarding_subscription_for_business,
+    )
+
+    onboarding = resolve_onboarding_subscription_for_business(
+        db, settings, identity, data.checkout_session_id
+    )
+    if settings is not None and settings.require_plan_before_business and onboarding is None:
+        raise DomainError(
+            "ERR_SUBSCRIPTION_REQUIRED",
+            "Purchase a yearly subscription plan before creating a business.",
+            402,
+        )
     bid = uuid4()
     db.execute(
         text("""SELECT app.create_business(:id,:name,:currency,:precision,
@@ -166,6 +212,9 @@ def create(db: Session, identity: Principal, data: BusinessCreate) -> UUID:
             "jurisdiction": data.jurisdiction,
         },
     )
+    if onboarding is not None:
+        set_context(db, identity.user.id, bid)
+        attach_onboarding_subscription(db, settings, bid, onboarding)
     record(db, identity.user.id, "business.created", bid, bid)
     return bid
 

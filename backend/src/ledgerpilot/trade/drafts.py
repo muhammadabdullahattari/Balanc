@@ -112,7 +112,7 @@ def publish(
     reserved = projects.allocation(db, bid, did)
     source = None
     if reserved is not None:
-        projects.gate(settings, bid)
+        projects.gate(settings, bid, db)
         source = projects.check_reserved_source(db, bid, reserved)
     payload = DocumentCreate.model_validate(
         {**item.payload, "expected_version": data.expected_business_version}

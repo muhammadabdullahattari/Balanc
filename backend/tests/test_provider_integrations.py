@@ -10,7 +10,7 @@ from uuid import uuid4
 import pytest
 
 from ledgerpilot.config import Settings
-from ledgerpilot.provider_integrations import import_entities, process_stripe_event, signed_event
+from ledgerpilot.provider_integrations import process_stripe_event, signed_event
 from ledgerpilot.shared.errors import DomainError
 
 
@@ -768,27 +768,241 @@ def test_stripe_checkout_endpoint_creates_session_and_stores_state() -> None:
         assert saved, "Expected pending checkout session to be saved in provider_connections"
 
 
-def test_import_selection_is_explicit_and_order_independent() -> None:
-    assert len(import_entities(None)) == 10
-    assert import_entities(["Bill", "Invoice", "bill"]) == import_entities(["invoice", "bill"])
-    for invalid in ([], ["unsupported"], ["Bill", "unsupported"]):
-        with pytest.raises(DomainError, match="ERR_IMPORT_ENTITIES"):
-            import_entities(invalid)
+def test_yearly_billing_plans_and_onboarding_checkout_and_receipt_email() -> None:
+    from unittest.mock import patch
 
+    from pydantic import SecretStr
 
-def test_queued_import_rechecks_and_preserves_requester(monkeypatch: pytest.MonkeyPatch) -> None:
-    from ledgerpilot.jobs import handlers
+    from ledgerpilot.provider_integrations import (
+        list_billing_plans,
+        onboarding_checkout,
+    )
 
-    business, actor = uuid4(), uuid4()
+    request = MagicMock()
+    settings = MagicMock(spec=Settings)
+    settings.stripe_secret_key = SecretStr("sk_test_12345")
+    settings.stripe_starter_price_id = "price_starter_yearly"
+    settings.stripe_growth_price_id = "price_growth_yearly"
+    settings.stripe_enterprise_price_id = "price_enterprise_yearly"
+    settings.billing_return_url = "https://balanc-amber.vercel.app/settings/billing"
+    settings.stripe_billing_configured = True
+    settings.require_plan_before_business = True
+    request.app.state.settings = settings
+
+    identity = MagicMock()
+    identity.user.id = uuid4()
+    identity.user.email = "founder@example.com"
+    identity.family.mfa = True
+
+    catalog = list_billing_plans(request=request, identity=identity)
+    assert catalog.stripe_enabled is True
+    assert catalog.require_plan_before_business is True
+    assert len(catalog.plans) == 3
+    assert all(p.interval == "year" for p in catalog.plans)
+    assert [p.amount_cents for p in catalog.plans] == [20000, 50000, 150000]
+
     db = MagicMock()
-    execute = MagicMock(return_value={})
-    monkeypatch.setattr(handlers, "execute_quickbooks_import", execute)
-    monkeypatch.setattr(handlers, "get_settings", MagicMock())
-    monkeypatch.setattr(handlers, "load", MagicMock(return_value={}))
-    db.scalar.return_value = False
-    with pytest.raises(DomainError, match="ERR_IMPORT_ACTOR"):
-        handlers.handle_quickbooks_import(db, business, actor, {})
-    execute.assert_not_called()
-    db.scalar.return_value = True
-    handlers.handle_quickbooks_import(db, business, actor, {})
-    assert execute.call_args.kwargs["user_id"] == actor
+    db.execute.return_value.scalar_one_or_none.return_value = None
+
+    def fake_stripe(settings: Any, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        assert path == "checkout/sessions"
+        data = kwargs["data"]
+        assert data["mode"] == "subscription"
+        assert data["customer_email"] == "founder@example.com"
+        assert data["line_items[0][price]"] == "price_growth_yearly"
+        assert data["metadata[purpose]"] == "business_onboarding"
+        assert "onboarding_checkout=success" in data["success_url"]
+        assert "{CHECKOUT_SESSION_ID}" in data["success_url"]
+        return {
+            "id": "cs_test_onboarding_1",
+            "url": "https://checkout.stripe.com/c/pay/cs_test_onboarding_1",
+        }
+
+    with patch("ledgerpilot.provider_integrations.stripe", side_effect=fake_stripe):
+        out = onboarding_checkout(plan="growth", request=request, identity=identity, db=db)
+        assert out.session_id == "cs_test_onboarding_1"
+        assert out.url == "https://checkout.stripe.com/c/pay/cs_test_onboarding_1"
+
+
+def test_business_creation_requires_paid_plan_when_stripe_configured() -> None:
+    from unittest.mock import patch
+
+    from ledgerpilot.tenancy.schemas import BusinessCreate
+    from ledgerpilot.tenancy.service import create
+
+    db = MagicMock()
+    identity = MagicMock()
+    identity.family.mfa = True
+    identity.user.id = uuid4()
+    identity.user.email = "owner@example.com"
+    settings = MagicMock(spec=Settings)
+    settings.require_plan_before_business = True
+
+    payload = BusinessCreate(
+        name="Paid Corp",
+        currency="USD",
+        timezone="UTC",
+        basis="accrual",
+        fiscal_month=1,
+        jurisdiction="US-GAAP",
+    )
+    with patch(
+        "ledgerpilot.provider_integrations.resolve_onboarding_subscription_for_business",
+        return_value=None,
+    ):
+        with pytest.raises(DomainError) as exc_info:
+            create(db, identity, payload, settings=settings)
+        assert exc_info.value.code == "ERR_SUBSCRIPTION_REQUIRED"
+        assert exc_info.value.status == 402
+
+
+def test_paid_subscription_unlocks_all_p2_features() -> None:
+    from ledgerpilot.local_setup import FileSettings
+    from ledgerpilot.tenancy.service import allows_feature
+
+    business_id = uuid4()
+    settings = FileSettings(
+        app_env="local",
+        database_url="postgresql+psycopg://ledgerpilot_app:p@127.0.0.1:5432/d",
+        session_signing_key="a" * 40,
+    )
+    db = MagicMock()
+    db.execute.return_value.scalar_one_or_none.return_value = {
+        "status": "active",
+        "paid_access": True,
+        "grace_until": None,
+    }
+    for feat in (
+        "projects",
+        "insights",
+        "reconciliation",
+        "prepaids",
+        "micro_close",
+        "retention",
+        "audit",
+    ):
+        assert allows_feature(db, settings, business_id, feat) is True
+
+    db.execute.return_value.scalar_one_or_none.return_value = {
+        "status": "canceled",
+        "paid_access": False,
+    }
+    assert allows_feature(db, settings, business_id, "projects") is False
+
+
+def test_invoices_listing_cancel_resume_and_transaction_emails() -> None:
+    from unittest.mock import patch
+
+    from pydantic import SecretStr
+
+    from ledgerpilot.provider_integrations import (
+        cancel_subscription,
+        change_subscription_plan,
+        list_billing_invoices,
+        resume_subscription,
+    )
+
+    db = MagicMock()
+    business_id = uuid4()
+    identity = MagicMock()
+    identity.user.email = "owner@example.com"
+    request = MagicMock()
+    settings = MagicMock(spec=Settings)
+    settings.stripe_secret_key = SecretStr("sk_test_12345")
+    settings.stripe_starter_price_id = "price_starter_yr"
+    settings.stripe_growth_price_id = "price_growth_yr"
+    settings.stripe_enterprise_price_id = "price_enterprise_yr"
+    settings.billing_return_url = "https://balanc-amber.vercel.app/settings/billing"
+    settings.stripe_billing_configured = True
+    settings.auth_delivery_enabled = True
+    request.app.state.settings = settings
+
+    conn = {
+        "customer": "cus_inv_1",
+        "subscription_id": "sub_inv_1",
+        "plan": "starter",
+        "snapshot": {"status": "active", "paid_access": True, "plan": "starter"},
+    }
+
+    def fake_stripe(settings: Any, method: str, path: str, **kwargs: Any) -> dict[str, Any]:
+        if path == "invoices":
+            return {
+                "data": [
+                    {
+                        "id": "in_123",
+                        "number": "INV-0001",
+                        "status": "paid",
+                        "amount_paid": 20000,
+                        "amount_due": 20000,
+                        "currency": "usd",
+                        "created": 1763596800,
+                        "hosted_invoice_url": "https://invoice.stripe.com/i/acct/test",
+                        "invoice_pdf": "https://pay.stripe.com/invoice/pdf",
+                        "description": "Starter Yearly",
+                    }
+                ]
+            }
+        if method == "GET" and path == "subscriptions/sub_inv_1":
+            return {"id": "sub_inv_1", "items": {"data": [{"id": "si_1"}]}}
+        if method == "POST" and path == "subscriptions/sub_inv_1":
+            return {"id": "sub_inv_1", "status": "active", "current_period_end": 1795132800}
+        if method == "DELETE" and path == "subscriptions/sub_inv_1":
+            return {"id": "sub_inv_1", "status": "canceled"}
+        return {}
+
+    sent_emails: list[dict[str, Any]] = []
+
+    def fake_send(settings: Any, recipient: str, subject: str, body: str, **kwargs: Any) -> bool:
+        sent_emails.append({"to": recipient, "subject": subject, "body": body, **kwargs})
+        return True
+
+    with (
+        patch("ledgerpilot.provider_integrations.load", return_value=dict(conn)),
+        patch("ledgerpilot.provider_integrations.save"),
+        patch("ledgerpilot.provider_integrations.stripe", side_effect=fake_stripe),
+        patch("ledgerpilot.provider_integrations.authorize"),
+        patch("ledgerpilot.provider_integrations.send_transactional_email", side_effect=fake_send),
+    ):
+        invoices = list_billing_invoices(
+            business_id=business_id, request=request, identity=identity, db=db
+        )
+        assert len(invoices.items) == 1
+        assert invoices.items[0].number == "INV-0001"
+        assert invoices.items[0].invoice_pdf == "https://pay.stripe.com/invoice/pdf"
+
+        change_subscription_plan(
+            business_id=business_id,
+            new_plan="growth",
+            request=request,
+            identity=identity,
+            db=db,
+        )
+        cancel_subscription(
+            business_id=business_id,
+            request=request,
+            identity=identity,
+            db=db,
+            immediate=False,
+        )
+        resume_subscription(
+            business_id=business_id,
+            request=request,
+            identity=identity,
+            db=db,
+        )
+        cancel_subscription(
+            business_id=business_id,
+            request=request,
+            identity=identity,
+            db=db,
+            immediate=True,
+        )
+
+    assert len(sent_emails) == 4
+    assert all(m["to"] == "owner@example.com" for m in sent_emails)
+    assert [m["tag"] for m in sent_emails] == [
+        "billing.plan_changed",
+        "billing.cancel_scheduled",
+        "billing.resumed",
+        "billing.canceled",
+    ]

@@ -285,7 +285,7 @@ jobs:
         run: uv run python -m ledgerpilot.local_setup prepare
       - name: Start PostgreSQL with restricted roles
         run: docker compose up -d --wait --wait-timeout 90 postgres
-      - name: Run Alembic upgrade through 0034 on fresh database
+      - name: Run Alembic upgrade through 0036 on fresh database
         working-directory: backend
         run: uv run alembic upgrade head
       - name: Assert exactly one Alembic head
