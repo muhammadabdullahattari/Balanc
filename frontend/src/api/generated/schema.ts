@@ -6324,6 +6324,8 @@ export interface components {
         IdentityRead: {
             /** Email */
             email: string;
+            /** Google Linked */
+            google_linked?: boolean | null;
             /**
              * Id
              * Format: uuid

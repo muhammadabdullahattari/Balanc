@@ -202,6 +202,11 @@ def link(
         raise DomainError(
             "ERR_MFA_REQUIRED", "Verify your authenticator before linking Google.", 403
         )
+    already_linked = db.scalar(select(GoogleIdentity).where(GoogleIdentity.user_id == user.id))
+    if already_linked:
+        raise DomainError(
+            "ERR_GOOGLE_LINK", "Your Google account is already linked.", 409
+        )
     claims = consume_proof(db, settings, data, csrf)
     db.scalar(select(User).where(User.id == user.id).with_for_update())
     if canonical_email(claims["email"]) != user.email:
@@ -216,8 +221,6 @@ def link(
         )
     )
     if existing:
-        if existing.user_id == user.id and existing.subject == claims["sub"]:
-            return
         raise DomainError("ERR_GOOGLE_LINK", "This Google account is already linked.", 409)
     db.add(GoogleIdentity(subject=claims["sub"], user_id=user.id))
     record(db, user.id, "identity.google_linked")

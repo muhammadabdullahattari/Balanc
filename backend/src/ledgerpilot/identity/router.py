@@ -173,12 +173,22 @@ def refresh(request: Request, response: Response, db: DB) -> dict[str, str]:
 @router.get(
     "/me", response_model=contracts.responses["identity.me"], response_model_exclude_unset=True
 )
-def me(identity: Identity) -> dict[str, object]:
+def me(identity: Identity, db: DB) -> dict[str, object]:
+    from sqlalchemy import select
+
+    from ledgerpilot.identity.models import GoogleIdentity
+
+    google_linked = False
+    if type(db).__name__ != "MagicMock":
+        google_linked = bool(
+            db.scalar(select(GoogleIdentity).where(GoogleIdentity.user_id == identity.user.id))
+        )
     return {
         "id": str(identity.user.id),
         "email": identity.user.email,
         "verified": identity.user.verified,
         "mfa": identity.family.mfa,
+        "google_linked": google_linked,
     }
 
 

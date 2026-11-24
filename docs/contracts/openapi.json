@@ -6786,6 +6786,17 @@
             "title": "Email",
             "type": "string"
           },
+          "google_linked": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Google Linked"
+          },
           "id": {
             "format": "uuid",
             "title": "Id",

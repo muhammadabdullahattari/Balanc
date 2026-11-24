@@ -124,6 +124,14 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
     },
   });
   const [googleLinked, setGoogleLinked] = useState(false);
+  const session = useQuery({
+    queryKey: keys.session,
+    queryFn: () => result(api.GET("/api/v1/auth/me")),
+  });
+  const isGoogleLinked = Boolean(
+    googleLinked ||
+      (session.data as { google_linked?: boolean } | undefined)?.google_linked,
+  );
   return (
     <>
       <PageHeading
@@ -276,14 +284,24 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
         {section === "security" && (
           <>
             <h2>Keep your workspace protected.</h2>
-            <h3>Link your Google account</h3>
-            {googleLinked && (
-              <p role="status">
-                Google account linked. You can use Google with your LedgerPilot
-                authenticator.
-              </p>
+            <h3>Google account sign-in</h3>
+            {isGoogleLinked ? (
+              <div className="info-callout" role="status">
+                <p>
+                  <strong>Google account linked.</strong>{" "}
+                  {session.data?.email ? `(${session.data.email}) ` : ""}
+                  You can use Google with your LedgerPilot authenticator.
+                </p>
+              </div>
+            ) : (
+              <GoogleSignIn
+                mode="link"
+                onLinked={() => {
+                  setGoogleLinked(true);
+                  void queryClient.invalidateQueries({ queryKey: keys.session });
+                }}
+              />
             )}
-            <GoogleSignIn mode="link" onLinked={() => setGoogleLinked(true)} />
 
             <p className="muted">
               Signing out everywhere revokes all your active sessions.
