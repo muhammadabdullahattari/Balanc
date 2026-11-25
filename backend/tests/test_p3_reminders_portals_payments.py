@@ -566,13 +566,22 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sign1.status_code == 200
         assert sign1.json()["state"] == "first_approved"
 
-        # Second human sign-off executes the NACHA ACH settlement
-        sign2 = await accountant.post(
+        # Same human attempting second sign-off in a multi-approver workspace is blocked (403)
+        same_user_sign2 = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/supplier-payments/{dual_id}/approve-and-execute",
             headers=headers,
             json={"step_up_code": "654321"},
         )
-        assert sign2.status_code == 200
+        assert same_user_sign2.status_code == 403
+
+        # Distinct second human (workspace owner `client`) completes final sign-off
+        owner_headers = {"X-CSRF-Token": client.headers.get("X-CSRF-Token", "")}
+        sign2 = await client.post(
+            f"/api/v1/businesses/{bid}/p3/supplier-payments/{dual_id}/approve-and-execute",
+            headers=owner_headers,
+            json={"step_up_code": "654321"},
+        )
+        assert sign2.status_code == 200, sign2.text
         assert sign2.json()["state"] == "settled_posted"
         assert sign2.json()["provider_reference"].startswith("ACH-NACHA-")
         assert "NACHA BATCH PAYLOAD" in sign2.json()["remittance_advice"]

@@ -121,7 +121,12 @@ class FoundationMiddleware:
                 os.environ.get("RAILWAY_PROJECT_ID") or os.environ.get("RAILWAY_ENVIRONMENT")
             )
             origin_allowed = origin in settings.allowed_origins or (
-                is_railway and bool(origin and origin.endswith((".vercel.app", ".railway.app")))
+                is_railway
+                and bool(
+                    origin
+                    and origin.startswith("https://balanc")
+                    and origin.endswith((".vercel.app", ".railway.app"))
+                )
             )
             if (
                 not origin_allowed

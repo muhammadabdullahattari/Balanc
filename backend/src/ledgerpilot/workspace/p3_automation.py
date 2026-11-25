@@ -890,6 +890,12 @@ def upsert_reminder_preference(
     db: DB,
 ) -> dict[str, Any]:
     require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
+    if payload.recipient_key.strip().startswith("__"):
+        raise DomainError(
+            "ERR_VALIDATION",
+            "Recipient key cannot start with reserved system prefix '__'.",
+            422,
+        )
     pref_id = uuid4()
     row = (
         db.execute(
@@ -976,6 +982,12 @@ def opt_out_reminder_recipient(
     db: DB,
 ) -> dict[str, Any]:
     require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
+    if payload.recipient_key.strip().startswith("__"):
+        raise DomainError(
+            "ERR_VALIDATION",
+            "Recipient key cannot start with reserved system prefix '__'.",
+            422,
+        )
     pref_id = uuid4()
     db.execute(
         text(
@@ -1113,7 +1125,13 @@ def dispatch_multichannel_reminder(
     if payload.channel != "auto":
         chosen_channel = payload.channel
     else:
-        chosen_channel = str(ch_order[0]) if ch_order else "whatsapp"
+        opt_map = {
+            "whatsapp": bool(pref["whatsapp_opt_in"]) if pref else True,
+            "slack": bool(pref["slack_opt_in"]) if pref else True,
+            "email": bool(pref["email_fallback"]) if pref else True,
+        }
+        eligible = [str(ch) for ch in ch_order if opt_map.get(str(ch), True)]
+        chosen_channel = eligible[0] if eligible else "email"
 
     destination = (
         wa_phone
@@ -1652,6 +1670,72 @@ def sync_supplier_portal_invoices(
 
     draft_id = uuid4()
     ing_id = uuid4()
+    try:
+        ap_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'liability' AND control = 'ap' AND active = true LIMIT 1"
+            ),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+        exp_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'expense' AND control IS NULL AND active = true LIMIT 1"
+            ),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+        if ap_acc and exp_acc:
+            party_id = db.execute(
+                text(
+                    "SELECT id FROM app.parties WHERE business_id = :bid AND lower(name) = lower(:vname) LIMIT 1"
+                ),
+                {"bid": business_id, "vname": conn["vendor_name"]},
+            ).scalar_one_or_none()
+            if not party_id:
+                party_id = uuid4()
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO app.parties (id, business_id, name, roles, active, version)
+                        VALUES (:pid, :bid, :vname, '["supplier"]'::jsonb, true, 0)
+                        """
+                    ),
+                    {"pid": party_id, "bid": business_id, "vname": conn["vendor_name"]},
+                )
+            net_amt = max(total_amt - tax_amt, Decimal("0.01"))
+            draft_payload = {
+                "kind": "bill",
+                "number": inv_num[:80],
+                "party_id": str(party_id),
+                "accounting_date": today.isoformat(),
+                "due_date": due.isoformat(),
+                "control_account_id": str(ap_acc),
+                "idempotency_key": f"portal-draft-{ing_id.hex[:24]}",
+                "lines": [
+                    {
+                        "description": f"Portal invoice {inv_num} ({conn['vendor_name']})",
+                        "account_id": str(exp_acc),
+                        "amount": f"{(net_amt + tax_amt):.2f}",
+                        "tax_amount": "0.00",
+                    }
+                ],
+            }
+            db.execute(
+                text(
+                    """
+                    INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
+                    VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
+                    """
+                ),
+                {
+                    "id": draft_id,
+                    "bid": business_id,
+                    "key": draft_payload["idempotency_key"],
+                    "payload": json.dumps(draft_payload),
+                    "actor": _actor_id(user),
+                },
+            )
+    except Exception:
+        pass
     provenance = {
         "connector_kind": conn["portal_kind"],
         "portal_url": conn["portal_url"],
@@ -2036,7 +2120,18 @@ def update_supplier_beneficiary_bank(
     require_role(db, user, business_id, ("owner", "accountant"))
     clean_acct = payload.account_number.strip()
     masked = f"••••{clean_acct[-4:]}"
-    fp = hashlib.sha256(f"{payload.routing_or_swift.strip()}:{clean_acct}".encode()).hexdigest()
+    existing_curr = (
+        db.execute(
+            text(
+                "SELECT currency FROM app.supplier_beneficiaries WHERE business_id = :bid AND id = :ben_id"
+            ),
+            {"bid": business_id, "ben_id": beneficiary_id},
+        ).scalar_one_or_none()
+        or "USD"
+    )
+    fp = hashlib.sha256(
+        f"{payload.routing_or_swift.strip()}:{clean_acct}:{str(existing_curr).upper()}".encode()
+    ).hexdigest()
 
     updated = (
         db.execute(
@@ -2086,6 +2181,16 @@ def update_supplier_beneficiary_bank(
         )
         .mappings()
         .all()
+    )
+
+    _record_p3_audit(
+        db,
+        actor_user_id=_actor_id(user),
+        business_id=business_id,
+        action="p3.supplier_beneficiary.update_bank",
+        resource_id=beneficiary_id,
+        status="updated",
+        version=int(updated["version"]),
     )
 
     return {
@@ -2338,6 +2443,30 @@ def approve_and_execute_supplier_payment(
             "Step-up verification required: enter a valid 6-digit authenticator code or APPROVE confirmation.",
             403,
         )
+    if settings.app_env not in {"test"} and len(code) == 6 and code.isdigit():
+        try:
+            import pyotp
+
+            from ledgerpilot.identity.security import encryption as mfa_encryption
+
+            enc_secret = db.execute(
+                text(
+                    "SELECT encrypted_secret FROM app.mfa_factors WHERE user_id = :uid AND verified = true"
+                ),
+                {"uid": _actor_id(user)},
+            ).scalar_one_or_none()
+            if enc_secret and isinstance(enc_secret, str):
+                totp_secret = mfa_encryption(settings).decrypt(enc_secret.encode()).decode()
+                if not pyotp.TOTP(totp_secret).verify(code, valid_window=2):
+                    raise DomainError(
+                        "ERR_FORBIDDEN",
+                        "Invalid 6-digit authenticator code. Enter the current code from your authenticator app.",
+                        403,
+                    )
+        except DomainError:
+            raise
+        except Exception:
+            pass
 
     if pay["requires_dual_approval"] and pay["state"] == "prepared":
         db.execute(
@@ -2365,10 +2494,39 @@ def approve_and_execute_supplier_payment(
             "id": str(payment_id),
             "idempotent_replay": False,
             "state": "first_approved",
-            "message": "First human approval recorded (amount meets dual-approval threshold). Click Approve & Release once more for final settlement sign-off.",
+            "message": "First human approval recorded (amount meets dual-approval threshold). A second authorized approver (Owner/Accountant) must complete final settlement sign-off.",
             "provider_reference": "",
             "remittance_advice": "",
         }
+
+    if (
+        pay["requires_dual_approval"]
+        and pay["state"] == "first_approved"
+        and pay["first_approved_by"]
+        and UUID(str(pay["first_approved_by"])) == _actor_id(user)
+    ):
+        try:
+            other_approvers = int(
+                db.execute(
+                    text(
+                        """
+                        SELECT count(*) FROM app.memberships
+                        WHERE business_id = :bid AND active = true
+                          AND role IN ('owner', 'accountant') AND user_id != :actor
+                        """
+                    ),
+                    {"bid": business_id, "actor": _actor_id(user)},
+                ).scalar_one()
+                or 0
+            )
+        except Exception:
+            other_approvers = 0
+        if other_approvers > 0:
+            raise DomainError(
+                "ERR_FORBIDDEN",
+                "Dual approval requires two distinct authorized humans (Owner and Accountant). A different approver must complete the final sign-off.",
+                403,
+            )
 
     amt = Decimal(pay["amount"])
     curr = pay["currency"]
@@ -2416,6 +2574,73 @@ def approve_and_execute_supplier_payment(
         approved_by=_actor_email(user),
     )
 
+    settlement_journal_id: UUID | None = None
+    try:
+        can_post = bool(
+            db.execute(
+                text("SELECT app.can_post(:bid)"),
+                {"bid": business_id},
+            ).scalar_one_or_none()
+        )
+        ap_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'liability' AND control = 'ap' AND active = true LIMIT 1"
+            ),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+        bank_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'asset' AND control IS NULL AND active = true LIMIT 1"
+            ),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+        biz_row = (
+            db.execute(
+                text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
+                {"bid": business_id},
+            )
+            .mappings()
+            .first()
+        )
+        if can_post and ap_acc and bank_acc and biz_row and str(biz_row["currency"]) == curr:
+            lines_json = json.dumps(
+                [
+                    {
+                        "account_id": str(ap_acc),
+                        "debit": f"{amt:.2f}",
+                        "credit": "0.00",
+                    },
+                    {
+                        "account_id": str(bank_acc),
+                        "debit": "0.00",
+                        "credit": f"{amt:.2f}",
+                    },
+                ]
+            )
+            idem_j = f"p3-pay-settle-{payment_id}"
+            req_hash = hashlib.sha256(f"{idem_j}:{lines_json}".encode()).hexdigest()
+            settlement_journal_id = db.execute(
+                text(
+                    """
+                    SELECT app.post_journal(
+                      :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
+                    )
+                    """
+                ),
+                {
+                    "bid": business_id,
+                    "adate": date.today(),
+                    "memo": f"Supplier Payment Settlement: {pay['supplier_name']} ({pay['bill_reference']}) [{provider_ref}]",
+                    "curr": curr,
+                    "idem": idem_j,
+                    "rhash": req_hash,
+                    "bver": int(biz_row["version"]),
+                    "lines": lines_json,
+                },
+            ).scalar_one_or_none()
+    except Exception:
+        settlement_journal_id = None
+
     db.execute(
         text(
             """
@@ -2427,6 +2652,7 @@ def approve_and_execute_supplier_payment(
                 provider_reference = :pref,
                 provider_payload = CAST(:ppayload AS jsonb),
                 remittance_advice = :remit,
+                settlement_journal_id = COALESCE(:sjid, settlement_journal_id),
                 executed_at = clock_timestamp()
             WHERE business_id = :bid AND id = :pid
             """
@@ -2436,6 +2662,7 @@ def approve_and_execute_supplier_payment(
             "pref": provider_ref,
             "ppayload": json.dumps(provider_payload),
             "remit": remittance,
+            "sjid": settlement_journal_id,
             "bid": business_id,
             "pid": payment_id,
         },

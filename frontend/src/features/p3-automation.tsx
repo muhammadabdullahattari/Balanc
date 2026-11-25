@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
 import {
@@ -1078,7 +1078,7 @@ export function HumanApprovedSupplierPayments() {
   const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState("");
   const [billRef, setBillRef] = useState("BILL-AWS-2026-114");
   const [payAmount, setPayAmount] = useState("425.00");
-  const [stepUpCode, setStepUpCode] = useState("123456");
+  const [stepUpCode, setStepUpCode] = useState("");
   const [activeRemittance, setActiveRemittance] = useState<string>("");
   const [statusNotice, setStatusNotice] = useState<string>("");
 
@@ -1500,6 +1500,9 @@ export function P3AutomationHub({
   initialTab?: "reminders" | "portals" | "payments";
 }) {
   const [tab, setTab] = useState<string>(initialTab);
+  useEffect(() => {
+    setTab(initialTab);
+  }, [initialTab]);
   return (
     <>
       <PageHeading

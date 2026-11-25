@@ -244,7 +244,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.add_middleware(
         CORSMiddleware,
         allow_origins=configured.allowed_origins,
-        allow_origin_regex=r"^https://.*\.vercel\.app$" if is_railway else None,
+        allow_origin_regex=r"^https://balanc(-[a-z0-9-]+)?\.vercel\.app$" if is_railway else None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH"],
         allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Range", "If-Match"],
@@ -389,113 +389,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):
             return JSONResponse({"status": "not_ready"}, status_code=503)
-
-    @application.get("/health/migrate", include_in_schema=False)
-    def run_migrations_endpoint(db_url: str | None = None) -> JSONResponse:
-        import traceback
-
-        try:
-            from alembic import command
-            from alembic.config import Config
-
-            target_url = db_url or configured.database_url.get_secret_value()
-            if target_url.startswith("postgres://"):
-                target_url = "postgresql+psycopg://" + target_url[len("postgres://") :]
-            elif target_url.startswith("postgresql://"):
-                target_url = "postgresql+psycopg://" + target_url[len("postgresql://") :]
-
-            cfg = Config("alembic.ini")
-            cfg.set_main_option("sqlalchemy.url", target_url)
-            command.upgrade(cfg, "head")
-            parsed = make_url(target_url)
-            return JSONResponse(
-                {
-                    "status": "ok",
-                    "message": "Migrations completed successfully",
-                    "applied_to_host": parsed.host,
-                    "applied_to_db": parsed.database,
-                }
-            )
-        except Exception as exc:
-            return JSONResponse(
-                {"status": "error", "error": str(exc), "traceback": traceback.format_exc()},
-                status_code=500,
-            )
-
-    @application.get("/health/test-email", include_in_schema=False)
-    def test_email_endpoint(
-        to: str = "tintinxlr8@gmail.com",
-        resend_key: str | None = None,
-        brevo_key: str | None = None,
-        sendgrid_key: str | None = None,
-    ) -> JSONResponse:
-        import os
-        import socket
-        import traceback
-
-        from ledgerpilot.identity.mail import deliver
-
-        if resend_key:
-            os.environ["RESEND_API_KEY"] = resend_key.strip().strip("'\"")
-        if brevo_key:
-            os.environ["BREVO_API_KEY"] = brevo_key.strip().strip("'\"")
-        if sendgrid_key:
-            os.environ["SENDGRID_API_KEY"] = sendgrid_key.strip().strip("'\"")
-
-        probe_ports = [587, 465, 2525, 25, 443]
-        port_results = {}
-        for p in probe_ports:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(2)
-            try:
-                s.connect(("smtp.gmail.com", p))
-                port_results[p] = "OPEN"
-            except Exception as e:
-                port_results[p] = f"BLOCKED: {e}"
-            finally:
-                s.close()
-
-        try:
-            deliver(configured, to, "verify", "123456")
-            return JSONResponse(
-                {
-                    "status": "ok",
-                    "delivered_to": to,
-                    "port_probes": port_results,
-                    "smtp_host": configured.smtp_host,
-                    "smtp_port": configured.smtp_port,
-                    "auth_delivery_enabled": configured.auth_delivery_enabled,
-                    "smtp_starttls": configured.smtp_starttls,
-                    "smtp_from": configured.smtp_from,
-                    "smtp_username": configured.smtp_username,
-                    "resend_enabled": bool(os.environ.get("RESEND_API_KEY")),
-                    "brevo_enabled": bool(os.environ.get("BREVO_API_KEY")),
-                    "sendgrid_enabled": bool(os.environ.get("SENDGRID_API_KEY")),
-                }
-            )
-        except Exception as exc:
-            message_text = getattr(exc, "message", str(exc))
-            cause = getattr(exc, "__cause__", None)
-            return JSONResponse(
-                {
-                    "status": "error",
-                    "error": str(exc),
-                    "message": message_text,
-                    "cause": str(cause) if cause else None,
-                    "cause_type": type(cause).__name__ if cause else None,
-                    "traceback": traceback.format_exc(),
-                    "port_probes": port_results,
-                    "smtp_host": configured.smtp_host,
-                    "smtp_port": configured.smtp_port,
-                    "auth_delivery_enabled": configured.auth_delivery_enabled,
-                    "smtp_starttls": configured.smtp_starttls,
-                    "smtp_from": configured.smtp_from,
-                    "smtp_username": configured.smtp_username,
-                    "resend_enabled": bool(os.environ.get("RESEND_API_KEY")),
-                    "brevo_enabled": bool(os.environ.get("BREVO_API_KEY")),
-                },
-                status_code=500,
-            )
 
     application.include_router(identity_router, prefix=configured.api_v1_prefix)
     application.include_router(jobs_router, prefix=configured.api_v1_prefix)

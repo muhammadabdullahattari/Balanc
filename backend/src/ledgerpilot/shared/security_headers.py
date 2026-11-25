@@ -59,8 +59,6 @@ class SecurityHeadersMiddleware:
         health_probe = scope["method"] in {"GET", "HEAD"} and scope["path"] in {
             "/health/live",
             "/health/ready",
-            "/health/migrate",
-            "/health/test-email",
         }
         if (
             settings.app_env not in {"local", "test"}

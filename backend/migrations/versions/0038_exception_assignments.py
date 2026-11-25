@@ -83,6 +83,8 @@ def upgrade() -> None:
         CREATE INDEX portfolio_pending_bank ON app.bank_rows(business_id,id)
           WHERE state='for_review';
         CREATE INDEX portfolio_bills ON app.trade_documents(business_id,id) WHERE kind='bill';
+        CREATE INDEX IF NOT EXISTS portfolio_bill_evidence ON app.evidence_links(business_id,resource_id)
+          WHERE resource_kind='trade_document';
         CREATE FUNCTION app.portfolio_counts() RETURNS TABLE
         (business_id uuid, business_name text, exceptions bigint, severity integer, assignees uuid[])
         LANGUAGE plpgsql SECURITY INVOKER SET search_path=pg_catalog SET jit=off AS $$
@@ -115,7 +117,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    op.execute("DROP INDEX app.portfolio_open_close,app.portfolio_pending_bank,app.portfolio_bills")
+    op.execute(
+        "DROP INDEX IF EXISTS app.portfolio_bill_evidence,app.portfolio_open_close,app.portfolio_pending_bank,app.portfolio_bills"
+    )
     op.execute("DROP FUNCTION app.portfolio_counts()")
     op.execute(
         "DROP TABLE app.fx_quotes, app.fixed_assets, app.fx_proposals, app.exception_assignments"
