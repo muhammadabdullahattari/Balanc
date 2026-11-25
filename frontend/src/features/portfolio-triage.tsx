@@ -3,6 +3,22 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, result } from "../api/runtime";
 import { Button, ErrorNotice, Field, Loading } from "../components/ui";
 
+const SORT_LABELS: Record<
+  "exceptions" | "status" | "severity" | "assignee",
+  string
+> = {
+  exceptions: "Open exception count (highest first)",
+  status: "Exception review status",
+  severity: "Exception severity",
+  assignee: "Assigned accountant",
+};
+
+const STATUS_LABELS: Record<"all" | "clear" | "open", string> = {
+  all: "All workspaces",
+  clear: "Clear (0 open exceptions)",
+  open: "Workspaces with open exceptions",
+};
+
 export function PortfolioTriage() {
   const [sort, setSort] = useState<
     "exceptions" | "status" | "severity" | "assignee"
@@ -21,60 +37,92 @@ export function PortfolioTriage() {
       ),
   });
   return (
-    <section className="panel">
+    <section className="panel portfolio-triage-panel">
       <h2>Portfolio exceptions</h2>
-      <Field label="Sort businesses">
-        <select
-          value={sort}
-          onChange={(e) => {
-            setSort(e.target.value as typeof sort);
-            page(0);
-          }}
-        >
-          {["exceptions", "status", "severity", "assignee"].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-      </Field>
-      <Field label="Exception status">
-        <select
-          value={status}
-          onChange={(e) => {
-            setStatus(e.target.value as typeof status);
-            page(0);
-          }}
-        >
-          {["all", "clear", "open"].map((x) => (
-            <option key={x}>{x}</option>
-          ))}
-        </select>
-      </Field>
+      <p className="muted">
+        Filter workspaces across your accounting practice and click any business
+        below to inspect or assign open reconciliation and close exceptions.
+      </p>
+      <div className="form-grid">
+        <Field label="Sort businesses">
+          <select
+            value={sort}
+            onChange={(e) => {
+              setSort(e.target.value as typeof sort);
+              page(0);
+            }}
+          >
+            {(["exceptions", "status", "severity", "assignee"] as const).map(
+              (x) => (
+                <option key={x} value={x}>
+                  {SORT_LABELS[x]}
+                </option>
+              ),
+            )}
+          </select>
+        </Field>
+        <Field label="Exception status">
+          <select
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value as typeof status);
+              page(0);
+            }}
+          >
+            {(["all", "clear", "open"] as const).map((x) => (
+              <option key={x} value={x}>
+                {STATUS_LABELS[x]}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
       {rows.isPending ? <Loading /> : <ErrorNotice error={rows.error} />}
-      {rows.data?.length === 0 && <p>No matching businesses.</p>}
-      {rows.data?.map((r) => (
+      {rows.data?.length === 0 && (
+        <p className="muted" style={{ marginTop: "12px" }}>
+          No matching businesses.
+        </p>
+      )}
+      {rows.data && rows.data.length > 0 && (
+        <div className="portfolio-chip-grid">
+          {rows.data.map((r) => (
+            <Button
+              key={r.business_id}
+              variant="secondary"
+              className={
+                selected === r.business_id ? "portfolio-chip-active" : ""
+              }
+              onClick={() => select(r.business_id)}
+            >
+              {r.business_name}: {r.exceptions} exceptions
+            </Button>
+          ))}
+        </div>
+      )}
+      <div className="p3-actions-row">
         <Button
-          key={r.business_id}
-          variant="ghost"
-          onClick={() => select(r.business_id)}
+          variant="secondary"
+          disabled={!offset}
+          onClick={() => page(offset - 25)}
         >
-          {r.business_name}: {r.exceptions} exceptions
+          Previous 25
         </Button>
-      ))}
-      <Button disabled={!offset} onClick={() => page(offset - 25)}>
-        Previous 25
-      </Button>
-      <Button
-        disabled={rows.data?.length !== 25}
-        onClick={() => page(offset + 25)}
-      >
-        Next 25
-      </Button>
+        <Button
+          variant="secondary"
+          disabled={rows.data?.length !== 25}
+          onClick={() => page(offset + 25)}
+        >
+          Next 25
+        </Button>
+      </div>
       {selected && (
-        <Assignments
-          key={selected}
-          id={selected}
-          changed={() => void rows.refetch()}
-        />
+        <div className="portfolio-assignments-box">
+          <Assignments
+            key={selected}
+            id={selected}
+            changed={() => void rows.refetch()}
+          />
+        </div>
       )}
     </section>
   );

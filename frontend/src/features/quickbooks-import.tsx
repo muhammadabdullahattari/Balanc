@@ -204,36 +204,28 @@ export function QuickBooksImport() {
         }
       />
 
-      <div className="review-summary" style={{ marginBottom: "1.5rem" }}>
-        <div
-          style={{
-            display: "flex",
-            gap: "1rem",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
-          <strong>QuickBooks Connector:</strong>
-          {previewMeta?.connection_mode &&
-          previewMeta.connection_mode !== "sandbox_demo" ? (
-            <Badge>
-              CONNECTED ({previewMeta.company_name || "QuickBooks Online"} ·
-              Realm {previewMeta.realm_id})
-            </Badge>
-          ) : previewQuery.data ? (
-            <Badge>CONNECTED (SANDBOX READY)</Badge>
-          ) : (
-            <Badge>SANDBOX READY</Badge>
-          )}
-        </div>
+      <div className="p3-badge-row" style={{ marginBottom: "18px" }}>
+        <strong>QuickBooks Source Status:</strong>
+        {previewMeta?.connection_mode &&
+        previewMeta.connection_mode !== "sandbox_demo" ? (
+          <Badge tone="good">
+            LIVE CONNECTED ({previewMeta.company_name || "QuickBooks Online"} ·
+            Realm {previewMeta.realm_id})
+          </Badge>
+        ) : (
+          <Badge>
+            BUILT-IN SANDBOX DATASET READY (No Live Intuit QBO Connected)
+          </Badge>
+        )}
       </div>
 
-      <div className="panel" style={{ marginBottom: "1.5rem" }}>
-        <h3>0. Connect Your QuickBooks Online Account</h3>
+      <div className="panel" style={{ marginBottom: "22px" }}>
+        <h3>Step 1 · QuickBooks Online Source Connection</h3>
         <p className="muted">
-          Connect your own QuickBooks Online company via Intuit OAuth 2.0 or by
-          entering your QuickBooks Company Realm ID and OAuth Access Token
-          (encrypted per workspace), or test using the built-in Sandbox dataset.
+          Authorize your live QuickBooks Online company via Intuit OAuth 2.0 or
+          encrypted Realm ID &amp; OAuth credentials, or proceed directly to
+          Step 2 below to evaluate migration using the built-in Intuit Sandbox
+          company dataset.
         </p>
         <form
           onSubmit={(e) => {
@@ -290,14 +282,7 @@ export function QuickBooksImport() {
               </select>
             </Field>
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              marginTop: "10px",
-            }}
-          >
+          <div className="p3-actions-row">
             <Button type="submit" busy={connectQuickBooks.isPending}>
               Connect QuickBooks Company
             </Button>
@@ -311,19 +296,14 @@ export function QuickBooksImport() {
                 Connect via Intuit OAuth 2.0 Redirect
               </Button>
             )}
-            {previewMeta?.connection_mode &&
-              previewMeta.connection_mode !== "sandbox_demo" && (
-                <Button
-                  type="button"
-                  variant="secondary"
-                  busy={connectQuickBooks.isPending}
-                  onClick={() =>
-                    connectQuickBooks.mutate({ mode: "sandbox_demo" })
-                  }
-                >
-                  Switch to Built-in Sandbox Demo
-                </Button>
-              )}
+            <Button
+              type="button"
+              variant="secondary"
+              busy={connectQuickBooks.isPending}
+              onClick={() => connectQuickBooks.mutate({ mode: "sandbox_demo" })}
+            >
+              Use Built-in Sandbox Demo Dataset
+            </Button>
           </div>
           {qbStatusNotice && (
             <p
@@ -337,66 +317,72 @@ export function QuickBooksImport() {
         </form>
       </div>
 
-      <h3>1. Select Entities for Import</h3>
-      <div className="qb-entity-grid">
-        {[
-          ["Account", "Chart of Accounts"],
-          ["Customer", "Customers"],
-          ["Vendor", "Vendors"],
-          ["JournalEntry", "Journal Entries"],
-          ["Invoice", "Invoices"],
-          ["Bill", "Bills"],
-          ["Payment", "Payments (Customer Receipts)"],
-          ["CreditMemo", "Credit Memos (Customer Credits)"],
-          ["BillPayment", "Bill Payments (Supplier Settlement)"],
-          ["VendorCredit", "Vendor Credits (Applied Credits)"],
-        ].map(([key, label]) => (
-          <label key={key} className="qb-entity-card">
+      <div className="panel" style={{ marginBottom: "22px" }}>
+        <h3>Step 2 · Select Entities &amp; Cutover Date for Import</h3>
+        <p className="muted">
+          Choose which QuickBooks ledgers, master records, and subledger
+          transactions to synchronize through your accounting cutover date.
+        </p>
+        <div className="qb-entity-grid">
+          {[
+            ["Account", "Chart of Accounts"],
+            ["Customer", "Customers"],
+            ["Vendor", "Vendors"],
+            ["JournalEntry", "Journal Entries"],
+            ["Invoice", "Invoices"],
+            ["Bill", "Bills"],
+            ["Payment", "Payments (Customer Receipts)"],
+            ["CreditMemo", "Credit Memos (Customer Credits)"],
+            ["BillPayment", "Bill Payments (Supplier Settlement)"],
+            ["VendorCredit", "Vendor Credits (Applied Credits)"],
+          ].map(([key, label]) => (
+            <label key={key} className="qb-entity-card">
+              <input
+                type="checkbox"
+                checked={selectedEntities.includes(key)}
+                onChange={() => toggleEntity(key)}
+              />
+              <span>{label}</span>
+            </label>
+          ))}
+        </div>
+
+        <div
+          className="form-grid"
+          style={{ maxWidth: "320px", marginBottom: "16px" }}
+        >
+          <Field label="Cutover Date">
             <input
-              type="checkbox"
-              checked={selectedEntities.includes(key)}
-              onChange={() => toggleEntity(key)}
+              type="date"
+              value={cutoverDate}
+              onChange={(e) => setCutoverDate(e.target.value)}
             />
-            <span>{label}</span>
-          </label>
-        ))}
-      </div>
+          </Field>
+        </div>
 
-      <div
-        className="form-grid"
-        style={{ maxWidth: "300px", marginBottom: "1rem" }}
-      >
-        <Field label="Cutover Date">
-          <input
-            type="date"
-            value={cutoverDate}
-            onChange={(e) => setCutoverDate(e.target.value)}
-          />
-        </Field>
-      </div>
-
-      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1.5rem" }}>
-        <Button
-          busy={importDryRun.isPending}
-          disabled={selectedEntities.length === 0}
-          onClick={() => importDryRun.mutate()}
-        >
-          Run Pre-Import Review (Dry Run)
-        </Button>
-        <Button
-          variant="secondary"
-          busy={importLive.isPending}
-          disabled={
-            selectedEntities.length === 0 ||
-            !cutoverDate ||
-            importDryRun.isPending ||
-            !dryRunData?.reconciled ||
-            importLive.isSuccess
-          }
-          onClick={() => setConfirmLiveImport(true)}
-        >
-          Confirm & Post to Ledger
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={importDryRun.isPending}
+            disabled={selectedEntities.length === 0}
+            onClick={() => importDryRun.mutate()}
+          >
+            Run Pre-Import Review (Dry Run)
+          </Button>
+          <Button
+            variant="secondary"
+            busy={importLive.isPending}
+            disabled={
+              selectedEntities.length === 0 ||
+              !cutoverDate ||
+              importDryRun.isPending ||
+              !dryRunData?.reconciled ||
+              importLive.isSuccess
+            }
+            onClick={() => setConfirmLiveImport(true)}
+          >
+            Confirm & Post to Ledger
+          </Button>
+        </div>
       </div>
 
       {confirmLiveImport && (

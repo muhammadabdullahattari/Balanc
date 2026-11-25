@@ -120,7 +120,7 @@ function PortfolioBankReview({ businessId }: { businessId: string }) {
     );
   const status = review.data;
   return (
-    <dl>
+    <dl className="portfolio-status-card">
       <dt>Bank transactions awaiting review</dt>
       <dd>{status.pending_bank_rows}</dd>
       {status.oldest_transaction && (
@@ -453,47 +453,46 @@ export function BusinessChooser({
           void businesses.refetch();
         }}
       />
-      <label>
-        <input
-          type="checkbox"
-          checked={portfolio}
-          onChange={(e) => {
-            setCursor(undefined);
-            setPortfolio(e.target.checked);
-          }}
-        />{" "}
-        Show portfolio review status
-      </label>
-      {portfolio && (
-        <Field label="Find a business by name">
+      <div className="chooser-controls">
+        <label className="chooser-checkbox">
           <input
-            type="search"
-            maxLength={100}
-            value={search}
+            type="checkbox"
+            checked={portfolio}
             onChange={(e) => {
               setCursor(undefined);
-              setSearch(e.target.value);
+              setPortfolio(e.target.checked);
             }}
-          />
-        </Field>
-      )}
-      {portfolio && (
-        <details>
-          <summary>Review and assign portfolio exceptions</summary>
-          <PortfolioTriage />
-        </details>
-      )}
+          />{" "}
+          Show portfolio review status
+        </label>
+        {portfolio && (
+          <Field label="Find a business by name">
+            <input
+              type="search"
+              maxLength={100}
+              placeholder="Filter workspaces by business name…"
+              value={search}
+              onChange={(e) => {
+                setCursor(undefined);
+                setSearch(e.target.value);
+              }}
+            />
+          </Field>
+        )}
+        {portfolio && (
+          <details className="chooser-details">
+            <summary>Review and assign portfolio exceptions</summary>
+            <PortfolioTriage />
+          </details>
+        )}
+      </div>
       {businesses.isPending ? (
         <Loading />
       ) : (
         <div className="business-grid">
           {businesses.data?.items.map((b) => (
-            <div key={b.id}>
-              <button
-                className="business-card"
-                key={b.id}
-                onClick={() => onChoose(b.id)}
-              >
+            <div key={b.id} className="business-card-item">
+              <button className="business-card" onClick={() => onChoose(b.id)}>
                 <Building2 />
                 <h3>{b.name}</h3>
                 <Badge>

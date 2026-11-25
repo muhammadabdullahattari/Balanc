@@ -961,8 +961,59 @@ def list_reminders_and_preferences(
     ws_cfg = _load_workspace_channel_config(db, settings, business_id)
     channels_status = _build_channels_status(settings, ws_cfg)
 
+    open_documents: list[dict[str, Any]] = []
+    try:
+        with db.begin_nested():
+            biz_curr = str(
+                db.execute(
+                    text("SELECT currency FROM app.businesses WHERE id = :bid"),
+                    {"bid": business_id},
+                ).scalar_one_or_none()
+                or "USD"
+            )
+            doc_rows = (
+                db.execute(
+                    text(
+                        """
+                        SELECT d.id, d.kind, d.number, d.total, d.due_date,
+                               coalesce(p.name, 'Workspace Counterparty') AS party_name,
+                               coalesce(sum(a.amount), 0) AS allocated
+                        FROM app.trade_documents d
+                        LEFT JOIN app.parties p
+                          ON p.business_id = d.business_id AND p.id = d.party_id
+                        LEFT JOIN app.allocations a
+                          ON a.business_id = d.business_id AND a.document_id = d.id
+                        WHERE d.business_id = :bid AND d.kind IN ('bill', 'invoice')
+                        GROUP BY d.id, d.kind, d.number, d.total, d.due_date, p.name
+                        HAVING coalesce(sum(a.amount), 0) < d.total
+                        ORDER BY d.due_date ASC
+                        LIMIT 25
+                        """
+                    ),
+                    {"bid": business_id},
+                )
+                .mappings()
+                .all()
+            )
+            for dr in doc_rows:
+                rem_amt = Decimal(dr["total"]) - Decimal(dr["allocated"])
+                open_documents.append(
+                    {
+                        "id": str(dr["id"]),
+                        "kind": dr["kind"],
+                        "number": dr["number"],
+                        "party_name": dr["party_name"],
+                        "outstanding_amount": f"{rem_amt:.2f}",
+                        "currency": biz_curr,
+                        "due_date": dr["due_date"].isoformat(),
+                    }
+                )
+    except Exception:
+        open_documents = []
+
     return {
         "channels_status": channels_status,
+        "open_documents": open_documents,
         "preferences": [
             {
                 "id": str(r["id"]),
@@ -2414,6 +2465,84 @@ def list_supplier_payments_and_controls(
 
     stripe_key = _resolve_env_or_setting(settings, "stripe_secret_key", "STRIPE_SECRET_KEY")
 
+    open_bills: list[dict[str, Any]] = []
+    try:
+        with db.begin_nested():
+            biz_curr = str(
+                db.execute(
+                    text("SELECT currency FROM app.businesses WHERE id = :bid"),
+                    {"bid": business_id},
+                ).scalar_one_or_none()
+                or "USD"
+            )
+            bill_rows = (
+                db.execute(
+                    text(
+                        """
+                        SELECT d.id, d.number, d.total, d.due_date,
+                               coalesce(p.name, 'Supplier') AS supplier_name,
+                               coalesce(sum(a.amount), 0) AS allocated
+                        FROM app.trade_documents d
+                        LEFT JOIN app.parties p
+                          ON p.business_id = d.business_id AND p.id = d.party_id
+                        LEFT JOIN app.allocations a
+                          ON a.business_id = d.business_id AND a.document_id = d.id
+                        WHERE d.business_id = :bid AND d.kind = 'bill'
+                        GROUP BY d.id, d.number, d.total, d.due_date, p.name
+                        HAVING coalesce(sum(a.amount), 0) < d.total
+                        ORDER BY d.due_date ASC
+                        LIMIT 25
+                        """
+                    ),
+                    {"bid": business_id},
+                )
+                .mappings()
+                .all()
+            )
+            for br in bill_rows:
+                rem_amt = Decimal(br["total"]) - Decimal(br["allocated"])
+                open_bills.append(
+                    {
+                        "id": str(br["id"]),
+                        "source": "ledger_bill",
+                        "bill_reference": br["number"],
+                        "supplier_name": br["supplier_name"],
+                        "amount": f"{rem_amt:.2f}",
+                        "currency": biz_curr,
+                        "due_date": br["due_date"].isoformat(),
+                    }
+                )
+            portal_rows = (
+                db.execute(
+                    text(
+                        """
+                        SELECT id, invoice_number, vendor_name, total_amount, currency, due_date
+                        FROM app.supplier_portal_ingestions
+                        WHERE business_id = :bid
+                        ORDER BY created_at DESC
+                        LIMIT 15
+                        """
+                    ),
+                    {"bid": business_id},
+                )
+                .mappings()
+                .all()
+            )
+            for pr in portal_rows:
+                open_bills.append(
+                    {
+                        "id": str(pr["id"]),
+                        "source": "portal_ingestion",
+                        "bill_reference": pr["invoice_number"],
+                        "supplier_name": pr["vendor_name"],
+                        "amount": f"{Decimal(pr['total_amount']):.2f}",
+                        "currency": pr["currency"],
+                        "due_date": pr["due_date"].isoformat(),
+                    }
+                )
+    except Exception:
+        open_bills = []
+
     return {
         "controls": {
             "kill_switch_active": bool(controls["kill_switch_active"]),
@@ -2423,6 +2552,7 @@ def list_supplier_payments_and_controls(
             "default_rail": controls["default_rail"],
             "stripe_live_available": bool(stripe_key),
         },
+        "open_bills": open_bills,
         "beneficiaries": [
             {
                 "id": str(b["id"]),

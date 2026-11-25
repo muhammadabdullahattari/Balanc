@@ -2489,20 +2489,199 @@ details > form {
   }
 }
 
-/* ── Semantic P3 & QuickBooks Layout Classes (FE-04) ─────────────────── */
+/* ── Semantic P3, QuickBooks, Reports & Portfolio Layout Classes ──────── */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+.stack > .panel,
+.quickbooks-import > .panel,
+.portfolio-triage-panel {
+  padding: 24px 28px;
+}
+.stack > .panel > h2,
+.stack > .panel > h3,
+.stack > .panel > h4,
+.quickbooks-import > .panel > h3,
+.quickbooks-import > .panel > h4,
+.portfolio-triage-panel > h2,
+.portfolio-triage-panel > h3 {
+  margin-top: 0;
+  margin-bottom: 8px;
+}
+.stack > .panel > p.muted,
+.quickbooks-import > .panel > p.muted,
+.portfolio-triage-panel > p.muted {
+  margin-bottom: 18px;
+}
+.stack > .panel .form-grid + .button,
+.stack > .panel .form-grid + div,
+.stack > .panel .field + .button,
+.stack > .panel .field + div,
+.quickbooks-import > .panel .form-grid + div {
+  margin-top: 16px;
+}
+.stack > .panel > .table-scroll {
+  margin: 16px -28px -24px;
+  border-top: 1px solid var(--line);
+}
+.stack > .panel > .table-scroll:first-child {
+  margin-top: -24px;
+  border-top: 0;
+}
+
+/* ── Disclosure Panels (Ask about your books, Accountant Tools, Advanced) ─ */
+details.panel {
+  margin-bottom: 24px;
+  padding: 0;
+}
+details.panel > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 15px 22px;
+  font-size: 0.92rem;
+  font-weight: 650;
+  color: var(--ink);
+  background: var(--surface);
+  cursor: pointer;
+  user-select: none;
+  transition: background-color var(--duration) var(--ease);
+}
+details.panel > summary:hover {
+  background: var(--surface-alt);
+}
+details.panel[open] > summary {
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-alt);
+}
+details.panel > form,
+details.panel > div:not(.table-scroll),
+details.panel > p {
+  padding: 20px 24px;
+  margin: 0;
+}
+
+/* ── Multi-row Section Tabs Polish ────────────────────────────────────── */
+.tabs {
+  gap: 6px;
+  padding-bottom: 6px;
+}
+.tabs button {
+  border-radius: 8px;
+  text-transform: none;
+  transition:
+    background-color var(--duration) var(--ease),
+    color var(--duration) var(--ease);
+}
+.tabs button[aria-selected="true"],
+.tabs button.active {
+  background: var(--accent-soft);
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 650;
+}
+
+/* ── Workspace Chooser & Portfolio Triage Layout ──────────────────────── */
+.chooser-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin: 20px 0 28px;
+  padding: 18px 22px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.chooser-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--ink);
+  cursor: pointer;
+}
+.chooser-details {
+  border-top: 1px solid var(--line);
+  padding-top: 14px;
+}
+.chooser-details > summary {
+  font-size: 0.88rem;
+  font-weight: 650;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 4px 0;
+}
+.chooser-details[open] > summary {
+  margin-bottom: 14px;
+}
+.business-card-item {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.business-card-item > .business-card {
+  width: 100%;
+}
+.portfolio-status-card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px 14px;
+  margin: 0;
+  padding: 16px 18px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  font-size: 0.8rem;
+  box-shadow: var(--shadow);
+}
+.portfolio-status-card dt {
+  color: var(--muted);
+}
+.portfolio-status-card dd {
+  margin: 0;
+  font-weight: 650;
+  color: var(--ink);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.portfolio-chip-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 16px 0;
+}
+.portfolio-chip-active {
+  border-color: var(--accent) !important;
+  background: var(--accent-soft) !important;
+  color: var(--accent) !important;
+}
+.portfolio-assignments-box {
+  margin-top: 18px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
 .p3-badge-row {
   display: flex;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  margin-top: 12px;
+  margin-top: 14px;
 }
 .p3-actions-row {
   display: flex;
   gap: 10px;
   flex-wrap: wrap;
   align-items: center;
-  margin-top: 10px;
+  margin-top: 16px;
 }
 .p3-modal-actions {
   display: flex;
@@ -2512,12 +2691,16 @@ details > form {
 }
 .p3-remittance-box {
   margin-top: 16px;
+  padding: 18px 22px;
   background: var(--surface-alt);
+  border-radius: 12px;
+  border: 1px solid var(--line);
 }
 .p3-remittance-pre {
   white-space: pre-wrap;
   font-size: 0.82rem;
   overflow-x: auto;
+  margin: 8px 0 0;
 }
 .p3-progress-track {
   height: 10px;
@@ -2525,29 +2708,51 @@ details > form {
   background: var(--surface-alt);
   border: 1px solid var(--line);
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 .p3-progress-fill {
   height: 100%;
   background: var(--accent);
   transition: width 0.25s ease;
 }
+.p3-advanced-details {
+  margin: 14px 0;
+  padding: 12px 16px;
+  background: var(--surface-alt);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+}
+.p3-advanced-details > summary {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--muted);
+  cursor: pointer;
+}
+.p3-advanced-details[open] > summary {
+  margin-bottom: 12px;
+  color: var(--ink);
+}
 .qb-entity-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 10px;
+  margin-bottom: 18px;
 }
 .qb-entity-card {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem;
+  gap: 10px;
+  padding: 10px 14px;
   background: var(--surface-alt);
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   cursor: pointer;
   color: var(--ink);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+.qb-entity-card:hover {
+  border-color: var(--accent);
 }
 .qb-unmapped-heading {
   color: var(--danger);

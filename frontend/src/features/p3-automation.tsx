@@ -28,6 +28,15 @@ interface RemindersData {
     default_slack_channel: string;
     email_fallback_enabled: boolean;
   };
+  open_documents?: Array<{
+    id: string;
+    kind: "bill" | "invoice";
+    number: string;
+    party_name: string;
+    outstanding_amount: string;
+    currency: string;
+    due_date: string;
+  }>;
   preferences: Array<{
     id: string;
     recipient_key: string;
@@ -105,6 +114,15 @@ interface PaymentsData {
     default_rail: "stripe_live" | "ach_nacha" | "swift_wire";
     stripe_live_available: boolean;
   };
+  open_bills?: Array<{
+    id: string;
+    source: "ledger_bill" | "portal_ingestion";
+    bill_reference: string;
+    supplier_name: string;
+    amount: string;
+    currency: string;
+    due_date: string;
+  }>;
   beneficiaries: Array<{
     id: string;
     supplier_name: string;
@@ -147,6 +165,7 @@ export function MultichannelReminders() {
   const [targetKind, setTargetKind] = useState<
     "bill" | "invoice" | "evidence" | "approval"
   >("bill");
+  const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [targetLabel, setTargetLabel] = useState(
     "AWS Cloud Hosting Bill #INV-2026-114 ($800.00 - Due in 2 days)",
   );
@@ -179,6 +198,7 @@ export function MultichannelReminders() {
           params: { path },
           body: {
             target_kind: targetKind,
+            ...(selectedDocId ? { target_id: selectedDocId } : {}),
             target_label: targetLabel,
             recipient_key: recipientKey,
             channel: overrideChannel || channel,
@@ -331,22 +351,14 @@ export function MultichannelReminders() {
           automatic resolution recheck, quiet hours, attempt caps, and email
           fallback.
         </p>
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-            marginTop: "12px",
-          }}
-        >
+        <div className="p3-badge-row">
           <Badge>
             WhatsApp Cloud API:{" "}
             {cs?.whatsapp_mode === "workspace_custom"
-              ? "WORKSPACE CONNECTED"
+              ? `WORKSPACE CONNECTED (${cs.default_whatsapp_recipient || "Configured"})`
               : cs?.whatsapp_cloud_connected
-                ? "CONNECTED"
-                : "SANDBOX READY"}{" "}
-            ({cs?.default_whatsapp_recipient || "+923412685261"})
+                ? "PLATFORM CONNECTED"
+                : "SANDBOX READY"}
           </Badge>
           <Badge>
             Slack Workspace:{" "}
@@ -355,14 +367,14 @@ export function MultichannelReminders() {
               : cs?.slack_connected
                 ? "CONNECTED"
                 : "SANDBOX READY"}{" "}
-            ({cs?.default_slack_channel || "#all-balanc"})
+            ({cs?.default_slack_channel || "#finance-alerts"})
           </Badge>
           <Badge>Email Fallback: ACTIVE</Badge>
         </div>
       </div>
 
       <div className="panel">
-        <h3>0. Connect Your Workspace WhatsApp & Slack Accounts</h3>
+        <h3>Step 1 · Connect Your Workspace WhatsApp &amp; Slack Accounts</h3>
         <p className="muted">
           Connect your own business Meta WhatsApp Cloud API sender and Slack
           Workspace (encrypted per business workspace), or leave blank to use
@@ -426,8 +438,12 @@ export function MultichannelReminders() {
             <Field label="Default WhatsApp Recipient (E.164)">
               <input
                 name="default_whatsapp_recipient"
-                defaultValue={cs?.default_whatsapp_recipient || "+923412685261"}
-                placeholder="+923412685261"
+                defaultValue={
+                  cs?.whatsapp_mode === "workspace_custom"
+                    ? cs?.default_whatsapp_recipient || ""
+                    : ""
+                }
+                placeholder="e.g. +15550192834"
               />
             </Field>
             <Field label="Slack Workspace Name">
@@ -461,14 +477,7 @@ export function MultichannelReminders() {
               />
             </Field>
           </div>
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-              flexWrap: "wrap",
-              marginTop: "10px",
-            }}
-          >
+          <div className="p3-actions-row">
             <Button type="submit" busy={connectChannelsMutation.isPending}>
               Save Workspace WhatsApp & Slack Connection
             </Button>
@@ -510,9 +519,46 @@ export function MultichannelReminders() {
       </div>
 
       <div className="panel">
-        <h3>1. Send Live WhatsApp or Slack Reminder</h3>
+        <h3>Step 2 · Send Live WhatsApp or Slack Reminder</h3>
+        <p className="muted">
+          Select an open supplier bill or customer invoice directly from your
+          workspace ledger (or enter a custom follow-up target) to dispatch a
+          consent-checked reminder with automatic resolution verification.
+        </p>
         <ErrorNotice error={dispatchMutation.error} />
         <div className="form-grid">
+          <Field label="Link to Open Ledger Bill / Invoice (Optional)">
+            <select
+              value={selectedDocId}
+              onChange={(e) => {
+                const docId = e.target.value;
+                setSelectedDocId(docId);
+                const doc = (query.data?.open_documents || []).find(
+                  (d) => d.id === docId,
+                );
+                if (doc) {
+                  const nextKind = doc.kind === "invoice" ? "invoice" : "bill";
+                  setTargetKind(nextKind);
+                  const lbl = `${doc.party_name} ${doc.kind.toUpperCase()} #${doc.number} (${doc.currency} ${doc.outstanding_amount} · Due ${doc.due_date})`;
+                  setTargetLabel(lbl);
+                  setCustomMessage(
+                    `LedgerPilot Reminder: ${lbl} is awaiting review, settlement, or supporting evidence.`,
+                  );
+                }
+              }}
+            >
+              <option value="">
+                -- Custom / Manual Target Reference (or pick open ledger
+                document) --
+              </option>
+              {(query.data?.open_documents || []).map((doc) => (
+                <option key={doc.id} value={doc.id}>
+                  [{doc.kind.toUpperCase()}] #{doc.number} — {doc.party_name} (
+                  {doc.currency} {doc.outstanding_amount} · Due {doc.due_date})
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Reminder Target Type">
             <select
               value={targetKind}
@@ -550,10 +596,7 @@ export function MultichannelReminders() {
                 )
               }
             >
-              <option value="whatsapp">
-                WhatsApp Cloud API (
-                {cs?.default_whatsapp_recipient || "+923412685261"})
-              </option>
+              <option value="whatsapp">WhatsApp Cloud API</option>
               <option value="slack">
                 Slack Channel ({cs?.default_slack_channel || "#all-balanc"})
               </option>
@@ -569,7 +612,7 @@ export function MultichannelReminders() {
             onChange={(e) => setCustomMessage(e.target.value)}
           />
         </Field>
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="p3-actions-row">
           <Button
             busy={dispatchMutation.isPending}
             onClick={() => dispatchMutation.mutate("whatsapp")}
@@ -603,7 +646,7 @@ export function MultichannelReminders() {
       </div>
 
       <div className="panel">
-        <h3>2. Recipient Consent, Quiet Hours & Attempt Caps</h3>
+        <h3>Step 3 · Recipient Consent, Quiet Hours &amp; Attempt Caps</h3>
         <ErrorNotice error={prefMutation.error} />
         <form
           onSubmit={(e) => {
@@ -622,14 +665,19 @@ export function MultichannelReminders() {
             <Field label="Recipient Name">
               <input
                 name="recipient_name"
-                defaultValue="Muhammad Abdullah (Finance)"
+                defaultValue="Accounts Payable & Finance Team"
                 required
               />
             </Field>
             <Field label="WhatsApp Phone (E.164)">
               <input
                 name="whatsapp_phone"
-                defaultValue={cs?.default_whatsapp_recipient || "+923412685261"}
+                defaultValue={
+                  cs?.whatsapp_mode === "workspace_custom"
+                    ? cs?.default_whatsapp_recipient || ""
+                    : ""
+                }
+                placeholder="e.g. +15550192834"
               />
             </Field>
             <Field label="Slack Channel">
@@ -976,6 +1024,54 @@ export function SupplierPortalConnectors() {
 
       <div className="panel">
         <h3>1. Connect Supplier Portal (with 32-Character 2FA TOTP Seed)</h3>
+        <p className="muted">
+          Enter your read-only vendor billing sub-user credentials and 32-char
+          Base32 TOTP seed, or load a vendor preset below to test automated 2FA
+          portal invoice ingestion.
+        </p>
+        <div
+          className="p3-actions-row"
+          style={{ marginTop: 0, marginBottom: "14px" }}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setVendorName("Amazon Web Services (AWS Cloud Billing)");
+              setPortalKind("cloud_portal");
+              setPortalUrl(
+                "https://console.aws.amazon.com/billing/home#/bills",
+              );
+              setLoginUsername("aws-billing-viewer@workspace.local");
+            }}
+          >
+            Preset: AWS Cloud Portal
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setVendorName("K-Electric Corporate Utility Portal");
+              setPortalKind("utility_portal");
+              setPortalUrl("https://billing.ke.com.pk/corporate/invoices");
+              setLoginUsername("utility-viewer@workspace.local");
+            }}
+          >
+            Preset: Utility Portal
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setVendorName("Stripe Vendor Billing API");
+              setPortalKind("api_stripe");
+              setPortalUrl("https://api.stripe.com/v1/invoices");
+              setLoginUsername("stripe-api-connector@workspace.local");
+            }}
+          >
+            Preset: Stripe Invoices API
+          </Button>
+        </div>
         <ErrorNotice
           error={createPortalMutation.error || generateSeedMutation.error}
         />
@@ -1077,34 +1173,46 @@ export function SupplierPortalConnectors() {
       {query.data && (
         <div className="panel">
           <h3>2. Authorized Portal Connections</h3>
+          <p className="muted">
+            Click <strong>Fetch &amp; OCR Invoice Now</strong> on any active
+            portal below. LedgerPilot automatically computes the live 6-digit
+            RFC 6238 TOTP code, authenticates into the vendor portal, and routes
+            fetched PDFs through OCR into Purchase Bill Drafts.
+          </p>
           <ErrorNotice
             error={syncPortalMutation.error || revokeMutation.error}
           />
-          <div className="form-grid" style={{ marginBottom: "12px" }}>
-            <Field label="Portal Invoice # (Optional override)">
-              <input
-                value={syncInvoiceNumber}
-                onChange={(e) => setSyncInvoiceNumber(e.target.value)}
-                placeholder="Auto-detect from portal or enter e.g. INV-2026-991"
-              />
-            </Field>
-            <Field label="Expected / Extracted Total Amount">
-              <input
-                type="number"
-                step="0.01"
-                value={syncTotalAmount}
-                onChange={(e) => setSyncTotalAmount(e.target.value)}
-              />
-            </Field>
-            <Field label="Expected / Extracted Tax Amount">
-              <input
-                type="number"
-                step="0.01"
-                value={syncTaxAmount}
-                onChange={(e) => setSyncTaxAmount(e.target.value)}
-              />
-            </Field>
-          </div>
+          <details className="p3-advanced-details">
+            <summary>
+              Advanced: Optional Portal Invoice # or Extracted Amount Override
+              (for testing specific invoice payloads)
+            </summary>
+            <div className="form-grid">
+              <Field label="Portal Invoice # (Optional override)">
+                <input
+                  value={syncInvoiceNumber}
+                  onChange={(e) => setSyncInvoiceNumber(e.target.value)}
+                  placeholder="Auto-detect from portal or enter e.g. INV-2026-991"
+                />
+              </Field>
+              <Field label="Expected / Extracted Total Amount">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={syncTotalAmount}
+                  onChange={(e) => setSyncTotalAmount(e.target.value)}
+                />
+              </Field>
+              <Field label="Expected / Extracted Tax Amount">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={syncTaxAmount}
+                  onChange={(e) => setSyncTaxAmount(e.target.value)}
+                />
+              </Field>
+            </div>
+          </details>
           {syncMessage && (
             <p role="status" className="success-text">
               {syncMessage}
@@ -1590,8 +1698,49 @@ export function HumanApprovedSupplierPayments() {
 
       <div className="panel">
         <h3>2. Prepare Supplier Payment Draft (Maker Step)</h3>
+        <p className="muted">
+          Select an open supplier bill or ingested portal invoice from your
+          workspace (or enter a bill reference) and pair it with an out-of-band
+          verified supplier bank beneficiary.
+        </p>
         <ErrorNotice error={preparePayment.error} />
         <div className="form-grid">
+          <Field label="Select Open Supplier Bill / Portal Invoice (Optional)">
+            <select
+              defaultValue=""
+              onChange={(e) => {
+                const chosen = (query.data?.open_bills || []).find(
+                  (ob) => `${ob.source}:${ob.id}` === e.target.value,
+                );
+                if (chosen) {
+                  setBillRef(chosen.bill_reference);
+                  setPayAmount(chosen.amount);
+                  const matchedBen = (query.data?.beneficiaries || []).find(
+                    (ben) =>
+                      ben.supplier_name.toLowerCase() ===
+                      chosen.supplier_name.toLowerCase(),
+                  );
+                  if (matchedBen) {
+                    setSelectedBeneficiaryId(matchedBen.id);
+                  }
+                }
+              }}
+            >
+              <option value="">
+                -- Custom Bill Reference (or select open workspace bill) --
+              </option>
+              {(query.data?.open_bills || []).map((ob) => (
+                <option
+                  key={`${ob.source}:${ob.id}`}
+                  value={`${ob.source}:${ob.id}`}
+                >
+                  [{ob.source === "ledger_bill" ? "LEDGER BILL" : "PORTAL BILL"}
+                  ] {ob.bill_reference} — {ob.supplier_name} ({ob.currency}{" "}
+                  {ob.amount})
+                </option>
+              ))}
+            </select>
+          </Field>
           <Field label="Verified Supplier Beneficiary">
             <select
               value={
@@ -1599,6 +1748,12 @@ export function HumanApprovedSupplierPayments() {
               }
               onChange={(e) => setSelectedBeneficiaryId(e.target.value)}
             >
+              {!query.data?.beneficiaries.length && (
+                <option value="">
+                  -- No verified beneficiaries yet (register &amp; verify in
+                  Step 1 above) --
+                </option>
+              )}
               {(query.data?.beneficiaries || []).map((ben) => (
                 <option key={ben.id} value={ben.id}>
                   {ben.supplier_name} — {ben.bank_name} (
