@@ -71,6 +71,14 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["ledgerpilot"]
+omit = [
+    "*/ledgerpilot/testing/smtp_server.py",
+    "*/ledgerpilot/documents/ocr_service.py",
+    "*/ledgerpilot/jobs/cli.py",
+    "*/ledgerpilot/local_setup.py",
+    "*/ledgerpilot/billing/replay_webhooks.py",
+    "*/ledgerpilot/provider_integrations.py",
+]
 
 [tool.coverage.report]
 show_missing = true

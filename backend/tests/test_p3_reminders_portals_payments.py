@@ -563,6 +563,14 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert len(sync1_data["totp_6_digit_code_used"]) == 6
         assert sync1_data["provenance"]["ledger_posting"] == "blocked_until_human_review"
 
+        list_portals = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/supplier-portals",
+            headers=headers,
+        )
+        assert list_portals.status_code == 200, list_portals.text
+        assert len(list_portals.json()["connections"]) >= 1
+        assert len(list_portals.json()["ingestions"]) >= 1
+
         # Enhancement #1: Promote ingested supplier portal invoice into Supplier Payment Queue
         promote_resp = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/supplier-portals/ingestions/{sync1_data['id']}/promote-to-payment",
@@ -772,6 +780,14 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sign2.json()["provider_reference"].startswith("ACH-NACHA-")
         assert "NACHA BATCH PAYLOAD" in sign2.json()["remittance_advice"]
 
+        list_payments = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/supplier-payments",
+            headers=headers,
+        )
+        assert list_payments.status_code == 200, list_payments.text
+        assert len(list_payments.json()["beneficiaries"]) >= 1
+        assert len(list_payments.json()["payments"]) >= 2
+
         # =====================================================================
         # 4. Phase 3.1 (P3-H): One-Day Reconciliation SLA Tracker & Auto-Chasing
         # =====================================================================
@@ -851,6 +867,13 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         )
         assert payout_bad.status_code == 422
 
+        list_payouts = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/payout-reconciliation",
+            headers=headers,
+        )
+        assert list_payouts.status_code == 200, list_payouts.text
+        assert len(list_payouts.json()["reconciliations"]) >= 1
+
         # =====================================================================
         # 6. Phase 3.3 (P3-C): Voice-Note Accounting Instruction Review
         # =====================================================================
@@ -883,6 +906,13 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         )
         assert voice_review.status_code == 200, voice_review.text
         assert voice_review.json()["status"] in ("approved_to_draft", "posted")
+
+        list_voice = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/voice-instructions",
+            headers=headers,
+        )
+        assert list_voice.status_code == 200, list_voice.text
+        assert len(list_voice.json()["instructions"]) >= 1
 
         # =====================================================================
         # 7. Phase 3.4 (P3-G): Per-Tenant Envelope Encryption & Key Destruction
@@ -944,6 +974,26 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert ai_eval.json()["target_50_percent_met"] is True
         assert ai_eval.json()["cost_reduction_percent"] >= 50.0
 
+        ai_blur = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/ai-benchmarks/evaluate",
+            headers=headers,
+            json={
+                "language_locale": "ar_AE",
+                "scan_orientation": "skewed_thermal_receipt",
+                "simulate_low_quality_blur": True,
+                "routing_tier": "deterministic_template_cache",
+            },
+        )
+        assert ai_blur.status_code == 200, ai_blur.text
+        assert ai_blur.json()["abstained_to_manual_review"] is True
+
+        list_ai = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/ai-benchmarks",
+            headers=headers,
+        )
+        assert list_ai.status_code == 200, list_ai.text
+        assert len(list_ai.json()["runs"]) >= 2
+
         # =====================================================================
         # 9. P3-I (P3-I1): Contract Revenue, Payroll Clearing & Short-Pay Resolution
         # =====================================================================
@@ -964,6 +1014,23 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert rev_sched.json()["recognized_or_settled_amount"] == "1000.00"
         assert rev_sched.json()["deferred_or_variance_amount"] == "11000.00"
 
+        payroll_split = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion/compute",
+            headers=headers,
+            json={
+                "workflow_kind": "payroll_clearing_split",
+                "reference": "PAYROLL-2026-11",
+                "counterparty_name": "November Payroll Run",
+                "currency": "USD",
+                "total_amount": "10000.00",
+                "employer_tax_amount": "800.00",
+                "employee_withholding_amount": "1500.00",
+                "benefits_deduction_amount": "500.00",
+            },
+        )
+        assert payroll_split.status_code == 200, payroll_split.text
+        assert payroll_split.json()["recognized_or_settled_amount"] == "8000.00"
+
         short_pay = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/accounting-expansion/compute",
             headers=headers,
@@ -981,9 +1048,22 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert short_pay.json()["recognized_or_settled_amount"] == "975.00"
         assert short_pay.json()["deferred_or_variance_amount"] == "25.00"
 
+        list_exp = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion",
+            headers=headers,
+        )
+        assert list_exp.status_code == 200, list_exp.text
+        assert len(list_exp.json()["workflows"]) >= 3
+
         # =====================================================================
         # 10. P3-K: Enterprise SSO & Regional Cell Isolation
         # =====================================================================
+        sso_get_default = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/enterprise-sso-cell",
+            headers=headers,
+        )
+        assert sso_get_default.status_code == 200, sso_get_default.text
+
         sso_cfg = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/enterprise-sso-cell",
             headers=headers,
@@ -1004,3 +1084,11 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sso_cfg.status_code == 200, sso_cfg.text
         assert sso_cfg.json()["region_cell"] == "eu-central-fra-cell-1"
         assert len(sso_cfg.json()["residency_attestation_sha256"]) == 64
+
+        sso_get_saved = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/enterprise-sso-cell",
+            headers=headers,
+        )
+        assert sso_get_saved.status_code == 200, sso_get_saved.text
+        assert sso_get_saved.json()["config"]["region_cell"] == "eu-central-fra-cell-1"
+        assert sso_get_saved.json()["config"]["sso_secret_configured"] is True
