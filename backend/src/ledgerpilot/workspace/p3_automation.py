@@ -2506,18 +2506,28 @@ def approve_and_execute_supplier_payment(
         and UUID(str(pay["first_approved_by"])) == _actor_id(user)
     ):
         try:
-            other_approvers = int(
+            is_owner = bool(
                 db.execute(
-                    text(
-                        """
-                        SELECT count(*) FROM app.memberships
-                        WHERE business_id = :bid AND active = true
-                          AND role IN ('owner', 'accountant') AND user_id != :actor
-                        """
-                    ),
-                    {"bid": business_id, "actor": _actor_id(user)},
-                ).scalar_one()
-                or 0
+                    text("SELECT app.has_role(:bid, ARRAY['owner'])"),
+                    {"bid": business_id},
+                ).scalar_one_or_none()
+            )
+            other_approvers = (
+                1
+                if not is_owner
+                else int(
+                    db.execute(
+                        text(
+                            """
+                            SELECT count(*) FROM app.memberships
+                            WHERE business_id = :bid AND active = true
+                              AND role IN ('owner', 'accountant') AND user_id != :actor
+                            """
+                        ),
+                        {"bid": business_id, "actor": _actor_id(user)},
+                    ).scalar_one()
+                    or 0
+                )
             )
         except Exception:
             other_approvers = 0
