@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import os
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
@@ -17,6 +18,8 @@ from ledgerpilot.local_setup import FileSettings
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.workspace.p3_automation import (
     _build_remittance_advice,
+    _evaluate_sla_status,
+    _extract_accounting_intent_from_transcript,
     _is_in_quiet_hours,
     _send_slack_reminder_message,
     _send_whatsapp_cloud_message,
@@ -62,6 +65,27 @@ def test_quiet_hours_wraparound_and_linear_windows() -> None:
     # Daytime window 9:00 -> 17:00
     assert _is_in_quiet_hours(12, 9, 17) is True
     assert _is_in_quiet_hours(20, 9, 17) is False
+
+
+def test_phase3_sla_status_and_voice_note_nlu_extraction() -> None:
+    now_dt = datetime(2026, 11, 25, 12, 0, tzinfo=UTC)
+    assert _evaluate_sla_status(now_dt + timedelta(hours=12), 2, now_dt)[0] == "on_track"
+    assert _evaluate_sla_status(now_dt + timedelta(hours=2), 2, now_dt)[0] == "at_risk"
+    assert _evaluate_sla_status(now_dt - timedelta(minutes=5), 2, now_dt)[0] == "breached"
+    assert _evaluate_sla_status(now_dt - timedelta(minutes=5), 0, now_dt)[0] == "completed"
+
+    action, counterparty, amount, tax, conf = _extract_accounting_intent_from_transcript(
+        "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax.",
+        override_action=None,
+        override_counterparty="",
+        override_amount=None,
+        override_tax=None,
+    )
+    assert action == "bill"
+    assert "Amazon Web Services" in counterparty
+    assert amount == Decimal("480.00")
+    assert tax == Decimal("30.00")
+    assert conf >= Decimal("0.95")
 
 
 def test_whatsapp_and_slack_sandbox_dispatch_in_test_env() -> None:
@@ -585,3 +609,158 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sign2.json()["state"] == "settled_posted"
         assert sign2.json()["provider_reference"].startswith("ACH-NACHA-")
         assert "NACHA BATCH PAYLOAD" in sign2.json()["remittance_advice"]
+
+        # =====================================================================
+        # 4. Phase 3.1 (P3-H): One-Day Reconciliation SLA Tracker & Auto-Chasing
+        # =====================================================================
+        sla_get = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/reconciliation-sla",
+            headers=headers,
+        )
+        assert sla_get.status_code == 200, sla_get.text
+        assert sla_get.json()["tracker"]["sla_hours"] == 24
+        assert len(sla_get.json()["tracker"]["checklist"]) == 4
+
+        sla_start = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/reconciliation-sla/start",
+            headers=headers,
+            json={"sla_hours": 18},
+        )
+        assert sla_start.status_code == 200, sla_start.text
+        assert sla_start.json()["sla_hours"] == 18
+
+        sla_chase = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/reconciliation-sla/auto-chase",
+            headers=headers,
+            json={"channel": "slack", "recipient_key": "sla-finance-owner"},
+        )
+        assert sla_chase.status_code == 200, sla_chase.text
+        assert sla_chase.json()["chased_count"] >= 1
+
+        # =====================================================================
+        # 5. Phase 3.2 (P2-D1 & P3-J): Live Bank Feed & Gross-to-Net Payout Split
+        # =====================================================================
+        payout_split = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/payout-reconciliation/reconcile",
+            headers=headers,
+            json={
+                "payout_reference": "po_stripe_test_20261125",
+                "provider": "stripe_financial_connections",
+                "currency": "USD",
+                "gross_sales_amount": "2000.00",
+                "processing_fee_amount": "62.50",
+                "refund_dispute_amount": "75.00",
+                "tax_withheld_amount": "20.00",
+                "idempotency_key": "payout-idem-01",
+            },
+        )
+        assert payout_split.status_code == 200, payout_split.text
+        p_data = payout_split.json()
+        assert p_data["net_payout_amount"] == "1842.50"
+        assert len(p_data["split_lines"]) == 5
+
+        # Idempotent replay returns identical split
+        payout_replay = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/payout-reconciliation/reconcile",
+            headers=headers,
+            json={
+                "payout_reference": "po_stripe_test_20261125",
+                "provider": "stripe_financial_connections",
+                "currency": "USD",
+                "gross_sales_amount": "2000.00",
+                "processing_fee_amount": "62.50",
+                "refund_dispute_amount": "75.00",
+                "tax_withheld_amount": "20.00",
+                "idempotency_key": "payout-idem-01",
+            },
+        )
+        assert payout_replay.status_code == 200
+        assert payout_replay.json()["idempotent_replay"] is True
+
+        # Unbalanced payout (fees > gross) rejected with 422
+        payout_bad = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/payout-reconciliation/reconcile",
+            headers=headers,
+            json={
+                "payout_reference": "po_bad",
+                "gross_sales_amount": "50.00",
+                "processing_fee_amount": "60.00",
+            },
+        )
+        assert payout_bad.status_code == 422
+
+        # =====================================================================
+        # 6. Phase 3.3 (P3-C): Voice-Note Accounting Instruction Review
+        # =====================================================================
+        voice_create = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/voice-instructions",
+            headers=headers,
+            json={
+                "audio_filename": "voice-aws-bill.webm",
+                "audio_mime_type": "audio/webm",
+                "audio_duration_seconds": 15,
+                "transcript_text": "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax.",
+                "extracted_currency": "USD",
+            },
+        )
+        assert voice_create.status_code == 200, voice_create.text
+        v_data = voice_create.json()
+        assert v_data["extracted_action"] == "bill"
+        assert v_data["extracted_amount"] == "480.00"
+        assert v_data["extracted_tax_amount"] == "30.00"
+        assert v_data["status"] == "pending_review"
+        assert v_data["source_draft_id"] is not None
+
+        voice_review = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/voice-instructions/{v_data['id']}/review",
+            headers=headers,
+            json={
+                "decision": "approve",
+                "reviewer_note": "Approved voice instruction after verifying invoice amount",
+            },
+        )
+        assert voice_review.status_code == 200, voice_review.text
+        assert voice_review.json()["status"] in ("approved_to_draft", "posted")
+
+        # =====================================================================
+        # 7. Phase 3.4 (P3-G): Per-Tenant Envelope Encryption & Key Destruction
+        # =====================================================================
+        keys_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p3/encryption-keys",
+            headers=headers,
+        )
+        assert keys_list.status_code == 200, keys_list.text
+        assert keys_list.json()["envelope_status"]["active_key_version"] == 1
+
+        key_rot = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/encryption-keys/rotate",
+            headers=headers,
+        )
+        assert key_rot.status_code == 200, key_rot.text
+        assert key_rot.json()["key_version"] == 2
+
+        # Accountant (non-owner) cannot destroy tenant encryption key (403)
+        non_owner_destroy = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/encryption-keys/destroy",
+            headers=headers,
+            json={
+                "confirmation": "DESTROY-TENANT-KEY",
+                "reason": "Unauthorized attempt",
+            },
+        )
+        assert non_owner_destroy.status_code == 403
+
+        # Workspace Owner can provably destroy the tenant DEK and obtain SHA-256 certificate
+        owner_destroy = await client.post(
+            f"/api/v1/businesses/{bid}/p3/encryption-keys/destroy",
+            headers=owner_headers,
+            json={
+                "confirmation": "DESTROY-TENANT-KEY",
+                "reason": "Tenant offboarding cryptographic shred drill",
+            },
+        )
+        assert owner_destroy.status_code == 200, owner_destroy.text
+        d_data = owner_destroy.json()
+        assert d_data["status"] == "destroyed"
+        assert d_data["provably_unrecoverable"] is True
+        assert len(d_data["destruction_certificate_sha256"]) == 64

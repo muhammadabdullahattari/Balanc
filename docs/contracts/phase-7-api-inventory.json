@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 237,
-  "distinct_operations": 194,
+  "call_sites": 249,
+  "distinct_operations": 206,
   "operations": [
     {
       "file": "App.tsx",
@@ -822,6 +822,66 @@
       "file": "features/p3-automation.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/p3/supplier-payments/{payment_id}/approve-and-execute"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/reconciliation-sla"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reconciliation-sla/start"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reconciliation-sla/auto-chase"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/payout-reconciliation"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/payout-reconciliation/sync-bank-feed"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/payout-reconciliation/reconcile"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/voice-instructions"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/voice-instructions"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/voice-instructions/{instruction_id}/review"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/encryption-keys"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/encryption-keys/rotate"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/encryption-keys/destroy"
     },
     {
       "file": "features/portfolio-triage.tsx",

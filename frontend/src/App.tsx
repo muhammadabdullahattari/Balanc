@@ -715,6 +715,22 @@ function Workspace() {
                     path="/supplier-payments"
                     element={<P3AutomationHub initialTab="payments" />}
                   />
+                  <Route
+                    path="/reconciliation-sla"
+                    element={<P3AutomationHub initialTab="sla" />}
+                  />
+                  <Route
+                    path="/payout-reconciliation"
+                    element={<P3AutomationHub initialTab="payouts" />}
+                  />
+                  <Route
+                    path="/voice-instructions"
+                    element={<P3AutomationHub initialTab="voice" />}
+                  />
+                  <Route
+                    path="/encryption-keys"
+                    element={<P3AutomationHub initialTab="encryption" />}
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/billing"
@@ -754,6 +770,30 @@ function Workspace() {
                         hint: item.to,
                         run: () => navigate(item.to),
                       })),
+                    {
+                      id: "/reconciliation-sla",
+                      label: "3.1 · One-Day Reconciliation SLA & Auto-Chasing",
+                      hint: "/reconciliation-sla",
+                      run: () => navigate("/reconciliation-sla"),
+                    },
+                    {
+                      id: "/payout-reconciliation",
+                      label: "3.2 · Live Bank Feed & Gross-to-Net Payout Split",
+                      hint: "/payout-reconciliation",
+                      run: () => navigate("/payout-reconciliation"),
+                    },
+                    {
+                      id: "/voice-instructions",
+                      label: "3.3 · Voice-Note Accounting Instruction Review",
+                      hint: "/voice-instructions",
+                      run: () => navigate("/voice-instructions"),
+                    },
+                    {
+                      id: "/encryption-keys",
+                      label: "3.4 · Per-Tenant Envelope Encryption & Key Shred",
+                      hint: "/encryption-keys",
+                      run: () => navigate("/encryption-keys"),
+                    },
                     {
                       id: "/settings",
                       label: "Settings & Integrations",

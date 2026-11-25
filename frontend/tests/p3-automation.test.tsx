@@ -81,6 +81,75 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
         },
       } as never;
     }
+    if (url.endsWith("/p3/reconciliation-sla")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          tracker: {
+            id: "sla-1",
+            target_date: "2026-11-25",
+            sla_hours: 24,
+            started_at: "2026-11-25T00:00:00Z",
+            deadline_at: "2026-11-26T00:00:00Z",
+            completed_at: null,
+            status: "on_track",
+            remaining_seconds: 72000,
+            completion_percent: 75,
+            pending_bank_rows: 1,
+            missing_evidence_bills: 0,
+            pending_drafts: 0,
+            pending_close_tasks: 0,
+            total_blockers: 1,
+            chased_count: 2,
+            last_chased_at: null,
+            checklist: [
+              {
+                key: "bank_feed_reconciled",
+                label: "Bank feed rows reviewed & reconciled",
+                open_count: 1,
+                completed: false,
+              },
+            ],
+            unlinked_bills: [],
+            unreviewed_bank_rows: [],
+          },
+        },
+      } as never;
+    }
+    if (url.endsWith("/p3/payout-reconciliation")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          feed_status: {
+            stripe_financial_connections_live: true,
+            provider_mode: "stripe_live_feed",
+          },
+          recent_bank_feed_rows: [],
+          reconciliations: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p3/voice-instructions")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: { instructions: [] },
+      } as never;
+    }
+    if (url.endsWith("/p3/encryption-keys")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          envelope_status: {
+            master_kek_configured: true,
+            active_key_version: 1,
+            active_key_status: "active",
+            protected_records_count: 3,
+            provably_shredded: false,
+          },
+          keys: [],
+        },
+      } as never;
+    }
     return {
       response: new Response(null, { status: 200 }),
       data: { connections: [], ingestions: [] },
@@ -127,6 +196,35 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
     expect(
       screen.getByRole("button", { name: "Confirm & Execute Settlement" }),
     ).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /3\.1 · 1-Day Reconciliation SLA/ }),
+    );
+    expect(
+      await screen.findByText(/One-Day Reconciliation SLA Tracker/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /3\.2 · Bank Feed & Gross-to-Net/ }),
+    );
+    expect(
+      await screen.findByText(/Reconcile Gross-to-Net Merchant Payout Split/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /3\.3 · Voice-Note Accounting/ }),
+    );
+    expect(
+      await screen.findByText(/Voice-Note Accounting Instruction Review/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /3\.4 · Envelope Encryption & Shred/ }),
+    );
+    expect(
+      await screen.findByText(/Per-Tenant Envelope Encryption Keys/),
+    ).toBeInTheDocument();
   } finally {
     client.clear();
     get.mockRestore();

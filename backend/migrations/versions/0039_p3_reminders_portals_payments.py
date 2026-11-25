@@ -237,11 +237,150 @@ def upgrade() -> None:
           USING (business_id=app.scope() AND app.has_access(business_id))
           WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
         GRANT SELECT,INSERT,UPDATE ON app.supplier_payment_executions TO {role};
+
+        -- Phase 3.1 (P3-H): One-Day Reconciliation SLA Tracker & Auto-Chasing
+        CREATE TABLE app.reconciliation_sla_trackers (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          target_date date NOT NULL,
+          sla_hours integer NOT NULL DEFAULT 24 CHECK (sla_hours BETWEEN 1 AND 168),
+          started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          deadline_at timestamptz NOT NULL,
+          completed_at timestamptz,
+          status text NOT NULL DEFAULT 'on_track' CHECK (status IN (
+            'on_track','at_risk','breached','completed'
+          )),
+          pending_bank_rows integer NOT NULL DEFAULT 0,
+          missing_evidence_bills integer NOT NULL DEFAULT 0,
+          pending_drafts integer NOT NULL DEFAULT 0,
+          pending_close_tasks integer NOT NULL DEFAULT 0,
+          chased_count integer NOT NULL DEFAULT 0,
+          last_chased_at timestamptz,
+          checklist jsonb NOT NULL DEFAULT '[]'::jsonb,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          UNIQUE (business_id, target_date)
+        );
+        ALTER TABLE app.reconciliation_sla_trackers ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.reconciliation_sla_trackers FORCE ROW LEVEL SECURITY;
+        CREATE POLICY reconciliation_sla_trackers_scope ON app.reconciliation_sla_trackers
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE,DELETE ON app.reconciliation_sla_trackers TO {role};
+
+        -- Phase 3.2 (P2-D1 & P3-J): Gross-to-Net Payout Reconciliation
+        CREATE TABLE app.gross_to_net_payout_reconciliations (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          payout_reference text NOT NULL,
+          provider text NOT NULL DEFAULT 'stripe_financial_connections' CHECK (provider IN (
+            'stripe_financial_connections','shopify_payouts','amazon_settlement','square_payouts'
+          )),
+          payout_date date NOT NULL,
+          currency text NOT NULL DEFAULT 'USD',
+          gross_sales_amount numeric(18,6) NOT NULL CHECK (gross_sales_amount > 0),
+          processing_fee_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (processing_fee_amount >= 0),
+          refund_dispute_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (refund_dispute_amount >= 0),
+          tax_withheld_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (tax_withheld_amount >= 0),
+          net_payout_amount numeric(18,6) NOT NULL CHECK (net_payout_amount > 0),
+          bank_row_id uuid,
+          journal_id uuid,
+          source_draft_id uuid,
+          split_lines jsonb NOT NULL DEFAULT '[]'::jsonb,
+          status text NOT NULL DEFAULT 'reconciled_posted' CHECK (status IN (
+            'previewed','draft_created','reconciled_posted'
+          )),
+          idempotency_key text NOT NULL,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          UNIQUE (business_id, idempotency_key)
+        );
+        CREATE INDEX gross_to_net_payout_biz_idx ON app.gross_to_net_payout_reconciliations
+          (business_id, created_at DESC);
+        ALTER TABLE app.gross_to_net_payout_reconciliations ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.gross_to_net_payout_reconciliations FORCE ROW LEVEL SECURITY;
+        CREATE POLICY gross_to_net_payout_scope ON app.gross_to_net_payout_reconciliations
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.gross_to_net_payout_reconciliations TO {role};
+
+        -- Phase 3.3 (P3-C): Voice-Note Accounting Instruction Review
+        CREATE TABLE app.voice_note_instructions (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          audio_filename text NOT NULL DEFAULT 'voice-instruction.webm',
+          audio_mime_type text NOT NULL DEFAULT 'audio/webm',
+          audio_duration_seconds integer NOT NULL DEFAULT 12 CHECK (audio_duration_seconds >= 1),
+          audio_sha256 text NOT NULL,
+          transcript_text text NOT NULL,
+          extracted_action text NOT NULL CHECK (extracted_action IN (
+            'bill','invoice','expense','journal'
+          )),
+          extracted_counterparty text NOT NULL DEFAULT '',
+          extracted_amount numeric(18,6) NOT NULL CHECK (extracted_amount > 0),
+          extracted_tax_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (extracted_tax_amount >= 0),
+          extracted_currency text NOT NULL DEFAULT 'USD',
+          extracted_date date NOT NULL,
+          extracted_memo text NOT NULL,
+          confidence_score numeric(5,4) NOT NULL DEFAULT 0.9600,
+          source_draft_id uuid,
+          journal_id uuid,
+          status text NOT NULL DEFAULT 'pending_review' CHECK (status IN (
+            'pending_review','approved_to_draft','posted','rejected'
+          )),
+          reviewer_note text NOT NULL DEFAULT '',
+          actor uuid NOT NULL REFERENCES app.users(id),
+          reviewed_by uuid REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          reviewed_at timestamptz
+        );
+        CREATE INDEX voice_note_instructions_biz_idx ON app.voice_note_instructions
+          (business_id, created_at DESC);
+        ALTER TABLE app.voice_note_instructions ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.voice_note_instructions FORCE ROW LEVEL SECURITY;
+        CREATE POLICY voice_note_instructions_scope ON app.voice_note_instructions
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.voice_note_instructions TO {role};
+
+        -- Phase 3.4 (P3-G): Per-Tenant Envelope Encryption Keys & Provable Key Destruction
+        CREATE TABLE app.tenant_encryption_keys (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          key_version integer NOT NULL DEFAULT 1 CHECK (key_version >= 1),
+          algorithm text NOT NULL DEFAULT 'AES-256-GCM-FERNET-ENVELOPE',
+          wrapped_dek_ciphertext text NOT NULL DEFAULT '',
+          dek_fingerprint_sha256 text NOT NULL,
+          status text NOT NULL DEFAULT 'active' CHECK (status IN (
+            'active','rotated','destroyed'
+          )),
+          encrypted_records_count integer NOT NULL DEFAULT 0,
+          destruction_reason text NOT NULL DEFAULT '',
+          destruction_certificate_sha256 text NOT NULL DEFAULT '',
+          created_by uuid NOT NULL REFERENCES app.users(id),
+          destroyed_by uuid REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          rotated_at timestamptz,
+          destroyed_at timestamptz,
+          UNIQUE (business_id, key_version)
+        );
+        CREATE INDEX tenant_encryption_keys_biz_idx ON app.tenant_encryption_keys
+          (business_id, key_version DESC);
+        ALTER TABLE app.tenant_encryption_keys ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.tenant_encryption_keys FORCE ROW LEVEL SECURITY;
+        CREATE POLICY tenant_encryption_keys_scope ON app.tenant_encryption_keys
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.tenant_encryption_keys TO {role};
     """)
 
 
 def downgrade() -> None:
     op.execute("""
+        DROP TABLE IF EXISTS app.tenant_encryption_keys;
+        DROP TABLE IF EXISTS app.voice_note_instructions;
+        DROP TABLE IF EXISTS app.gross_to_net_payout_reconciliations;
+        DROP TABLE IF EXISTS app.reconciliation_sla_trackers;
         DROP TABLE IF EXISTS app.supplier_payment_executions;
         DROP TABLE IF EXISTS app.supplier_beneficiaries;
         DROP TABLE IF EXISTS app.supplier_payment_controls;

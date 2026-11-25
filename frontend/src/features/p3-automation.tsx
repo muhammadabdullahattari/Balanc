@@ -1632,10 +1632,1031 @@ export function HumanApprovedSupplierPayments() {
   );
 }
 
+export function ReconciliationSlaDashboard() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [slaHours, setSlaHours] = useState(24);
+  const [chaseChannel, setChaseChannel] = useState<
+    "auto" | "whatsapp" | "slack" | "email"
+  >("auto");
+  const [chaseNotice, setChaseNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-reconciliation-sla"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/reconciliation-sla", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        tracker: {
+          id: string;
+          target_date: string;
+          sla_hours: number;
+          started_at: string;
+          deadline_at: string;
+          completed_at: string | null;
+          status: "on_track" | "at_risk" | "breached" | "completed";
+          remaining_seconds: number;
+          completion_percent: number;
+          pending_bank_rows: number;
+          missing_evidence_bills: number;
+          pending_drafts: number;
+          pending_close_tasks: number;
+          total_blockers: number;
+          chased_count: number;
+          last_chased_at: string | null;
+          checklist: Array<{
+            key: string;
+            label: string;
+            open_count: number;
+            completed: boolean;
+          }>;
+          unlinked_bills: Array<{
+            id: string;
+            number: string;
+            total: string;
+            currency: string;
+            accounting_date: string;
+          }>;
+          unreviewed_bank_rows: Array<{
+            id: string;
+            description: string;
+            amount: string;
+            accounting_date: string;
+          }>;
+        };
+      },
+  });
+
+  const startSlaMutation = useMutation({
+    mutationFn: () =>
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/reconciliation-sla/start",
+          {
+            params: { path },
+            body: { sla_hours: slaHours },
+          },
+        ),
+      ),
+    onSuccess: () => {
+      setChaseNotice(
+        `One-Day Reconciliation SLA timer started (${slaHours}h window).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-reconciliation-sla"],
+      });
+    },
+  });
+
+  const autoChaseMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/reconciliation-sla/auto-chase",
+          {
+            params: { path },
+            body: {
+              channel: chaseChannel,
+              recipient_key: "ap-finance-owner",
+            },
+          },
+        ),
+      )) as unknown as {
+        chased_count: number;
+        total_blockers: number;
+      },
+    onSuccess: (res) => {
+      setChaseNotice(
+        `Auto-chased ${res.chased_count} SLA blocker notification(s) via ${chaseChannel.toUpperCase()} (${res.total_blockers} open item(s) tracked).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-reconciliation-sla"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-reminders"],
+      });
+    },
+  });
+
+  const t = query.data?.tracker;
+  const hrsLeft = t ? Math.floor(t.remaining_seconds / 3600) : 24;
+  const minsLeft = t ? Math.floor((t.remaining_seconds % 3600) / 60) : 0;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          Phase 3.1 (P3-H) · One-Day Reconciliation SLA Tracker & Auto-Chasing
+        </h2>
+        <p className="muted">
+          Real-time 24-hour close and reconciliation SLA countdown across bank
+          feed rows, unlinked supplier bill receipts, pending AI/OCR drafts, and
+          period close tasks—with 1-click multichannel WhatsApp & Slack chasing
+          for missing items.
+        </p>
+        {t && (
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap",
+              marginTop: "12px",
+              alignItems: "center",
+            }}
+          >
+            <Badge>SLA Status: {t.status.toUpperCase()}</Badge>
+            <Badge>
+              Countdown: {hrsLeft}h {minsLeft}m remaining (Target: {t.sla_hours}
+              h)
+            </Badge>
+            <Badge>Completeness: {t.completion_percent}%</Badge>
+            <Badge>Open Blockers: {t.total_blockers}</Badge>
+            <Badge>Auto-Chases Sent: {t.chased_count}</Badge>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Configure SLA Window & Trigger 1-Click Auto-Chasing</h3>
+        <ErrorNotice
+          error={startSlaMutation.error || autoChaseMutation.error}
+        />
+        <div className="form-grid">
+          <Field label="Target SLA Window (Hours)">
+            <input
+              type="number"
+              min={1}
+              max={168}
+              value={slaHours}
+              onChange={(e) => setSlaHours(Number(e.target.value) || 24)}
+            />
+          </Field>
+          <Field label="Auto-Chase Delivery Channel">
+            <select
+              value={chaseChannel}
+              onChange={(e) =>
+                setChaseChannel(
+                  e.target.value as "auto" | "whatsapp" | "slack" | "email",
+                )
+              }
+            >
+              <option value="auto">
+                Auto Cascade (WhatsApp -&gt; Slack -&gt; Email)
+              </option>
+              <option value="whatsapp">WhatsApp Cloud API</option>
+              <option value="slack">Slack Workspace (#all-balanc)</option>
+              <option value="email">Email Fallback</option>
+            </select>
+          </Field>
+        </div>
+        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+          <Button
+            busy={autoChaseMutation.isPending}
+            onClick={() => autoChaseMutation.mutate()}
+          >
+            1-Click Auto-Chase Open SLA Blockers
+          </Button>
+          <Button
+            variant="secondary"
+            busy={startSlaMutation.isPending}
+            onClick={() => startSlaMutation.mutate()}
+          >
+            Start / Reset {slaHours}h SLA Countdown
+          </Button>
+        </div>
+        {chaseNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "10px" }}
+          >
+            {chaseNotice}
+          </p>
+        )}
+      </div>
+
+      {t && (
+        <div className="panel">
+          <h3>2. One-Day Reconciliation Completeness Checklist</h3>
+          <Table
+            caption="Reconciliation SLA Completeness Checklist"
+            rows={t.checklist}
+            rowKey={(c) => c.key}
+            columns={[
+              { label: "Control Gate", render: (c) => c.label },
+              {
+                label: "Open Items",
+                render: (c) => <strong>{c.open_count}</strong>,
+              },
+              {
+                label: "Gate Status",
+                render: (c) => (
+                  <Badge>{c.completed ? "COMPLETED" : "ACTION REQUIRED"}</Badge>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function PayoutReconciliationHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [provider, setProvider] = useState<
+    | "stripe_financial_connections"
+    | "shopify_payouts"
+    | "amazon_settlement"
+    | "square_payouts"
+  >("stripe_financial_connections");
+  const [payoutRef, setPayoutRef] = useState("po_stripe_20261125_01");
+  const [grossSales, setGrossSales] = useState("2000.00");
+  const [processingFee, setProcessingFee] = useState("62.50");
+  const [refundAmount, setRefundAmount] = useState("75.00");
+  const [taxWithheld, setTaxWithheld] = useState("20.00");
+  const [payoutNotice, setPayoutNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-payout-reconciliation"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/payout-reconciliation", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        feed_status: {
+          stripe_financial_connections_live: boolean;
+          provider_mode: string;
+        };
+        recent_bank_feed_rows: Array<{
+          id: string;
+          accounting_date: string;
+          description: string;
+          amount: string;
+          external_id: string;
+          state: string;
+        }>;
+        reconciliations: Array<{
+          id: string;
+          payout_reference: string;
+          provider: string;
+          payout_date: string;
+          currency: string;
+          gross_sales_amount: string;
+          processing_fee_amount: string;
+          refund_dispute_amount: string;
+          tax_withheld_amount: string;
+          net_payout_amount: string;
+          journal_id: string | null;
+          source_draft_id: string | null;
+          split_lines: Array<{
+            role: string;
+            label: string;
+            account_id: string;
+            debit: string;
+            credit: string;
+          }>;
+          status: string;
+        }>;
+      },
+  });
+
+  const syncFeedMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/payout-reconciliation/sync-bank-feed",
+          {
+            params: { path },
+            body: { provider },
+          },
+        ),
+      )) as unknown as {
+        imported_count: number;
+        skipped_duplicates: number;
+      },
+    onSuccess: (res) => {
+      setPayoutNotice(
+        `Synced ${res.imported_count} bank feed transaction(s) into Bank Rows (${res.skipped_duplicates} duplicate(s) skipped).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-payout-reconciliation"],
+      });
+    },
+  });
+
+  const reconcileMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/payout-reconciliation/reconcile",
+          {
+            params: { path },
+            body: {
+              payout_reference: payoutRef,
+              provider,
+              currency: b.currency || "USD",
+              gross_sales_amount: grossSales,
+              processing_fee_amount: processingFee,
+              refund_dispute_amount: refundAmount,
+              tax_withheld_amount: taxWithheld,
+              idempotency_key: "",
+            },
+          },
+        ),
+      )) as unknown as {
+        id: string;
+        payout_reference: string;
+        gross_sales_amount: string;
+        net_payout_amount: string;
+        status: string;
+      },
+    onSuccess: (res) => {
+      setPayoutNotice(
+        `Reconciled Payout ${res.payout_reference}: Gross ${res.gross_sales_amount} -> Net Bank Deposit ${res.net_payout_amount} (${res.status}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-payout-reconciliation"],
+      });
+    },
+  });
+
+  const netPreview = (
+    (Number(grossSales) || 0) -
+    (Number(processingFee) || 0) -
+    (Number(refundAmount) || 0) -
+    (Number(taxWithheld) || 0)
+  ).toFixed(2);
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          Phase 3.2 (P2-D1 & P3-J) · Live Bank Feed & Gross-to-Net Payout
+          Reconciliation
+        </h2>
+        <p className="muted">
+          Synchronize live bank feed transactions via Stripe Financial
+          Connections and automatically split net merchant payouts into balanced
+          double-entry lines (Gross Sales Revenue, Processing Fees, Customer
+          Refunds/Disputes, Withheld Tax, and Net Bank Settlement).
+        </p>
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            flexWrap: "wrap",
+            marginTop: "12px",
+            alignItems: "center",
+          }}
+        >
+          <Badge>
+            Bank Feed Mode:{" "}
+            {query.data?.feed_status.provider_mode?.toUpperCase() ||
+              "STRIPE_SANDBOX_FEED"}
+          </Badge>
+          <Button
+            variant="secondary"
+            busy={syncFeedMutation.isPending}
+            onClick={() => syncFeedMutation.mutate()}
+          >
+            Sync Live Bank Feed Into Bank Rows
+          </Button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>1. Reconcile Gross-to-Net Merchant Payout Split</h3>
+        <ErrorNotice
+          error={syncFeedMutation.error || reconcileMutation.error}
+        />
+        <div className="form-grid">
+          <Field label="Merchant Payout Provider">
+            <select
+              value={provider}
+              onChange={(e) =>
+                setProvider(
+                  e.target.value as
+                    | "stripe_financial_connections"
+                    | "shopify_payouts"
+                    | "amazon_settlement"
+                    | "square_payouts",
+                )
+              }
+            >
+              <option value="stripe_financial_connections">
+                Stripe Financial Connections & Payouts
+              </option>
+              <option value="shopify_payouts">Shopify Payments Payout</option>
+              <option value="amazon_settlement">
+                Amazon Seller Settlement
+              </option>
+              <option value="square_payouts">Square Merchant Payout</option>
+            </select>
+          </Field>
+          <Field label="Payout Reference / Trace ID">
+            <input
+              value={payoutRef}
+              onChange={(e) => setPayoutRef(e.target.value)}
+            />
+          </Field>
+          <Field label="Gross Sales Revenue">
+            <input
+              type="number"
+              step="0.01"
+              value={grossSales}
+              onChange={(e) => setGrossSales(e.target.value)}
+            />
+          </Field>
+          <Field label="Merchant Processing Fees">
+            <input
+              type="number"
+              step="0.01"
+              value={processingFee}
+              onChange={(e) => setProcessingFee(e.target.value)}
+            />
+          </Field>
+          <Field label="Customer Refunds & Disputes">
+            <input
+              type="number"
+              step="0.01"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(e.target.value)}
+            />
+          </Field>
+          <Field label="Marketplace Tax Withheld">
+            <input
+              type="number"
+              step="0.01"
+              value={taxWithheld}
+              onChange={(e) => setTaxWithheld(e.target.value)}
+            />
+          </Field>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "12px",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <Button
+            busy={reconcileMutation.isPending}
+            onClick={() => reconcileMutation.mutate()}
+          >
+            Split & Reconcile Gross-to-Net Payout
+          </Button>
+          <Badge>
+            Calculated Net Bank Deposit: {b.currency || "USD"} {netPreview}
+          </Badge>
+        </div>
+        {payoutNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "10px" }}
+          >
+            {payoutNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Reconciled Gross-to-Net Payout Splits</h3>
+          <Table
+            caption="Gross-to-Net Merchant Payout Reconciliations"
+            rows={query.data.reconciliations}
+            rowKey={(r) => r.id}
+            columns={[
+              { label: "Payout Ref", render: (r) => r.payout_reference },
+              { label: "Provider", render: (r) => <Badge>{r.provider}</Badge> },
+              {
+                label: "Gross Sales",
+                render: (r) => `${r.currency} ${r.gross_sales_amount}`,
+              },
+              {
+                label: "Fees / Refunds / Tax",
+                render: (r) =>
+                  `-${r.processing_fee_amount} / -${r.refund_dispute_amount} / -${r.tax_withheld_amount}`,
+              },
+              {
+                label: "Net Bank Deposit",
+                render: (r) => (
+                  <strong>
+                    {r.currency} {r.net_payout_amount}
+                  </strong>
+                ),
+              },
+              { label: "Status", render: (r) => <Badge>{r.status}</Badge> },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function VoiceNoteInstructionReview() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const access = useAccess();
+  const canReview = access?.role === "owner" || access?.role === "accountant";
+
+  const [audioFilename, setAudioFilename] = useState(
+    "founder-voice-note-aws-bill.webm",
+  );
+  const [transcript, setTranscript] = useState(
+    "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax for November production cluster hosting.",
+  );
+  const [voiceNotice, setVoiceNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-voice-instructions"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/voice-instructions", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        instructions: Array<{
+          id: string;
+          audio_filename: string;
+          audio_duration_seconds: number;
+          audio_sha256: string;
+          transcript_text: string;
+          extracted_action: string;
+          extracted_counterparty: string;
+          extracted_amount: string;
+          extracted_tax_amount: string;
+          extracted_currency: string;
+          extracted_date: string;
+          confidence_score: number;
+          source_draft_id: string | null;
+          journal_id: string | null;
+          status: string;
+          reviewer_note: string;
+        }>;
+      },
+  });
+
+  const ingestMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/voice-instructions", {
+          params: { path },
+          body: {
+            audio_filename: audioFilename,
+            audio_mime_type: "audio/webm",
+            audio_duration_seconds: 14,
+            audio_base64: "",
+            transcript_text: transcript,
+            extracted_counterparty: "",
+            extracted_currency: b.currency || "USD",
+          },
+        }),
+      )) as unknown as {
+        id: string;
+        extracted_action: string;
+        extracted_counterparty: string;
+        extracted_amount: string;
+        extracted_currency: string;
+        source_draft_id: string | null;
+      },
+    onSuccess: (res) => {
+      setVoiceNotice(
+        `Extracted ${res.extracted_action.toUpperCase()} for ${res.extracted_counterparty} (${res.extracted_currency} ${res.extracted_amount}) -> Created Review Draft (${res.source_draft_id?.slice(0, 8) || "pending"}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-voice-instructions"],
+      });
+    },
+  });
+
+  const reviewMutation = useMutation({
+    mutationFn: ({
+      id,
+      decision,
+    }: {
+      id: string;
+      decision: "approve" | "reject";
+    }) =>
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/voice-instructions/{instruction_id}/review",
+          {
+            params: { path: { business_id: b.id, instruction_id: id } },
+            body: {
+              decision,
+              reviewer_note:
+                decision === "approve"
+                  ? "Verified voice transcript and approved by accountant"
+                  : "Rejected during human review",
+            },
+          },
+        ),
+      ),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-voice-instructions"],
+      });
+    },
+  });
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>Phase 3.3 (P3-C) · Voice-Note Accounting Instruction Review</h2>
+        <p className="muted">
+          Capture or upload spoken accounting instructions, transcribe and
+          extract structured bookkeeping entities (action type, counterparty,
+          amount, tax, confidence score), and route them into linked Source
+          Drafts for mandatory human accountant review before posting.
+        </p>
+      </div>
+
+      <div className="panel">
+        <h3>1. Upload or Capture Voice-Note Accounting Instruction</h3>
+        <ErrorNotice error={ingestMutation.error || reviewMutation.error} />
+        <div className="form-grid">
+          <Field label="Voice Note Audio File / Recording Name">
+            <input
+              value={audioFilename}
+              onChange={(e) => setAudioFilename(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Field label="Transcribed Voice Instruction (or Spoken Prompt)">
+          <textarea
+            rows={2}
+            value={transcript}
+            onChange={(e) => setTranscript(e.target.value)}
+          />
+        </Field>
+        <Button
+          busy={ingestMutation.isPending}
+          onClick={() => ingestMutation.mutate()}
+        >
+          Transcribe, Extract & Create Review Draft
+        </Button>
+        {voiceNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "10px" }}
+          >
+            {voiceNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Extracted Voice Instructions Queue (Human Review Gate)</h3>
+          <Table
+            caption="Voice-Note Accounting Instructions"
+            rows={query.data.instructions}
+            rowKey={(i) => i.id}
+            columns={[
+              {
+                label: "Action",
+                render: (i) => <Badge>{i.extracted_action}</Badge>,
+              },
+              {
+                label: "Counterparty",
+                render: (i) => i.extracted_counterparty,
+              },
+              {
+                label: "Amount (Tax)",
+                render: (i) =>
+                  `${i.extracted_currency} ${i.extracted_amount} (Tax: ${i.extracted_tax_amount})`,
+              },
+              {
+                label: "Transcript",
+                render: (i) => i.transcript_text,
+              },
+              {
+                label: "Confidence",
+                render: (i) => `${(i.confidence_score * 100).toFixed(1)}%`,
+              },
+              { label: "Status", render: (i) => <Badge>{i.status}</Badge> },
+              {
+                label: "Accountant Action",
+                render: (i) =>
+                  i.status === "pending_review" && canReview ? (
+                    <div style={{ display: "flex", gap: "8px" }}>
+                      <Button
+                        busy={reviewMutation.isPending}
+                        onClick={() =>
+                          reviewMutation.mutate({
+                            id: i.id,
+                            decision: "approve",
+                          })
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="danger"
+                        busy={reviewMutation.isPending}
+                        onClick={() =>
+                          reviewMutation.mutate({
+                            id: i.id,
+                            decision: "reject",
+                          })
+                        }
+                      >
+                        Reject
+                      </Button>
+                    </div>
+                  ) : (
+                    <code>
+                      {i.journal_id?.slice(0, 8) ||
+                        i.source_draft_id?.slice(0, 8) ||
+                        i.status}
+                    </code>
+                  ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function TenantEncryptionKeyVault() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const access = useAccess();
+  const isOwner = access?.role === "owner";
+
+  const [destroyModalOpen, setDestroyModalOpen] = useState(false);
+  const [confirmPhrase, setConfirmPhrase] = useState("");
+  const [destroyReason, setDestroyReason] = useState(
+    "Tenant offboarding / GDPR cryptographic erasure drill",
+  );
+  const [keyNotice, setKeyNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-encryption-keys"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/encryption-keys", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        envelope_status: {
+          master_kek_configured: boolean;
+          active_key_version: number | null;
+          active_key_status: string;
+          protected_records_count: number;
+          provably_shredded: boolean;
+        };
+        keys: Array<{
+          id: string;
+          key_version: number;
+          algorithm: string;
+          dek_fingerprint_sha256: string;
+          wrapped_dek_present: boolean;
+          status: string;
+          encrypted_records_count: number;
+          destruction_reason: string;
+          destruction_certificate_sha256: string;
+          created_at: string;
+          rotated_at: string | null;
+          destroyed_at: string | null;
+        }>;
+      },
+  });
+
+  const rotateMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/encryption-keys/rotate", {
+          params: { path },
+        }),
+      )) as unknown as {
+        key_version: number;
+        dek_fingerprint_sha256: string;
+      },
+    onSuccess: (res) => {
+      setKeyNotice(
+        `Rotated tenant Data Encryption Key to v${res.key_version} (Fingerprint: ${res.dek_fingerprint_sha256.slice(0, 16)}…).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-encryption-keys"],
+      });
+    },
+  });
+
+  const destroyMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/encryption-keys/destroy",
+          {
+            params: { path },
+            body: {
+              confirmation: confirmPhrase,
+              reason: destroyReason,
+            },
+          },
+        ),
+      )) as unknown as {
+        destroyed_key_version: number;
+        destruction_certificate_sha256: string;
+        shredded_records_count: number;
+      },
+    onSuccess: (res) => {
+      setDestroyModalOpen(false);
+      setConfirmPhrase("");
+      setKeyNotice(
+        `Cryptographically destroyed Tenant DEK v${res.destroyed_key_version} (${res.shredded_records_count} record(s) shredded). Destruction Certificate SHA-256: ${res.destruction_certificate_sha256}`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-encryption-keys"],
+      });
+    },
+  });
+
+  const es = query.data?.envelope_status;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          Phase 3.4 (P3-G) · Per-Tenant Envelope Encryption Keys & Provable Key
+          Destruction
+        </h2>
+        <p className="muted">
+          Each business workspace has a dedicated 256-bit Data Encryption Key
+          (DEK) wrapped by the platform Master Key Encryption Key (KEK).
+          Supports online key rotation and provable cryptographic key
+          destruction (crypto-shredding) with a tamper-evident SHA-256
+          destruction certificate.
+        </p>
+        {es && (
+          <div
+            style={{
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap",
+              marginTop: "12px",
+              alignItems: "center",
+            }}
+          >
+            <Badge>
+              Master KEK: {es.master_kek_configured ? "ACTIVE" : "UNCONFIGURED"}
+            </Badge>
+            <Badge>
+              Active Tenant DEK:{" "}
+              {es.active_key_version
+                ? `v${es.active_key_version} (${es.active_key_status.toUpperCase()})`
+                : "DESTROYED (SHREDDED)"}
+            </Badge>
+            <Badge>Protected Secrets: {es.protected_records_count}</Badge>
+            <Button
+              variant="secondary"
+              busy={rotateMutation.isPending}
+              onClick={() => rotateMutation.mutate()}
+            >
+              Rotate Tenant DEK (v+1)
+            </Button>
+            {isOwner && !es.provably_shredded && (
+              <Button
+                variant="danger"
+                onClick={() => setDestroyModalOpen(true)}
+              >
+                Cryptographically Destroy Tenant Key
+              </Button>
+            )}
+          </div>
+        )}
+        <ErrorNotice error={rotateMutation.error || destroyMutation.error} />
+        {keyNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "10px" }}
+          >
+            {keyNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>Tenant DEK Lifecycle & Cryptographic Destruction Certificates</h3>
+          <Table
+            caption="Per-Tenant Envelope Encryption Key Versions"
+            rows={query.data.keys}
+            rowKey={(k) => k.id}
+            columns={[
+              { label: "Version", render: (k) => `v${k.key_version}` },
+              { label: "Algorithm", render: (k) => k.algorithm },
+              {
+                label: "DEK Fingerprint (SHA-256)",
+                render: (k) => (
+                  <code>{k.dek_fingerprint_sha256.slice(0, 16)}…</code>
+                ),
+              },
+              {
+                label: "Wrapped Key Material",
+                render: (k) =>
+                  k.wrapped_dek_present
+                    ? "Wrapped by Master KEK"
+                    : "WIPED (0 bytes)",
+              },
+              { label: "Status", render: (k) => <Badge>{k.status}</Badge> },
+              {
+                label: "Destruction Certificate SHA-256",
+                render: (k) => (
+                  <code>
+                    {k.destruction_certificate_sha256
+                      ? k.destruction_certificate_sha256.slice(0, 20) + "…"
+                      : "—"}
+                  </code>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+
+      {destroyModalOpen && (
+        <Modal
+          open={true}
+          title="Confirm Cryptographic Tenant Key Destruction"
+          description="Permanently shred the wrapped Data Encryption Key (DEK) for this workspace and emit an immutable SHA-256 destruction certificate."
+          onClose={() => setDestroyModalOpen(false)}
+        >
+          <div className="stack" style={{ gap: "12px" }}>
+            <Field label="Destruction Reason / Audit Reference">
+              <input
+                value={destroyReason}
+                onChange={(e) => setDestroyReason(e.target.value)}
+              />
+            </Field>
+            <Field label="Type DESTROY-TENANT-KEY to confirm">
+              <input
+                value={confirmPhrase}
+                onChange={(e) => setConfirmPhrase(e.target.value)}
+                placeholder="DESTROY-TENANT-KEY"
+                autoFocus
+              />
+            </Field>
+            <div
+              style={{
+                display: "flex",
+                gap: "10px",
+                justifyContent: "flex-end",
+              }}
+            >
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => setDestroyModalOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                disabled={confirmPhrase.trim() !== "DESTROY-TENANT-KEY"}
+                busy={destroyMutation.isPending}
+                onClick={() => destroyMutation.mutate()}
+              >
+                Confirm Cryptographic Key Destruction
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
 export function P3AutomationHub({
   initialTab = "reminders",
 }: {
-  initialTab?: "reminders" | "portals" | "payments";
+  initialTab?:
+    | "reminders"
+    | "portals"
+    | "payments"
+    | "sla"
+    | "payouts"
+    | "voice"
+    | "encryption";
 }) {
   const [tab, setTab] = useState<string>(initialTab);
   useEffect(() => {
@@ -1645,8 +2666,8 @@ export function P3AutomationHub({
     <>
       <PageHeading
         eyebrow="P3 AUTOMATION & CONTROLLED EXECUTION"
-        title="Reminders, Supplier Portals & Human-Approved Payments"
-        description="Multichannel WhatsApp & Slack reminders, 2FA TOTP supplier portal invoice ingestion, and human-approved supplier payment execution."
+        title="Reminders, Portals, Payments, SLA, Payouts, Voice & Encryption"
+        description="Multichannel WhatsApp & Slack reminders, 2FA TOTP supplier portals, human-approved supplier payments, 1-day reconciliation SLA, gross-to-net payout splits, voice-note instructions, and per-tenant envelope encryption."
       />
       <SectionTabs
         id="p3-automation"
@@ -1657,11 +2678,19 @@ export function P3AutomationHub({
           ["reminders", "C · WhatsApp & Slack Reminders"],
           ["portals", "D · Supplier Portal Connectors (2FA TOTP)"],
           ["payments", "E · Human-Approved Supplier Payments"],
+          ["sla", "3.1 · 1-Day Reconciliation SLA"],
+          ["payouts", "3.2 · Bank Feed & Gross-to-Net"],
+          ["voice", "3.3 · Voice-Note Accounting"],
+          ["encryption", "3.4 · Envelope Encryption & Shred"],
         ]}
       />
       {tab === "reminders" && <MultichannelReminders />}
       {tab === "portals" && <SupplierPortalConnectors />}
       {tab === "payments" && <HumanApprovedSupplierPayments />}
+      {tab === "sla" && <ReconciliationSlaDashboard />}
+      {tab === "payouts" && <PayoutReconciliationHub />}
+      {tab === "voice" && <VoiceNoteInstructionReview />}
+      {tab === "encryption" && <TenantEncryptionKeyVault />}
     </>
   );
 }
