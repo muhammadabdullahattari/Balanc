@@ -1,6 +1,8 @@
 # Documented vulnerability exceptions for container scan
-# Requirement: document any accepted exception with a reason and an expiry.
+# CI uses ignore-unfixed: true, so only suppressions for genuinely unfixable CVEs are needed here.
+# Format: CVE-ID  # reason | expiry: YYYY-MM-DD
 
-# Base OS zlib1g vulnerability fixed in Debian testing/unstable; pending backport to Debian 12 slim
-# Expiry: 2026-12-31
+# zlib1g: upstream fix not yet backported to Debian 12 Bookworm stable
+# Fix tracked at: https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1098542
+# Expiry: 2027-03-31
 CVE-2026-85091

@@ -8,8 +8,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     UV_LINK_MODE=copy
 WORKDIR /app
 
-# hadolint ignore=DL3008
-RUN apt-get update && apt-get install --no-install-recommends -y zlib1g ca-certificates \
+# hadolint ignore=DL3008,DL3009
+RUN apt-get update \
+    && apt-get upgrade -y \
+    && apt-get install --no-install-recommends -y ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=uv /uv /uvx /bin/
