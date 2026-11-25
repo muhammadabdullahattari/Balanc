@@ -165,6 +165,26 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         # =====================================================================
         # 1. Feature C (P3-B): Multichannel WhatsApp & Slack Reminders
         # =====================================================================
+        chan_resp = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/reminders/channels",
+            headers=headers,
+            json={
+                "whatsapp_phone_number_id": "1391722684032246",
+                "whatsapp_business_account_id": "1877048859962524",
+                "whatsapp_access_token": "EAAaCustomWorkspaceWhatsAppToken1234567890",
+                "default_whatsapp_recipient": "+923412685261",
+                "slack_workspace_name": "Acme Finance Slack",
+                "slack_webhook_url": "https://hooks.slack.com/services/T000/B000/CustomSecret",
+                "default_slack_channel": "#all-balanc",
+            },
+        )
+        assert chan_resp.status_code == 200, chan_resp.text
+        chan_data = chan_resp.json()
+        assert chan_data["whatsapp_mode"] == "workspace_custom"
+        assert chan_data["slack_mode"] == "workspace_custom"
+        assert "••••••••" in chan_data["whatsapp_token_masked"]
+        assert "••••••••" in chan_data["slack_credentials_masked"]
+
         pref_resp = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/reminders/preferences",
             headers=headers,
@@ -187,6 +207,13 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
             },
         )
         assert pref_resp.status_code == 200, pref_resp.text
+
+        list_rem = await accountant.get(f"/api/v1/businesses/{bid}/p3/reminders")
+        assert list_rem.status_code == 200, list_rem.text
+        assert all(
+            p["recipient_key"] != "__workspace_channel_connector__"
+            for p in list_rem.json()["preferences"]
+        )
 
         target_bill_id = str(uuid4())
         # Attempt #1 via WhatsApp (inside active daytime hour 14)

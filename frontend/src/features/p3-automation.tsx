@@ -15,9 +15,15 @@ import { useAccess, useBusiness } from "./context";
 interface RemindersData {
   channels_status: {
     whatsapp_cloud_connected: boolean;
+    whatsapp_mode?: "workspace_custom" | "platform_default" | "sandbox";
     whatsapp_phone_number_id: string;
+    whatsapp_business_account_id?: string;
+    whatsapp_token_masked?: string;
     default_whatsapp_recipient: string;
     slack_connected: boolean;
+    slack_mode?: "workspace_custom" | "platform_default" | "sandbox";
+    slack_workspace_name?: string;
+    slack_credentials_masked?: string;
     default_slack_channel: string;
     email_fallback_enabled: boolean;
   };
@@ -232,6 +238,49 @@ export function MultichannelReminders() {
   });
 
   const cs = query.data?.channels_status;
+  const [channelStatusNotice, setChannelStatusNotice] = useState<string>("");
+
+  const connectChannelsMutation = useMutation({
+    mutationFn: (payload: {
+      whatsapp_phone_number_id?: string;
+      whatsapp_business_account_id?: string;
+      whatsapp_access_token?: string;
+      default_whatsapp_recipient?: string;
+      slack_workspace_name?: string;
+      slack_webhook_url?: string;
+      slack_bot_token?: string;
+      default_slack_channel?: string;
+      disconnect_whatsapp?: boolean;
+      disconnect_slack?: boolean;
+    }) =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/p3/reminders/channels", {
+          params: { path },
+          body: {
+            whatsapp_phone_number_id: payload.whatsapp_phone_number_id || "",
+            whatsapp_business_account_id:
+              payload.whatsapp_business_account_id || "",
+            whatsapp_access_token: payload.whatsapp_access_token || "",
+            default_whatsapp_recipient:
+              payload.default_whatsapp_recipient || "",
+            slack_workspace_name: payload.slack_workspace_name || "",
+            slack_webhook_url: payload.slack_webhook_url || "",
+            slack_bot_token: payload.slack_bot_token || "",
+            default_slack_channel: payload.default_slack_channel || "",
+            disconnect_whatsapp: Boolean(payload.disconnect_whatsapp),
+            disconnect_slack: Boolean(payload.disconnect_slack),
+          },
+        }),
+      ),
+    onSuccess: () => {
+      setChannelStatusNotice(
+        "Workspace WhatsApp & Slack integration credentials saved and encrypted for this business.",
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-reminders"],
+      });
+    },
+  });
 
   return (
     <div className="stack">
@@ -253,16 +302,172 @@ export function MultichannelReminders() {
         >
           <Badge>
             WhatsApp Cloud API:{" "}
-            {cs?.whatsapp_cloud_connected ? "CONNECTED" : "SANDBOX READY"} (
-            {cs?.default_whatsapp_recipient || "+923412685261"})
+            {cs?.whatsapp_mode === "workspace_custom"
+              ? "WORKSPACE CONNECTED"
+              : cs?.whatsapp_cloud_connected
+                ? "CONNECTED"
+                : "SANDBOX READY"}{" "}
+            ({cs?.default_whatsapp_recipient || "+923412685261"})
           </Badge>
           <Badge>
             Slack Workspace:{" "}
-            {cs?.slack_connected ? "CONNECTED" : "SANDBOX READY"} (
-            {cs?.default_slack_channel || "#all-balanc"})
+            {cs?.slack_mode === "workspace_custom"
+              ? `WORKSPACE CONNECTED (${cs.slack_workspace_name || "Custom"})`
+              : cs?.slack_connected
+                ? "CONNECTED"
+                : "SANDBOX READY"}{" "}
+            ({cs?.default_slack_channel || "#all-balanc"})
           </Badge>
           <Badge>Email Fallback: ACTIVE</Badge>
         </div>
+      </div>
+
+      <div className="panel">
+        <h3>0. Connect Your Workspace WhatsApp & Slack Accounts</h3>
+        <p className="muted">
+          Connect your own business Meta WhatsApp Cloud API sender and Slack
+          Workspace (encrypted per business workspace), or leave blank to use
+          the default connected platform channels.
+        </p>
+        <ErrorNotice error={connectChannelsMutation.error} />
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            connectChannelsMutation.mutate({
+              whatsapp_phone_number_id: String(
+                fd.get("whatsapp_phone_number_id") || "",
+              ),
+              whatsapp_business_account_id: String(
+                fd.get("whatsapp_business_account_id") || "",
+              ),
+              whatsapp_access_token: String(
+                fd.get("whatsapp_access_token") || "",
+              ),
+              default_whatsapp_recipient: String(
+                fd.get("default_whatsapp_recipient") || "",
+              ),
+              slack_workspace_name: String(
+                fd.get("slack_workspace_name") || "",
+              ),
+              slack_webhook_url: String(fd.get("slack_webhook_url") || ""),
+              slack_bot_token: String(fd.get("slack_bot_token") || ""),
+              default_slack_channel: String(
+                fd.get("default_slack_channel") || "",
+              ),
+            });
+          }}
+        >
+          <div className="form-grid">
+            <Field label="WhatsApp Phone Number ID">
+              <input
+                name="whatsapp_phone_number_id"
+                placeholder={
+                  cs?.whatsapp_phone_number_id || "e.g. 1391722684032246"
+                }
+              />
+            </Field>
+            <Field label="WhatsApp Business Account ID (WABA)">
+              <input
+                name="whatsapp_business_account_id"
+                placeholder={
+                  cs?.whatsapp_business_account_id || "e.g. 1877048859962524"
+                }
+              />
+            </Field>
+            <Field
+              label={`Meta Cloud API Access Token ${cs?.whatsapp_token_masked ? `(Saved: ${cs.whatsapp_token_masked})` : ""}`}
+            >
+              <input
+                name="whatsapp_access_token"
+                type="password"
+                placeholder="EAAa... (Fernet-encrypted at rest)"
+              />
+            </Field>
+            <Field label="Default WhatsApp Recipient (E.164)">
+              <input
+                name="default_whatsapp_recipient"
+                defaultValue={cs?.default_whatsapp_recipient || "+923412685261"}
+                placeholder="+923412685261"
+              />
+            </Field>
+            <Field label="Slack Workspace Name">
+              <input
+                name="slack_workspace_name"
+                defaultValue={cs?.slack_workspace_name || ""}
+                placeholder="e.g. Acme Finance Workspace"
+              />
+            </Field>
+            <Field
+              label={`Slack Incoming Webhook URL ${cs?.slack_credentials_masked ? `(Saved: ${cs.slack_credentials_masked})` : ""}`}
+            >
+              <input
+                name="slack_webhook_url"
+                type="password"
+                placeholder="https://hooks.slack.com/services/T.../B.../..."
+              />
+            </Field>
+            <Field label="Slack Bot OAuth Token (Optional)">
+              <input
+                name="slack_bot_token"
+                type="password"
+                placeholder="xoxb-... (Optional if Webhook URL is provided)"
+              />
+            </Field>
+            <Field label="Default Slack Channel">
+              <input
+                name="default_slack_channel"
+                defaultValue={cs?.default_slack_channel || "#all-balanc"}
+                placeholder="#finance-alerts"
+              />
+            </Field>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginTop: "10px",
+            }}
+          >
+            <Button type="submit" busy={connectChannelsMutation.isPending}>
+              Save Workspace WhatsApp & Slack Connection
+            </Button>
+            {cs?.whatsapp_mode === "workspace_custom" && (
+              <Button
+                type="button"
+                variant="secondary"
+                busy={connectChannelsMutation.isPending}
+                onClick={() =>
+                  connectChannelsMutation.mutate({ disconnect_whatsapp: true })
+                }
+              >
+                Disconnect Custom WhatsApp
+              </Button>
+            )}
+            {cs?.slack_mode === "workspace_custom" && (
+              <Button
+                type="button"
+                variant="secondary"
+                busy={connectChannelsMutation.isPending}
+                onClick={() =>
+                  connectChannelsMutation.mutate({ disconnect_slack: true })
+                }
+              >
+                Disconnect Custom Slack
+              </Button>
+            )}
+          </div>
+          {channelStatusNotice && (
+            <p
+              role="status"
+              className="success-text"
+              style={{ marginTop: "8px" }}
+            >
+              {channelStatusNotice}
+            </p>
+          )}
+        </form>
       </div>
 
       <div className="panel">

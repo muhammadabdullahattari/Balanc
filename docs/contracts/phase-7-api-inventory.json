@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 234,
-  "distinct_operations": 191,
+  "call_sites": 237,
+  "distinct_operations": 194,
   "operations": [
     {
       "file": "App.tsx",
@@ -770,6 +770,11 @@
     },
     {
       "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reminders/channels"
+    },
+    {
+      "file": "features/p3-automation.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/p3/supplier-portals"
     },
@@ -927,6 +932,16 @@
       "file": "features/quickbooks-import.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/quickbooks/import"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/authorize"
+    },
+    {
+      "file": "features/quickbooks-import.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/quickbooks/connect"
     },
     {
       "file": "features/reconciliation.tsx",

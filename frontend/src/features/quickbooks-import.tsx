@@ -112,6 +112,70 @@ export function QuickBooksImport() {
     | undefined;
 
   const unmapped = dryRunData?.unmapped_accounts || [];
+  const previewMeta = previewQuery.data as
+    | {
+        connection_mode?: "custom_company" | "oauth_connected" | "sandbox_demo";
+        realm_id?: string;
+        company_name?: string;
+        oauth_configured?: boolean;
+      }
+    | undefined;
+
+  const [qbStatusNotice, setQbStatusNotice] = useState<string>("");
+
+  const oauthAuthorize = useMutation({
+    mutationFn: () =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/quickbooks/authorize", {
+          params: { path },
+        }),
+      ),
+    onSuccess: (res) => {
+      const targetUrl = (res as { url?: string })?.url;
+      if (targetUrl) {
+        window.location.assign(targetUrl);
+      }
+    },
+  });
+
+  const connectQuickBooks = useMutation({
+    mutationFn: (payload: {
+      mode: "custom_credentials" | "sandbox_demo";
+      company_name?: string;
+      realm_id?: string;
+      access_token?: string;
+      refresh_token?: string;
+      environment?: "sandbox" | "production";
+    }) =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/quickbooks/connect", {
+          params: { path },
+          body: {
+            mode: payload.mode,
+            company_name: payload.company_name || "",
+            realm_id: payload.realm_id || "",
+            access_token: payload.access_token || "",
+            refresh_token: payload.refresh_token || "",
+            environment: payload.environment || "sandbox",
+          },
+        }),
+      ),
+    onSuccess: (res) => {
+      const data = res as {
+        company_name?: string;
+        realm_id?: string;
+        connection_mode?: string;
+      };
+      setQbStatusNotice(
+        data.connection_mode === "sandbox_demo"
+          ? "Switched to Built-in Intuit QuickBooks Sandbox Demo dataset."
+          : `Connected QuickBooks Online company: ${data.company_name || "Custom"} (Realm ID: ${data.realm_id || ""}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "quickbooks", "preview"],
+      });
+    },
+  });
 
   return (
     <div className="quickbooks-import">
@@ -123,18 +187,146 @@ export function QuickBooksImport() {
       </p>
 
       <ErrorNotice
-        error={previewQuery.error || importDryRun.error || importLive.error}
+        error={
+          previewQuery.error ||
+          importDryRun.error ||
+          importLive.error ||
+          oauthAuthorize.error ||
+          connectQuickBooks.error
+        }
       />
 
       <div className="review-summary" style={{ marginBottom: "1.5rem" }}>
-        <div style={{ display: "flex", gap: "1rem", alignItems: "center" }}>
-          <strong>Sandbox Connector:</strong>
-          {previewQuery.data ? (
+        <div
+          style={{
+            display: "flex",
+            gap: "1rem",
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
+          <strong>QuickBooks Connector:</strong>
+          {previewMeta?.connection_mode &&
+          previewMeta.connection_mode !== "sandbox_demo" ? (
+            <Badge>
+              CONNECTED ({previewMeta.company_name || "QuickBooks Online"} ·
+              Realm {previewMeta.realm_id})
+            </Badge>
+          ) : previewQuery.data ? (
             <Badge>CONNECTED (SANDBOX READY)</Badge>
           ) : (
             <Badge>SANDBOX READY</Badge>
           )}
         </div>
+      </div>
+
+      <div className="panel" style={{ marginBottom: "1.5rem" }}>
+        <h3>0. Connect Your QuickBooks Online Account</h3>
+        <p className="muted">
+          Connect your own QuickBooks Online company via Intuit OAuth 2.0 or by
+          entering your QuickBooks Company Realm ID and OAuth Access Token
+          (encrypted per workspace), or test using the built-in Sandbox dataset.
+        </p>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            const fd = new FormData(e.currentTarget);
+            connectQuickBooks.mutate({
+              mode: "custom_credentials",
+              company_name: String(fd.get("company_name") || ""),
+              realm_id: String(fd.get("realm_id") || ""),
+              access_token: String(fd.get("access_token") || ""),
+              refresh_token: String(fd.get("refresh_token") || ""),
+              environment:
+                (fd.get("environment") as "sandbox" | "production") ||
+                "sandbox",
+            });
+          }}
+        >
+          <div className="form-grid">
+            <Field label="QuickBooks Company Name">
+              <input
+                name="company_name"
+                placeholder="e.g. Acme Global LLC"
+                defaultValue={
+                  previewMeta?.connection_mode !== "sandbox_demo"
+                    ? previewMeta?.company_name || ""
+                    : ""
+                }
+              />
+            </Field>
+            <Field label="Intuit Realm ID (Company ID)">
+              <input
+                name="realm_id"
+                placeholder="e.g. 934145291029182"
+                defaultValue={
+                  previewMeta?.connection_mode !== "sandbox_demo"
+                    ? previewMeta?.realm_id || ""
+                    : ""
+                }
+                required
+              />
+            </Field>
+            <Field label="QuickBooks OAuth Access Token">
+              <input
+                name="access_token"
+                type="password"
+                placeholder="eyJ... (Fernet-encrypted at rest)"
+                required
+              />
+            </Field>
+            <Field label="QuickBooks Environment">
+              <select name="environment" defaultValue="sandbox">
+                <option value="sandbox">Intuit Sandbox API</option>
+                <option value="production">Intuit Production API</option>
+              </select>
+            </Field>
+          </div>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              flexWrap: "wrap",
+              marginTop: "10px",
+            }}
+          >
+            <Button type="submit" busy={connectQuickBooks.isPending}>
+              Connect QuickBooks Company
+            </Button>
+            {previewMeta?.oauth_configured && (
+              <Button
+                type="button"
+                variant="secondary"
+                busy={oauthAuthorize.isPending}
+                onClick={() => oauthAuthorize.mutate()}
+              >
+                Connect via Intuit OAuth 2.0 Redirect
+              </Button>
+            )}
+            {previewMeta?.connection_mode &&
+              previewMeta.connection_mode !== "sandbox_demo" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  busy={connectQuickBooks.isPending}
+                  onClick={() =>
+                    connectQuickBooks.mutate({ mode: "sandbox_demo" })
+                  }
+                >
+                  Switch to Built-in Sandbox Demo
+                </Button>
+              )}
+          </div>
+          {qbStatusNotice && (
+            <p
+              role="status"
+              className="success-text"
+              style={{ marginTop: "8px" }}
+            >
+              {qbStatusNotice}
+            </p>
+          )}
+        </form>
       </div>
 
       <h3>1. Select Entities for Import</h3>

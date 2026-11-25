@@ -11344,6 +11344,50 @@
         "title": "Question",
         "type": "object"
       },
+      "QuickBooksConnectInput": {
+        "properties": {
+          "access_token": {
+            "default": "",
+            "title": "Access Token",
+            "type": "string"
+          },
+          "company_name": {
+            "default": "",
+            "title": "Company Name",
+            "type": "string"
+          },
+          "environment": {
+            "default": "sandbox",
+            "enum": [
+              "sandbox",
+              "production"
+            ],
+            "title": "Environment",
+            "type": "string"
+          },
+          "mode": {
+            "default": "custom_credentials",
+            "enum": [
+              "custom_credentials",
+              "sandbox_demo"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "realm_id": {
+            "default": "",
+            "title": "Realm Id",
+            "type": "string"
+          },
+          "refresh_token": {
+            "default": "",
+            "title": "Refresh Token",
+            "type": "string"
+          }
+        },
+        "title": "QuickBooksConnectInput",
+        "type": "object"
+      },
       "QuoteLookup": {
         "additionalProperties": false,
         "properties": {
@@ -14548,6 +14592,71 @@
           "type"
         ],
         "title": "ValidationField",
+        "type": "object"
+      },
+      "WorkspaceChannelConnectInput": {
+        "additionalProperties": false,
+        "properties": {
+          "default_slack_channel": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Default Slack Channel",
+            "type": "string"
+          },
+          "default_whatsapp_recipient": {
+            "default": "",
+            "maxLength": 40,
+            "title": "Default Whatsapp Recipient",
+            "type": "string"
+          },
+          "disconnect_slack": {
+            "default": false,
+            "title": "Disconnect Slack",
+            "type": "boolean"
+          },
+          "disconnect_whatsapp": {
+            "default": false,
+            "title": "Disconnect Whatsapp",
+            "type": "boolean"
+          },
+          "slack_bot_token": {
+            "default": "",
+            "maxLength": 500,
+            "title": "Slack Bot Token",
+            "type": "string"
+          },
+          "slack_webhook_url": {
+            "default": "",
+            "maxLength": 1000,
+            "title": "Slack Webhook Url",
+            "type": "string"
+          },
+          "slack_workspace_name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Slack Workspace Name",
+            "type": "string"
+          },
+          "whatsapp_access_token": {
+            "default": "",
+            "maxLength": 2000,
+            "title": "Whatsapp Access Token",
+            "type": "string"
+          },
+          "whatsapp_business_account_id": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Whatsapp Business Account Id",
+            "type": "string"
+          },
+          "whatsapp_phone_number_id": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Whatsapp Phone Number Id",
+            "type": "string"
+          }
+        },
+        "title": "WorkspaceChannelConnectInput",
         "type": "object"
       },
       "WorkspaceEmailHistory": {
@@ -42662,6 +42771,197 @@
         ]
       }
     },
+    "/api/v1/businesses/{business_id}/p3/reminders/channels": {
+      "post": {
+        "description": "Connect or update per-workspace Meta WhatsApp Cloud API and Slack Workspace credentials.",
+        "operationId": "connect_workspace_reminder_channels_api_v1_businesses__business_id__p3_reminders_channels_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/WorkspaceChannelConnectInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connect Workspace Reminder Channels Api V1 Businesses  Business Id  P3 Reminders Channels Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Connect Workspace Reminder Channels",
+        "tags": [
+          "p3-automation"
+        ]
+      }
+    },
     "/api/v1/businesses/{business_id}/p3/reminders/dispatch": {
       "post": {
         "operationId": "dispatch_multichannel_reminder_api_v1_businesses__business_id__p3_reminders_dispatch_post",
@@ -51841,6 +52141,196 @@
           }
         ],
         "summary": "Start Quickbooks",
+        "tags": [
+          "provider integrations"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/quickbooks/connect": {
+      "post": {
+        "operationId": "connect_quickbooks_workspace_api_v1_businesses__business_id__quickbooks_connect_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/QuickBooksConnectInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Connect Quickbooks Workspace Api V1 Businesses  Business Id  Quickbooks Connect Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Connect Quickbooks Workspace",
         "tags": [
           "provider integrations"
         ]

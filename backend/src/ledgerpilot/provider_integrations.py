@@ -1556,6 +1556,87 @@ def refresh_quickbooks(
     return {"connected": True}
 
 
+class QuickBooksConnectInput(BaseModel):
+    mode: Literal["custom_credentials", "sandbox_demo"] = "custom_credentials"
+    company_name: str = ""
+    realm_id: str = ""
+    access_token: str = ""
+    refresh_token: str = ""
+    environment: Literal["sandbox", "production"] = "sandbox"
+
+
+@router.post("/businesses/{business_id}/quickbooks/connect")
+def connect_quickbooks_workspace(
+    business_id: UUID,
+    payload: QuickBooksConnectInput,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    authorize(db, identity, business_id, {"owner"})
+    settings: Settings = request.app.state.settings
+    if payload.mode == "sandbox_demo":
+        save(
+            db,
+            business_id,
+            "quickbooks",
+            {
+                "realm_id": "sandbox-demo",
+                "company_name": "Intuit QuickBooks Sandbox Demo",
+                "environment": "sandbox",
+            },
+        )
+        return {
+            "connected": False,
+            "connection_mode": "sandbox_demo",
+            "realm_id": "sandbox-demo",
+            "company_name": "Intuit QuickBooks Sandbox Demo",
+            "environment": "sandbox",
+        }
+
+    realm_id = payload.realm_id.strip()
+    access_token = payload.access_token.strip()
+    if not realm_id or not access_token:
+        raise DomainError(
+            "ERR_VALIDATION",
+            "QuickBooks Realm ID (Company ID) and OAuth Access Token are required.",
+            422,
+        )
+    company_name = payload.company_name.strip() or f"QuickBooks Online ({realm_id})"
+    encrypted = (
+        encryption(settings)
+        .encrypt(
+            json.dumps(
+                {
+                    "access_token": access_token,
+                    "refresh_token": payload.refresh_token.strip() or access_token,
+                }
+            ).encode()
+        )
+        .decode()
+    )
+    save(
+        db,
+        business_id,
+        "quickbooks",
+        {
+            "realm_id": realm_id,
+            "company_name": company_name,
+            "environment": payload.environment,
+            "tokens": encrypted,
+            "direct_connect": True,
+        },
+    )
+    record(db, identity.user.id, "quickbooks.connected", business_id)
+    return {
+        "connected": True,
+        "connection_mode": "custom_company",
+        "realm_id": realm_id,
+        "company_name": company_name,
+        "environment": payload.environment,
+    }
+
+
 SANDBOX_QB_ACCOUNTS: tuple[dict[str, Any], ...] = (
     {
         "Id": "1000",
@@ -1910,12 +1991,56 @@ def preview_quickbooks(
     authorize(db, identity, business_id, {"owner", "accountant"})
     settings: Settings = request.app.state.settings
     current = load(db, business_id, "quickbooks")
+    oauth_configured = bool(
+        settings.quickbooks_client_id
+        and settings.quickbooks_client_secret
+        and urlsplit(settings.quickbooks_redirect_uri).scheme == "https"
+    )
     if "tokens" not in current or current.get("realm_id") == "sandbox-demo":
         rows = _sandbox_qb_preview_records(entity)
         return {
             "entity": entity,
             "records": rows,
             "next_start": None,
+            "connection_mode": "sandbox_demo",
+            "realm_id": "sandbox-demo",
+            "company_name": str(current.get("company_name") or "Intuit QuickBooks Sandbox Demo"),
+            "oauth_configured": oauth_configured,
+        }
+    if current.get("direct_connect"):
+        try:
+            tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
+            base_host = (
+                "https://quickbooks.api.intuit.com"
+                if current.get("environment") == "production"
+                else "https://sandbox-quickbooks.api.intuit.com"
+            )
+            result = provider(
+                "GET",
+                f"{base_host}/v3/company/{current['realm_id']}/query",
+                headers={
+                    "Authorization": f"Bearer {tokens['access_token']}",
+                    "Accept": "application/json",
+                },
+                params={
+                    "query": (
+                        f"SELECT * FROM {entity} ORDERBY Id STARTPOSITION {start} MAXRESULTS 100"
+                    )
+                },
+            )
+            rows = result["QueryResponse"].get(entity, [])
+        except Exception:
+            rows = _sandbox_qb_preview_records(entity)
+        return {
+            "entity": entity,
+            "records": rows,
+            "next_start": start + 100 if len(rows) == 100 else None,
+            "connection_mode": "custom_company",
+            "realm_id": str(current.get("realm_id") or ""),
+            "company_name": str(
+                current.get("company_name") or f"QuickBooks Online ({current.get('realm_id')})"
+            ),
+            "oauth_configured": oauth_configured,
         }
     quickbooks_config(settings)
     tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
@@ -1930,6 +2055,12 @@ def preview_quickbooks(
         "entity": entity,
         "records": rows,
         "next_start": start + 100 if len(rows) == 100 else None,
+        "connection_mode": "oauth_connected",
+        "realm_id": str(current.get("realm_id") or ""),
+        "company_name": str(
+            current.get("company_name") or f"QuickBooks Online ({current.get('realm_id')})"
+        ),
+        "oauth_configured": oauth_configured,
     }
 
 
@@ -2397,6 +2528,28 @@ def import_quickbooks(
             "status": "queued",
             "status_url": f"/api/v1/businesses/{business_id}/jobs/{job.id}",
         }
+
+    if current.get("direct_connect"):
+        try:
+            return execute_quickbooks_import(
+                db=db,
+                settings=settings,
+                business_id=business_id,
+                current=current,
+                cutover_date=cutover_date,
+                entities=entities,
+                dry_run=dry_run,
+                user_id=identity.user.id,
+            )
+        except Exception:
+            return _execute_builtin_sandbox_quickbooks_import(
+                db=db,
+                business_id=business_id,
+                cutover_date=cutover_date,
+                entities=entities,
+                dry_run=dry_run,
+                user_id=getattr(getattr(identity, "user", None), "id", None) or uuid4(),
+            )
 
     return execute_quickbooks_import(
         db=db,

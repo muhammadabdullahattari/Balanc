@@ -179,6 +179,22 @@ class ReminderOptOutInput(StrictModel):
     recipient_key: str = Field(min_length=1, max_length=120)
 
 
+WORKSPACE_CHANNEL_CONNECTOR_KEY = "__workspace_channel_connector__"
+
+
+class WorkspaceChannelConnectInput(StrictModel):
+    whatsapp_phone_number_id: str = Field(default="", max_length=120)
+    whatsapp_business_account_id: str = Field(default="", max_length=120)
+    whatsapp_access_token: str = Field(default="", max_length=2000)
+    default_whatsapp_recipient: str = Field(default="", max_length=40)
+    slack_workspace_name: str = Field(default="", max_length=120)
+    slack_webhook_url: str = Field(default="", max_length=1000)
+    slack_bot_token: str = Field(default="", max_length=500)
+    default_slack_channel: str = Field(default="", max_length=120)
+    disconnect_whatsapp: bool = False
+    disconnect_slack: bool = False
+
+
 class ReminderDispatchInput(StrictModel):
     target_kind: Literal["bill", "invoice", "evidence", "approval"] = "bill"
     target_id: UUID | None = None
@@ -289,15 +305,135 @@ def _resolve_env_or_setting(settings: Settings, attr: str, env_key: str) -> str:
     return os.environ.get(env_key, "").strip()
 
 
+def _mask_secret(raw: str) -> str:
+    val = raw.strip()
+    if not val:
+        return ""
+    if len(val) <= 8:
+        return "••••••••"
+    return f"{val[:6]}••••••••{val[-4:]}"
+
+
+def _load_workspace_channel_config(
+    db: Session, settings: Settings, business_id: UUID
+) -> dict[str, str]:
+    row = (
+        db.execute(
+            text(
+                """
+                SELECT whatsapp_phone, slack_channel, email_address
+                FROM app.channel_reminder_preferences
+                WHERE business_id = :bid AND recipient_key = :rkey
+                """
+            ),
+            {"bid": business_id, "rkey": WORKSPACE_CHANNEL_CONNECTOR_KEY},
+        )
+        .mappings()
+        .first()
+    )
+    if not row:
+        return {}
+    blob = str(row["email_address"] or "").strip()
+    parsed: dict[str, str] = {}
+    if blob:
+        try:
+            plain = decrypt_secret(settings, blob)
+            data = json.loads(plain)
+            if isinstance(data, dict):
+                parsed = {str(k): str(v) for k, v in data.items() if v is not None}
+        except Exception:
+            parsed = {}
+    if row["whatsapp_phone"] and not parsed.get("default_whatsapp_recipient"):
+        parsed["default_whatsapp_recipient"] = str(row["whatsapp_phone"])
+    if row["slack_channel"] and not parsed.get("default_slack_channel"):
+        parsed["default_slack_channel"] = str(row["slack_channel"])
+    return parsed
+
+
+def _build_channels_status(settings: Settings, ws_cfg: dict[str, str]) -> dict[str, Any]:
+    ws_wa_token = ws_cfg.get("whatsapp_access_token", "").strip()
+    ws_wa_phone_id = ws_cfg.get("whatsapp_phone_number_id", "").strip()
+    ws_wa_biz_id = ws_cfg.get("whatsapp_business_account_id", "").strip()
+    ws_wa_recipient = ws_cfg.get("default_whatsapp_recipient", "").strip()
+
+    env_wa_token = _resolve_env_or_setting(
+        settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN"
+    )
+    env_wa_phone_id = _resolve_env_or_setting(
+        settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"
+    )
+    env_wa_biz_id = _resolve_env_or_setting(
+        settings, "whatsapp_business_account_id", "WHATSAPP_BUSINESS_ACCOUNT_ID"
+    )
+    env_wa_recipient = (
+        _resolve_env_or_setting(
+            settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT"
+        )
+        or "+923412685261"
+    )
+
+    wa_custom = bool(ws_wa_token and ws_wa_phone_id)
+    wa_token = ws_wa_token if wa_custom else env_wa_token
+    wa_phone_id = ws_wa_phone_id or env_wa_phone_id
+    wa_biz_id = ws_wa_biz_id or env_wa_biz_id
+    wa_recipient = ws_wa_recipient or env_wa_recipient
+    wa_mode = (
+        "workspace_custom"
+        if wa_custom
+        else ("platform_default" if (env_wa_token and env_wa_phone_id) else "sandbox")
+    )
+
+    ws_slack_webhook = ws_cfg.get("slack_webhook_url", "").strip()
+    ws_slack_bot = ws_cfg.get("slack_bot_token", "").strip()
+    ws_slack_name = ws_cfg.get("slack_workspace_name", "").strip()
+    ws_slack_ch = ws_cfg.get("default_slack_channel", "").strip()
+
+    env_slack_webhook = _resolve_env_or_setting(settings, "slack_webhook_url", "SLACK_WEBHOOK_URL")
+    env_slack_bot = _resolve_env_or_setting(settings, "slack_bot_token", "SLACK_BOT_TOKEN")
+    env_slack_ch = (
+        _resolve_env_or_setting(settings, "slack_default_channel", "SLACK_DEFAULT_CHANNEL")
+        or "#all-balanc"
+    )
+
+    slack_custom = bool(ws_slack_webhook or ws_slack_bot)
+    slack_webhook = ws_slack_webhook if slack_custom else env_slack_webhook
+    slack_bot = ws_slack_bot if slack_custom else env_slack_bot
+    slack_ch = ws_slack_ch or env_slack_ch
+    slack_mode = (
+        "workspace_custom"
+        if slack_custom
+        else ("platform_default" if (env_slack_webhook or env_slack_bot) else "sandbox")
+    )
+
+    return {
+        "whatsapp_cloud_connected": bool(wa_token and wa_phone_id),
+        "whatsapp_mode": wa_mode,
+        "whatsapp_phone_number_id": wa_phone_id or "1391722684032246",
+        "whatsapp_business_account_id": wa_biz_id,
+        "whatsapp_token_masked": _mask_secret(wa_token),
+        "default_whatsapp_recipient": wa_recipient,
+        "slack_connected": bool(slack_webhook or slack_bot),
+        "slack_mode": slack_mode,
+        "slack_workspace_name": ws_slack_name or "Balanc Finance Workspace",
+        "slack_credentials_masked": _mask_secret(slack_webhook or slack_bot),
+        "default_slack_channel": slack_ch,
+        "email_fallback_enabled": True,
+    }
+
+
 def _send_whatsapp_cloud_message(
     settings: Settings,
     phone_number: str,
     message_body: str,
     template_name: str = "hello_world",
+    override_token: str = "",
+    override_phone_id: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Deliver a reminder via Official Meta WhatsApp Cloud API (or deterministic sandbox in offline/test mode)."""
-    token = _resolve_env_or_setting(settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN")
-    phone_id = _resolve_env_or_setting(
+    token = override_token.strip() or _resolve_env_or_setting(
+        settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN"
+    )
+    phone_id = override_phone_id.strip() or _resolve_env_or_setting(
         settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"
     )
     clean_to = "".join(ch for ch in phone_number if ch.isdigit())
@@ -376,10 +512,16 @@ def _send_slack_reminder_message(
     settings: Settings,
     channel: str,
     message_body: str,
+    override_webhook_url: str = "",
+    override_bot_token: str = "",
 ) -> tuple[str, dict[str, Any]]:
     """Deliver a reminder to the connected Slack workspace (#all-balanc) via Incoming Webhook or Bot Token."""
-    webhook_url = _resolve_env_or_setting(settings, "slack_webhook_url", "SLACK_WEBHOOK_URL")
-    bot_token = _resolve_env_or_setting(settings, "slack_bot_token", "SLACK_BOT_TOKEN")
+    webhook_url = override_webhook_url.strip() or _resolve_env_or_setting(
+        settings, "slack_webhook_url", "SLACK_WEBHOOK_URL"
+    )
+    bot_token = override_bot_token.strip() or _resolve_env_or_setting(
+        settings, "slack_bot_token", "SLACK_BOT_TOKEN"
+    )
 
     if webhook_url and settings.app_env != "test":
         try:
@@ -606,32 +748,11 @@ def list_reminders_and_preferences(
         .all()
     )
 
-    wa_token = _resolve_env_or_setting(settings, "whatsapp_access_token", "WHATSAPP_ACCESS_TOKEN")
-    wa_phone_id = _resolve_env_or_setting(
-        settings, "whatsapp_phone_number_id", "WHATSAPP_PHONE_NUMBER_ID"
-    )
-    wa_recipient = (
-        _resolve_env_or_setting(
-            settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT"
-        )
-        or "+923412685261"
-    )
-    slack_webhook = _resolve_env_or_setting(settings, "slack_webhook_url", "SLACK_WEBHOOK_URL")
-    slack_bot = _resolve_env_or_setting(settings, "slack_bot_token", "SLACK_BOT_TOKEN")
-    slack_channel = (
-        _resolve_env_or_setting(settings, "slack_default_channel", "SLACK_DEFAULT_CHANNEL")
-        or "#all-balanc"
-    )
+    ws_cfg = _load_workspace_channel_config(db, settings, business_id)
+    channels_status = _build_channels_status(settings, ws_cfg)
 
     return {
-        "channels_status": {
-            "whatsapp_cloud_connected": bool(wa_token and wa_phone_id),
-            "whatsapp_phone_number_id": wa_phone_id or "1391722684032246",
-            "default_whatsapp_recipient": wa_recipient,
-            "slack_connected": bool(slack_webhook or slack_bot),
-            "default_slack_channel": slack_channel,
-            "email_fallback_enabled": True,
-        },
+        "channels_status": channels_status,
         "preferences": [
             {
                 "id": str(r["id"]),
@@ -654,6 +775,7 @@ def list_reminders_and_preferences(
                 "updated_at": r["updated_at"].isoformat(),
             }
             for r in prefs
+            if r["recipient_key"] != WORKSPACE_CHANNEL_CONNECTOR_KEY
         ],
         "reminders": [
             {
@@ -676,6 +798,88 @@ def list_reminders_and_preferences(
             for r in reminders
         ],
     }
+
+
+@router.post("/businesses/{business_id}/p3/reminders/channels")
+def connect_workspace_reminder_channels(
+    business_id: UUID,
+    payload: WorkspaceChannelConnectInput,
+    user: CurrentUser,
+    db: DB,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> dict[str, Any]:
+    """Connect or update per-workspace Meta WhatsApp Cloud API and Slack Workspace credentials."""
+    require_role(db, user, business_id, ("owner", "accountant"))
+    current = _load_workspace_channel_config(db, settings, business_id)
+
+    if payload.disconnect_whatsapp:
+        current.pop("whatsapp_phone_number_id", None)
+        current.pop("whatsapp_business_account_id", None)
+        current.pop("whatsapp_access_token", None)
+    else:
+        if payload.whatsapp_phone_number_id.strip():
+            current["whatsapp_phone_number_id"] = payload.whatsapp_phone_number_id.strip()
+        if payload.whatsapp_business_account_id.strip():
+            current["whatsapp_business_account_id"] = payload.whatsapp_business_account_id.strip()
+        if payload.whatsapp_access_token.strip():
+            current["whatsapp_access_token"] = payload.whatsapp_access_token.strip()
+        if payload.default_whatsapp_recipient.strip():
+            current["default_whatsapp_recipient"] = payload.default_whatsapp_recipient.strip()
+
+    if payload.disconnect_slack:
+        current.pop("slack_workspace_name", None)
+        current.pop("slack_webhook_url", None)
+        current.pop("slack_bot_token", None)
+    else:
+        if payload.slack_workspace_name.strip():
+            current["slack_workspace_name"] = payload.slack_workspace_name.strip()
+        if payload.slack_webhook_url.strip():
+            current["slack_webhook_url"] = payload.slack_webhook_url.strip()
+        if payload.slack_bot_token.strip():
+            current["slack_bot_token"] = payload.slack_bot_token.strip()
+        if payload.default_slack_channel.strip():
+            current["default_slack_channel"] = payload.default_slack_channel.strip()
+
+    enc_blob = encrypt_secret(settings, json.dumps(current)) if current else ""
+    conn_id = uuid4()
+    db.execute(
+        text(
+            """
+            INSERT INTO app.channel_reminder_preferences (
+              id, business_id, recipient_key, recipient_name, whatsapp_phone,
+              slack_channel, email_address, actor
+            ) VALUES (
+              :id, :bid, :rkey, 'Workspace Channel Connector', :wa_phone,
+              :slack_ch, :blob, :actor
+            )
+            ON CONFLICT (business_id, recipient_key) DO UPDATE SET
+              whatsapp_phone = EXCLUDED.whatsapp_phone,
+              slack_channel = EXCLUDED.slack_channel,
+              email_address = EXCLUDED.email_address,
+              actor = EXCLUDED.actor,
+              updated_at = clock_timestamp()
+            """
+        ),
+        {
+            "id": conn_id,
+            "bid": business_id,
+            "rkey": WORKSPACE_CHANNEL_CONNECTOR_KEY,
+            "wa_phone": current.get("default_whatsapp_recipient", "+923412685261"),
+            "slack_ch": current.get("default_slack_channel", "#all-balanc"),
+            "blob": enc_blob,
+            "actor": _actor_id(user),
+        },
+    )
+
+    _record_p3_audit(
+        db,
+        actor_user_id=_actor_id(user),
+        business_id=business_id,
+        action="p3.reminder_channels.connect",
+        resource_id=business_id,
+        status="updated",
+    )
+    return _build_channels_status(settings, current)
 
 
 @router.post("/businesses/{business_id}/p3/reminders/preferences")
@@ -878,14 +1082,17 @@ def dispatch_multichannel_reminder(
         .first()
     )
 
+    ws_cfg = _load_workspace_channel_config(db, settings, business_id)
     default_wa = (
-        _resolve_env_or_setting(
+        ws_cfg.get("default_whatsapp_recipient", "").strip()
+        or _resolve_env_or_setting(
             settings, "whatsapp_default_recipient", "WHATSAPP_DEFAULT_RECIPIENT"
         )
         or "+923412685261"
     )
     default_slack = (
-        _resolve_env_or_setting(settings, "slack_default_channel", "SLACK_DEFAULT_CHANNEL")
+        ws_cfg.get("default_slack_channel", "").strip()
+        or _resolve_env_or_setting(settings, "slack_default_channel", "SLACK_DEFAULT_CHANNEL")
         or "#all-balanc"
     )
 
@@ -997,11 +1204,20 @@ def dispatch_multichannel_reminder(
     else:
         if chosen_channel == "whatsapp":
             provider_msg_id, provider_resp = _send_whatsapp_cloud_message(
-                settings, wa_phone, message_body, payload.template_name
+                settings,
+                wa_phone,
+                message_body,
+                payload.template_name,
+                override_token=ws_cfg.get("whatsapp_access_token", ""),
+                override_phone_id=ws_cfg.get("whatsapp_phone_number_id", ""),
             )
         elif chosen_channel == "slack":
             provider_msg_id, provider_resp = _send_slack_reminder_message(
-                settings, slack_ch, message_body
+                settings,
+                slack_ch,
+                message_body,
+                override_webhook_url=ws_cfg.get("slack_webhook_url", ""),
+                override_bot_token=ws_cfg.get("slack_bot_token", ""),
             )
         else:
             send_transactional_email(
