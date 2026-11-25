@@ -132,6 +132,9 @@ interface PaymentsData {
     step_up_verified: boolean;
     provider_reference: string;
     remittance_advice: string;
+    settlement_journal_id?: string | null;
+    first_approved_by?: string | null;
+    final_approved_by?: string | null;
     failure_reason: string;
     created_at: string;
     executed_at: string | null;
@@ -240,6 +243,41 @@ export function MultichannelReminders() {
 
   const cs = query.data?.channels_status;
   const [channelStatusNotice, setChannelStatusNotice] = useState<string>("");
+
+  const webhookStatusMutation = useMutation({
+    mutationFn: (payload: {
+      reminderId: string;
+      event_source: "whatsapp_cloud_webhook" | "slack_interactive_webhook";
+      delivery_status: "delivered" | "read" | "failed";
+      interactive_action:
+        "none" | "acknowledge" | "evidence_uploaded" | "opt_out";
+    }) =>
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status",
+          {
+            params: {
+              path: { business_id: b.id, reminder_id: payload.reminderId },
+            },
+            body: {
+              event_source: payload.event_source,
+              delivery_status: payload.delivery_status,
+              interactive_action: payload.interactive_action,
+              actor_handle: "",
+            },
+          },
+        ),
+      ),
+    onSuccess: (res) => {
+      const r = res as { status: string; interactive_action: string };
+      setLastResult(
+        `Webhook callback processed -> Status updated to ${r.status.toUpperCase()} (Action: ${r.interactive_action})`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-reminders"],
+      });
+    },
+  });
 
   const connectChannelsMutation = useMutation({
     mutationFn: (payload: {
@@ -685,6 +723,51 @@ export function MultichannelReminders() {
                   </code>
                 ),
               },
+              {
+                label: "Webhook Receipts & Slack Actions",
+                render: (r) =>
+                  r.status === "sent" || r.status === "delivered" ? (
+                    <div
+                      style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}
+                    >
+                      {r.status === "sent" && (
+                        <Button
+                          variant="secondary"
+                          busy={webhookStatusMutation.isPending}
+                          onClick={() =>
+                            webhookStatusMutation.mutate({
+                              reminderId: r.id,
+                              event_source: "whatsapp_cloud_webhook",
+                              delivery_status: "delivered",
+                              interactive_action: "none",
+                            })
+                          }
+                        >
+                          Mark Delivered
+                        </Button>
+                      )}
+                      <Button
+                        variant="secondary"
+                        busy={webhookStatusMutation.isPending}
+                        onClick={() =>
+                          webhookStatusMutation.mutate({
+                            reminderId: r.id,
+                            event_source:
+                              r.channel === "slack"
+                                ? "slack_interactive_webhook"
+                                : "whatsapp_cloud_webhook",
+                            delivery_status: "read",
+                            interactive_action: "acknowledge",
+                          })
+                        }
+                      >
+                        {r.channel === "slack" ? "Slack Ack" : "WhatsApp Read"}
+                      </Button>
+                    </div>
+                  ) : (
+                    <Badge>{r.status}</Badge>
+                  ),
+              },
             ]}
           />
         </div>
@@ -842,6 +925,35 @@ export function SupplierPortalConnectors() {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-portals"],
+      });
+    },
+  });
+
+  const promoteToPaymentMutation = useMutation({
+    mutationFn: async (ingestionId: string) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/supplier-portals/ingestions/{ingestion_id}/promote-to-payment",
+          {
+            params: {
+              path: { business_id: b.id, ingestion_id: ingestionId },
+            },
+          },
+        ),
+      )) as unknown as {
+        payment_id: string;
+        bill_reference: string;
+        supplier_name: string;
+        amount: string;
+        currency: string;
+        state: string;
+      },
+    onSuccess: (res) => {
+      setSyncMessage(
+        `Promoted ${res.supplier_name} Invoice ${res.bill_reference} (${res.currency} ${res.amount}) into Supplier Payment Queue (Draft #${res.payment_id.slice(0, 8)} · State: ${res.state})!`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-supplier-payments"],
       });
     },
   });
@@ -1103,6 +1215,18 @@ export function SupplierPortalConnectors() {
                       ? i.trade_draft_id.slice(0, 12) + "…"
                       : "—"}
                   </code>
+                ),
+              },
+              {
+                label: "End-to-End Pipeline",
+                render: (i) => (
+                  <Button
+                    variant="secondary"
+                    busy={promoteToPaymentMutation.isPending}
+                    onClick={() => promoteToPaymentMutation.mutate(i.id)}
+                  >
+                    Promote to Payment Queue
+                  </Button>
                 ),
               },
             ]}
@@ -1497,6 +1621,16 @@ export function HumanApprovedSupplierPayments() {
                 ),
               },
               {
+                label: "Ledger Journal",
+                render: (p) => (
+                  <code style={{ fontSize: "0.78rem" }}>
+                    {p.settlement_journal_id
+                      ? p.settlement_journal_id.slice(0, 10) + "…"
+                      : "—"}
+                  </code>
+                ),
+              },
+              {
                 label: "Human Action",
                 render: (p) => (
                   <div style={{ display: "flex", gap: "8px" }}>
@@ -1841,6 +1975,26 @@ export function ReconciliationSlaDashboard() {
       {t && (
         <div className="panel">
           <h3>2. One-Day Reconciliation Completeness Checklist</h3>
+          <div
+            style={{
+              height: "10px",
+              borderRadius: "999px",
+              background: "var(--surface-alt)",
+              border: "1px solid var(--line)",
+              overflow: "hidden",
+              marginBottom: "14px",
+            }}
+            aria-label={`SLA completion ${t.completion_percent}%`}
+          >
+            <div
+              style={{
+                width: `${t.completion_percent}%`,
+                height: "100%",
+                background: "var(--accent)",
+                transition: "width 0.25s ease",
+              }}
+            />
+          </div>
           <Table
             caption="Reconciliation SLA Completeness Checklist"
             rows={t.checklist}
@@ -1859,6 +2013,39 @@ export function ReconciliationSlaDashboard() {
               },
             ]}
           />
+          {t.unlinked_bills.length > 0 && (
+            <div style={{ marginTop: "16px" }}>
+              <h4>Supplier Bills Missing Supporting Receipt / Evidence</h4>
+              <Table
+                caption="Supplier Bills Missing Evidence"
+                rows={t.unlinked_bills}
+                rowKey={(b) => b.id}
+                columns={[
+                  { label: "Bill #", render: (b) => b.number },
+                  { label: "Date", render: (b) => b.accounting_date },
+                  {
+                    label: "Amount",
+                    render: (b) => `${b.currency} ${b.total}`,
+                  },
+                ]}
+              />
+            </div>
+          )}
+          {t.unreviewed_bank_rows.length > 0 && (
+            <div style={{ marginTop: "16px" }}>
+              <h4>Unreviewed Bank Feed Rows Blocking 24h Close</h4>
+              <Table
+                caption="Unreviewed Bank Feed Rows"
+                rows={t.unreviewed_bank_rows}
+                rowKey={(r) => r.id}
+                columns={[
+                  { label: "Date", render: (r) => r.accounting_date },
+                  { label: "Description", render: (r) => r.description },
+                  { label: "Amount", render: (r) => r.amount },
+                ]}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2155,9 +2342,49 @@ export function PayoutReconciliationHub() {
                   </strong>
                 ),
               },
+              {
+                label: "Balanced Double-Entry Split Lines",
+                render: (r) => (
+                  <span style={{ fontSize: "0.78rem" }}>
+                    {(r.split_lines || [])
+                      .map((l) =>
+                        Number(l.debit) > 0
+                          ? `DR ${l.label}: ${l.debit}`
+                          : `CR ${l.label}: ${l.credit}`,
+                      )
+                      .join(" · ")}
+                  </span>
+                ),
+              },
               { label: "Status", render: (r) => <Badge>{r.status}</Badge> },
             ]}
           />
+          {query.data.recent_bank_feed_rows.length > 0 && (
+            <div style={{ marginTop: "16px" }}>
+              <h4>
+                Recent Synced Bank Feed Transactions (Stripe Financial
+                Connections)
+              </h4>
+              <Table
+                caption="Recent Synced Bank Feed Transactions"
+                rows={query.data.recent_bank_feed_rows}
+                rowKey={(row) => row.id}
+                columns={[
+                  { label: "Date", render: (row) => row.accounting_date },
+                  { label: "Description", render: (row) => row.description },
+                  { label: "Amount", render: (row) => row.amount },
+                  {
+                    label: "Feed Trace ID",
+                    render: (row) => <code>{row.external_id || "—"}</code>,
+                  },
+                  {
+                    label: "Review State",
+                    render: (row) => <Badge>{row.state}</Badge>,
+                  },
+                ]}
+              />
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -2293,6 +2520,63 @@ export function VoiceNoteInstructionReview() {
               onChange={(e) => setAudioFilename(e.target.value)}
             />
           </Field>
+          <Field label="Upload Audio Recording (.webm / .mp3 / .wav)">
+            <input
+              type="file"
+              accept="audio/*"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) {
+                  setAudioFilename(f.name);
+                }
+              }}
+            />
+          </Field>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            gap: "8px",
+            flexWrap: "wrap",
+            marginBottom: "10px",
+          }}
+        >
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setAudioFilename("founder-voice-aws-bill.webm");
+              setTranscript(
+                "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax for November production cluster hosting.",
+              );
+            }}
+          >
+            Sample: Supplier Bill ($480)
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setAudioFilename("founder-voice-client-invoice.webm");
+              setTranscript(
+                "Issue customer invoice to Acme Enterprise Corp for $3500.00 including $250.00 tax for Q4 financial advisory retainer.",
+              );
+            }}
+          >
+            Sample: Customer Invoice ($3,500)
+          </Button>
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => {
+              setAudioFilename("founder-voice-kelectric-expense.webm");
+              setTranscript(
+                "Paid expense to K-Electric Utility for $420.00 including $20.00 tax for October office electricity.",
+              );
+            }}
+          >
+            Sample: Utility Expense ($420)
+          </Button>
         </div>
         <Field label="Transcribed Voice Instruction (or Spoken Prompt)">
           <textarea

@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 249,
-  "distinct_operations": 206,
+  "call_sites": 251,
+  "distinct_operations": 208,
   "operations": [
     {
       "file": "App.tsx",
@@ -771,6 +771,11 @@
     {
       "file": "features/p3-automation.tsx",
       "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
       "path": "/api/v1/businesses/{business_id}/p3/reminders/channels"
     },
     {
@@ -797,6 +802,11 @@
       "file": "features/p3-automation.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/p3/supplier-portals/{connection_id}/revoke"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/supplier-portals/ingestions/{ingestion_id}/promote-to-payment"
     },
     {
       "file": "features/p3-automation.tsx",

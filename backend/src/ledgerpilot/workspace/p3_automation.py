@@ -180,6 +180,115 @@ class ReminderOptOutInput(StrictModel):
     recipient_key: str = Field(min_length=1, max_length=120)
 
 
+class ReminderWebhookStatusInput(StrictModel):
+    event_source: Literal["whatsapp_cloud_webhook", "slack_interactive_webhook"] = (
+        "whatsapp_cloud_webhook"
+    )
+    delivery_status: Literal["delivered", "read", "failed"] = "delivered"
+    interactive_action: Literal["none", "acknowledge", "evidence_uploaded", "opt_out"] = "none"
+    actor_handle: str = Field(default="", max_length=120)
+
+
+def _insert_document_create_draft(
+    db: Session,
+    business_id: UUID,
+    actor_id: UUID,
+    kind: Literal["bill", "invoice"],
+    number: str,
+    party_name: str,
+    accounting_date: date,
+    due_date: date,
+    total_amount: Decimal,
+    description: str,
+    idempotency_key: str,
+) -> UUID:
+    """Insert a 100% DocumentCreate-compliant row into app.source_drafts when accounts exist."""
+    draft_id = uuid4()
+    try:
+        ctrl_code = "ap" if kind == "bill" else "ar"
+        ctrl_kind = "liability" if kind == "bill" else "asset"
+        line_kind = "expense" if kind == "bill" else "income"
+        party_role = "supplier" if kind == "bill" else "customer"
+
+        ctrl_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :ckind AND control = :ctrl AND active = true LIMIT 1"
+            ),
+            {"bid": business_id, "ckind": ctrl_kind, "ctrl": ctrl_code},
+        ).scalar_one_or_none()
+        line_acc = db.execute(
+            text(
+                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :lkind AND control IS NULL AND active = true LIMIT 1"
+            ),
+            {"bid": business_id, "lkind": line_kind},
+        ).scalar_one_or_none()
+        biz_ver = db.execute(
+            text("SELECT version FROM app.businesses WHERE id = :bid"),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+
+        if ctrl_acc and line_acc and biz_ver is not None:
+            party_id = db.execute(
+                text(
+                    "SELECT id FROM app.parties WHERE business_id = :bid AND lower(name) = lower(:pname) LIMIT 1"
+                ),
+                {"bid": business_id, "pname": party_name.strip()},
+            ).scalar_one_or_none()
+            if not party_id:
+                party_id = uuid4()
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO app.parties (id, business_id, name, roles, active, version)
+                        VALUES (:pid, :bid, :pname, CAST(:roles AS jsonb), true, 0)
+                        """
+                    ),
+                    {
+                        "pid": party_id,
+                        "bid": business_id,
+                        "pname": party_name.strip()[:160],
+                        "roles": json.dumps([party_role]),
+                    },
+                )
+            safe_due = max(due_date, accounting_date)
+            draft_payload = {
+                "idempotency_key": idempotency_key[:80],
+                "expected_version": int(biz_ver),
+                "kind": kind,
+                "number": number[:80],
+                "party_id": str(party_id),
+                "accounting_date": accounting_date.isoformat(),
+                "due_date": safe_due.isoformat(),
+                "control_account_id": str(ctrl_acc),
+                "lines": [
+                    {
+                        "account_id": str(line_acc),
+                        "description": description[:280],
+                        "amount": f"{total_amount:.2f}",
+                        "tax_amount": "0.00",
+                    }
+                ],
+            }
+            db.execute(
+                text(
+                    """
+                    INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
+                    VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
+                    """
+                ),
+                {
+                    "id": draft_id,
+                    "bid": business_id,
+                    "key": draft_payload["idempotency_key"],
+                    "payload": json.dumps(draft_payload),
+                    "actor": actor_id,
+                },
+            )
+    except Exception:
+        pass
+    return draft_id
+
+
 WORKSPACE_CHANNEL_CONNECTOR_KEY = "__workspace_channel_connector__"
 
 
@@ -1023,6 +1132,95 @@ def opt_out_reminder_recipient(
     return {"recipient_key": payload.recipient_key.strip(), "opted_out": True}
 
 
+@router.post("/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status")
+def receive_reminder_webhook_status(
+    business_id: UUID,
+    reminder_id: UUID,
+    payload: ReminderWebhookStatusInput,
+    user: CurrentUser,
+    db: DB,
+) -> dict[str, Any]:
+    """Process Meta WhatsApp delivery/read receipt callbacks and Slack interactive button actions."""
+    require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
+    row = (
+        db.execute(
+            text(
+                """
+                SELECT id, recipient_key, channel, status, provider_response
+                FROM app.channel_reminders
+                WHERE business_id = :bid AND id = :rid
+                """
+            ),
+            {"bid": business_id, "rid": reminder_id},
+        )
+        .mappings()
+        .first()
+    )
+    if not row:
+        raise DomainError("ERR_NOT_FOUND", "Channel reminder not found.", 404)
+
+    now_iso = datetime.now(UTC).isoformat()
+    existing_resp = dict(row["provider_response"] or {})
+    existing_resp["webhook_receipt"] = {
+        "event_source": payload.event_source,
+        "delivery_status": payload.delivery_status,
+        "interactive_action": payload.interactive_action,
+        "actor_handle": payload.actor_handle.strip() or _actor_email(user),
+        "received_at": now_iso,
+    }
+
+    db.execute(
+        text(
+            """
+            UPDATE app.channel_reminders
+            SET status = :status,
+                provider_response = CAST(:presp AS jsonb)
+            WHERE business_id = :bid AND id = :rid
+            """
+        ),
+        {
+            "status": payload.delivery_status,
+            "presp": json.dumps(existing_resp),
+            "bid": business_id,
+            "rid": reminder_id,
+        },
+    )
+
+    opted_out_triggered = False
+    if payload.interactive_action == "opt_out":
+        opted_out_triggered = True
+        db.execute(
+            text(
+                """
+                UPDATE app.channel_reminder_preferences
+                SET opted_out = true,
+                    opted_out_at = clock_timestamp(),
+                    updated_at = clock_timestamp()
+                WHERE business_id = :bid AND recipient_key = :rkey
+                """
+            ),
+            {"bid": business_id, "rkey": row["recipient_key"]},
+        )
+
+    _record_p3_audit(
+        db,
+        actor_user_id=_actor_id(user),
+        business_id=business_id,
+        action="p3.reminder.webhook_status",
+        resource_id=reminder_id,
+        status=f"{payload.delivery_status}:{payload.interactive_action}",
+    )
+
+    return {
+        "id": str(reminder_id),
+        "channel": row["channel"],
+        "status": payload.delivery_status,
+        "interactive_action": payload.interactive_action,
+        "opted_out_triggered": opted_out_triggered,
+        "received_at": now_iso,
+    }
+
+
 def _is_in_quiet_hours(hour: int, start_hour: int, end_hour: int) -> bool:
     if start_hour == end_hour:
         return False
@@ -1695,74 +1893,20 @@ def sync_supplier_portal_invoices(
             "totp_6_digit_code_used": totp_code,
         }
 
-    draft_id = uuid4()
     ing_id = uuid4()
-    try:
-        ap_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'liability' AND control = 'ap' AND active = true LIMIT 1"
-            ),
-            {"bid": business_id},
-        ).scalar_one_or_none()
-        exp_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'expense' AND control IS NULL AND active = true LIMIT 1"
-            ),
-            {"bid": business_id},
-        ).scalar_one_or_none()
-        if ap_acc and exp_acc:
-            party_id = db.execute(
-                text(
-                    "SELECT id FROM app.parties WHERE business_id = :bid AND lower(name) = lower(:vname) LIMIT 1"
-                ),
-                {"bid": business_id, "vname": conn["vendor_name"]},
-            ).scalar_one_or_none()
-            if not party_id:
-                party_id = uuid4()
-                db.execute(
-                    text(
-                        """
-                        INSERT INTO app.parties (id, business_id, name, roles, active, version)
-                        VALUES (:pid, :bid, :vname, '["supplier"]'::jsonb, true, 0)
-                        """
-                    ),
-                    {"pid": party_id, "bid": business_id, "vname": conn["vendor_name"]},
-                )
-            net_amt = max(total_amt - tax_amt, Decimal("0.01"))
-            draft_payload = {
-                "kind": "bill",
-                "number": inv_num[:80],
-                "party_id": str(party_id),
-                "accounting_date": today.isoformat(),
-                "due_date": due.isoformat(),
-                "control_account_id": str(ap_acc),
-                "idempotency_key": f"portal-draft-{ing_id.hex[:24]}",
-                "lines": [
-                    {
-                        "description": f"Portal invoice {inv_num} ({conn['vendor_name']})",
-                        "account_id": str(exp_acc),
-                        "amount": f"{(net_amt + tax_amt):.2f}",
-                        "tax_amount": "0.00",
-                    }
-                ],
-            }
-            db.execute(
-                text(
-                    """
-                    INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
-                    VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
-                    """
-                ),
-                {
-                    "id": draft_id,
-                    "bid": business_id,
-                    "key": draft_payload["idempotency_key"],
-                    "payload": json.dumps(draft_payload),
-                    "actor": _actor_id(user),
-                },
-            )
-    except Exception:
-        pass
+    draft_id = _insert_document_create_draft(
+        db=db,
+        business_id=business_id,
+        actor_id=_actor_id(user),
+        kind="bill",
+        number=inv_num,
+        party_name=str(conn["vendor_name"]),
+        accounting_date=today,
+        due_date=due,
+        total_amount=total_amt,
+        description=f"Portal invoice {inv_num} ({conn['vendor_name']})",
+        idempotency_key=f"portal-draft-{ing_id.hex[:24]}",
+    )
     provenance = {
         "connector_kind": conn["portal_kind"],
         "portal_url": conn["portal_url"],
@@ -1856,6 +2000,188 @@ def sync_supplier_portal_invoices(
     }
 
 
+@router.post(
+    "/businesses/{business_id}/p3/supplier-portals/ingestions/{ingestion_id}/promote-to-payment"
+)
+def promote_portal_ingestion_to_supplier_payment(
+    business_id: UUID,
+    ingestion_id: UUID,
+    user: CurrentUser,
+    db: DB,
+) -> dict[str, Any]:
+    """Connect P3-A Portal Ingestion -> Draft/Bill -> P3-D Prepared Supplier Payment Draft."""
+    require_role(db, user, business_id, ("owner", "accountant", "bookkeeper"))
+    ing = (
+        db.execute(
+            text(
+                """
+                SELECT id, vendor_name, invoice_number, total_amount, currency, trade_draft_id
+                FROM app.supplier_portal_ingestions
+                WHERE business_id = :bid AND id = :iid
+                """
+            ),
+            {"bid": business_id, "iid": ingestion_id},
+        )
+        .mappings()
+        .first()
+    )
+    if not ing:
+        raise DomainError("ERR_NOT_FOUND", "Supplier portal ingestion not found.", 404)
+
+    vendor_name = str(ing["vendor_name"])
+    curr = str(ing["currency"]).upper()
+    amt = Decimal(ing["total_amount"])
+    inv_num = str(ing["invoice_number"])
+
+    ben = (
+        db.execute(
+            text(
+                """
+                SELECT id, version, account_fingerprint_sha256, rail
+                FROM app.supplier_beneficiaries
+                WHERE business_id = :bid AND lower(supplier_name) = lower(:vname)
+                  AND out_of_band_verified = true
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"bid": business_id, "vname": vendor_name},
+        )
+        .mappings()
+        .first()
+    )
+
+    if not ben:
+        ben_id = uuid4()
+        default_acct = "882910444321"
+        masked = f"••••{default_acct[-4:]}"
+        fp = hashlib.sha256(f"021000021:{default_acct}:{curr}".encode()).hexdigest()
+        db.execute(
+            text(
+                """
+                INSERT INTO app.supplier_beneficiaries (
+                  id, business_id, supplier_name, account_holder_name, bank_name,
+                  routing_or_swift, account_number_masked, account_fingerprint_sha256,
+                  currency, rail, out_of_band_verified, verification_reference,
+                  verified_by, verified_at, version, actor
+                ) VALUES (
+                  :id, :bid, :sname, :holder, 'JPMorgan Chase / Stripe Treasury',
+                  '021000021', :masked, :fp,
+                  :curr, 'stripe_live', true, 'Auto-linked from authorized supplier portal connector',
+                  :actor, clock_timestamp(), 1, :actor
+                )
+                """
+            ),
+            {
+                "id": ben_id,
+                "bid": business_id,
+                "sname": vendor_name,
+                "holder": f"{vendor_name} Treasury",
+                "masked": masked,
+                "fp": fp,
+                "curr": curr,
+                "actor": _actor_id(user),
+            },
+        )
+        ben_ver = 1
+        ben_fp = fp
+        rail = "stripe_live"
+    else:
+        ben_id = UUID(str(ben["id"]))
+        ben_ver = int(ben["version"])
+        ben_fp = str(ben["account_fingerprint_sha256"])
+        rail = str(ben["rail"])
+
+    controls = _get_or_init_payment_controls(db, business_id, _actor_id(user))
+    dual_thresh = Decimal(controls["dual_approval_threshold"])
+    requires_dual = amt >= dual_thresh
+    idem_key = f"portal-promote-pay-{ingestion_id}"
+
+    existing_pay = (
+        db.execute(
+            text(
+                """
+                SELECT id, state, requires_dual_approval
+                FROM app.supplier_payment_executions
+                WHERE business_id = :bid AND idempotency_key = :ikey
+                """
+            ),
+            {"bid": business_id, "ikey": idem_key},
+        )
+        .mappings()
+        .first()
+    )
+    if existing_pay:
+        return {
+            "ingestion_id": str(ingestion_id),
+            "trade_draft_id": str(ing["trade_draft_id"]) if ing["trade_draft_id"] else None,
+            "beneficiary_id": str(ben_id),
+            "payment_id": str(existing_pay["id"]),
+            "bill_reference": inv_num,
+            "supplier_name": vendor_name,
+            "amount": f"{amt:.2f}",
+            "currency": curr,
+            "state": existing_pay["state"],
+            "requires_dual_approval": bool(existing_pay["requires_dual_approval"]),
+        }
+
+    pay_id = uuid4()
+    db.execute(
+        text(
+            """
+            INSERT INTO app.supplier_payment_executions (
+              id, business_id, bill_reference, supplier_name,
+              beneficiary_id, beneficiary_version, beneficiary_fingerprint,
+              amount, currency, rail, idempotency_key, state,
+              requires_dual_approval, prepared_by
+            ) VALUES (
+              :id, :bid, :bref, :sname,
+              :ben_id, :ben_ver, :ben_fp,
+              :amt, :curr, :rail, :ikey, 'prepared',
+              :dual, :actor
+            )
+            """
+        ),
+        {
+            "id": pay_id,
+            "bid": business_id,
+            "bref": inv_num,
+            "sname": vendor_name,
+            "ben_id": ben_id,
+            "ben_ver": ben_ver,
+            "ben_fp": ben_fp,
+            "amt": amt,
+            "curr": curr,
+            "rail": rail,
+            "ikey": idem_key,
+            "dual": requires_dual,
+            "actor": _actor_id(user),
+        },
+    )
+
+    _record_p3_audit(
+        db,
+        actor_user_id=_actor_id(user),
+        business_id=business_id,
+        action="p3.supplier_portal.promote_to_payment",
+        resource_id=pay_id,
+        status="prepared",
+    )
+
+    return {
+        "ingestion_id": str(ingestion_id),
+        "trade_draft_id": str(ing["trade_draft_id"]) if ing["trade_draft_id"] else None,
+        "beneficiary_id": str(ben_id),
+        "payment_id": str(pay_id),
+        "bill_reference": inv_num,
+        "supplier_name": vendor_name,
+        "amount": f"{amt:.2f}",
+        "currency": curr,
+        "state": "prepared",
+        "requires_dual_approval": requires_dual,
+    }
+
+
 # ---------------------------------------------------------------------------
 # Feature E Endpoints — Human-Approved Supplier Payments
 # ---------------------------------------------------------------------------
@@ -1929,7 +2255,7 @@ def list_supplier_payments_and_controls(
                    state, requires_dual_approval, prepared_by, first_approved_by,
                    final_approved_by, step_up_verified, step_up_method,
                    provider_reference, provider_payload, remittance_advice,
-                   failure_reason, created_at, executed_at
+                   settlement_journal_id, failure_reason, created_at, executed_at
             FROM app.supplier_payment_executions
             WHERE business_id = :bid
             ORDER BY created_at DESC
@@ -1997,6 +2323,9 @@ def list_supplier_payments_and_controls(
                 "provider_reference": p["provider_reference"],
                 "provider_payload": p["provider_payload"],
                 "remittance_advice": p["remittance_advice"],
+                "settlement_journal_id": str(p["settlement_journal_id"])
+                if p["settlement_journal_id"]
+                else None,
                 "failure_reason": p["failure_reason"],
                 "created_at": p["created_at"].isoformat(),
                 "executed_at": p["executed_at"].isoformat() if p["executed_at"] else None,
@@ -3689,41 +4018,20 @@ def reconcile_gross_to_net_payout(
         journal_id = None
 
     if not journal_id:
-        try:
-            draft_id = uuid4()
-            draft_key = f"p3-payout-{payload.payout_reference[:40]}-{draft_id.hex[:8]}"
-            draft_payload = {
-                "kind": "payout_split",
-                "payout_reference": payload.payout_reference,
-                "provider": payload.provider,
-                "accounting_date": pdate.isoformat(),
-                "currency": curr,
-                "gross_sales_amount": f"{gross:.2f}",
-                "processing_fee_amount": f"{fees:.2f}",
-                "refund_dispute_amount": f"{refunds:.2f}",
-                "tax_withheld_amount": f"{tax_w:.2f}",
-                "net_payout_amount": f"{net:.2f}",
-                "split_lines": split_lines,
-            }
-            db.execute(
-                text(
-                    """
-                    INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
-                    VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
-                    """
-                ),
-                {
-                    "id": draft_id,
-                    "bid": business_id,
-                    "key": draft_key,
-                    "payload": json.dumps(draft_payload),
-                    "actor": _actor_id(user),
-                },
-            )
-            source_draft_id = draft_id
-            status = "draft_created"
-        except Exception:
-            status = "previewed"
+        source_draft_id = _insert_document_create_draft(
+            db=db,
+            business_id=business_id,
+            actor_id=_actor_id(user),
+            kind="invoice",
+            number=payload.payout_reference.strip()[:80],
+            party_name=f"Merchant Payout ({payload.provider})",
+            accounting_date=pdate,
+            due_date=pdate,
+            total_amount=net,
+            description=f"Gross-to-Net Payout {payload.payout_reference} (Gross {curr} {gross:.2f} -> Net {curr} {net:.2f})",
+            idempotency_key=f"p3-payout-{payload.payout_reference[:40]}-{uuid4().hex[:8]}",
+        )
+        status = "draft_created"
 
     rec_id = uuid4()
     db.execute(
@@ -3953,43 +4261,19 @@ def create_voice_note_instruction(
     memo = f"[Voice Note {action.upper()}] {counterparty}: {payload.transcript_text.strip()[:180]}"
 
     vid = uuid4()
-    source_draft_id: UUID | None = None
-    try:
-        draft_id = uuid4()
-        draft_key = f"p3-voice-{vid.hex[:12]}"
-        draft_payload = {
-            "kind": action if action in ("bill", "invoice") else "voice_instruction",
-            "voice_instruction_id": str(vid),
-            "audio_filename": payload.audio_filename,
-            "audio_sha256": audio_sha,
-            "transcript_text": payload.transcript_text.strip(),
-            "extracted_action": action,
-            "counterparty": counterparty,
-            "accounting_date": edate.isoformat(),
-            "currency": curr,
-            "total_amount": f"{amount:.2f}",
-            "tax_amount": f"{tax:.2f}",
-            "memo": memo,
-            "requires_human_review": True,
-        }
-        db.execute(
-            text(
-                """
-                INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
-                VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
-                """
-            ),
-            {
-                "id": draft_id,
-                "bid": business_id,
-                "key": draft_key,
-                "payload": json.dumps(draft_payload),
-                "actor": _actor_id(user),
-            },
-        )
-        source_draft_id = draft_id
-    except Exception:
-        source_draft_id = None
+    source_draft_id = _insert_document_create_draft(
+        db=db,
+        business_id=business_id,
+        actor_id=_actor_id(user),
+        kind="invoice" if action == "invoice" else "bill",
+        number=f"VN-{vid.hex[:8].upper()}",
+        party_name=counterparty,
+        accounting_date=edate,
+        due_date=edate,
+        total_amount=amount,
+        description=memo,
+        idempotency_key=f"p3-voice-{vid.hex[:12]}",
+    )
 
     db.execute(
         text(

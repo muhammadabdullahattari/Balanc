@@ -771,6 +771,36 @@ function Workspace() {
                         run: () => navigate(item.to),
                       })),
                     {
+                      id: "quick-new-invoice",
+                      label: "Action · Create New Sales Invoice",
+                      hint: "/sales",
+                      run: () => navigate("/sales"),
+                    },
+                    {
+                      id: "quick-new-bill",
+                      label: "Action · Record New Supplier Bill",
+                      hint: "/purchases",
+                      run: () => navigate("/purchases"),
+                    },
+                    {
+                      id: "quick-new-journal",
+                      label: "Action · Post General Ledger Journal Entry",
+                      hint: "/ledger",
+                      run: () => navigate("/ledger"),
+                    },
+                    {
+                      id: "quick-ask-books",
+                      label: "Action · Ask Book Question & Financial Reports",
+                      hint: "/reports",
+                      run: () => navigate("/reports"),
+                    },
+                    {
+                      id: "quick-dispatch-reminder",
+                      label: "Action · Dispatch WhatsApp / Slack Reminder",
+                      hint: "/reminders",
+                      run: () => navigate("/reminders"),
+                    },
+                    {
                       id: "/reconciliation-sla",
                       label: "3.1 · One-Day Reconciliation SLA & Auto-Chasing",
                       hint: "/reconciliation-sla",

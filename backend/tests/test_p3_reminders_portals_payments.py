@@ -261,6 +261,33 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert rem1_data["attempt_number"] == 1
         assert rem1_data["provider_message_id"].startswith("wamid.")
 
+        # Enhancement #5: Real-Time WhatsApp Delivery & Read Webhook Status Transitions
+        wh_delivered = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/webhook-status",
+            headers=headers,
+            json={
+                "event_source": "whatsapp_cloud_webhook",
+                "delivery_status": "delivered",
+                "interactive_action": "none",
+            },
+        )
+        assert wh_delivered.status_code == 200, wh_delivered.text
+        assert wh_delivered.json()["status"] == "delivered"
+
+        wh_read = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/webhook-status",
+            headers=headers,
+            json={
+                "event_source": "slack_interactive_webhook",
+                "delivery_status": "read",
+                "interactive_action": "acknowledge",
+                "actor_handle": "@finance-approver",
+            },
+        )
+        assert wh_read.status_code == 200, wh_read.text
+        assert wh_read.json()["status"] == "read"
+        assert wh_read.json()["interactive_action"] == "acknowledge"
+
         # Idempotent replay with same idempotency_key
         rem1_replay = await accountant.post(
             f"/api/v1/businesses/{bid}/p3/reminders/dispatch",
@@ -409,6 +436,15 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sync1_data["duplicate_skipped"] is False
         assert len(sync1_data["totp_6_digit_code_used"]) == 6
         assert sync1_data["provenance"]["ledger_posting"] == "blocked_until_human_review"
+
+        # Enhancement #1: Promote ingested supplier portal invoice into Supplier Payment Queue
+        promote_resp = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/supplier-portals/ingestions/{sync1_data['id']}/promote-to-payment",
+            headers=headers,
+        )
+        assert promote_resp.status_code == 200, promote_resp.text
+        assert promote_resp.json()["state"] == "prepared"
+        assert promote_resp.json()["bill_reference"] == "INV-KE-9901"
 
         # Duplicate replay of the same invoice is safely skipped
         sync_dup = await accountant.post(
