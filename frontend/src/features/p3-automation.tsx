@@ -799,6 +799,9 @@ export function SupplierPortalConnectors() {
     code: string;
     remaining: number;
   } | null>(null);
+  const [syncInvoiceNumber, setSyncInvoiceNumber] = useState("");
+  const [syncTotalAmount, setSyncTotalAmount] = useState("425.00");
+  const [syncTaxAmount, setSyncTaxAmount] = useState("25.00");
   const [syncMessage, setSyncMessage] = useState("");
   const [revokeTarget, setRevokeTarget] = useState<{
     id: string;
@@ -882,11 +885,11 @@ export function SupplierPortalConnectors() {
               path: { business_id: b.id, connection_id: connectionId },
             },
             body: {
-              external_invoice_id: "",
-              invoice_number: "",
-              total_amount: "425.00",
-              tax_amount: "25.00",
-              currency: "USD",
+              external_invoice_id: syncInvoiceNumber.trim(),
+              invoice_number: syncInvoiceNumber.trim(),
+              total_amount: syncTotalAmount || "425.00",
+              tax_amount: syncTaxAmount || "25.00",
+              currency: b.currency || "USD",
               simulate_portal_changed: false,
             },
           },
@@ -1077,6 +1080,31 @@ export function SupplierPortalConnectors() {
           <ErrorNotice
             error={syncPortalMutation.error || revokeMutation.error}
           />
+          <div className="form-grid" style={{ marginBottom: "12px" }}>
+            <Field label="Portal Invoice # (Optional override)">
+              <input
+                value={syncInvoiceNumber}
+                onChange={(e) => setSyncInvoiceNumber(e.target.value)}
+                placeholder="Auto-detect from portal or enter e.g. INV-2026-991"
+              />
+            </Field>
+            <Field label="Expected / Extracted Total Amount">
+              <input
+                type="number"
+                step="0.01"
+                value={syncTotalAmount}
+                onChange={(e) => setSyncTotalAmount(e.target.value)}
+              />
+            </Field>
+            <Field label="Expected / Extracted Tax Amount">
+              <input
+                type="number"
+                step="0.01"
+                value={syncTaxAmount}
+                onChange={(e) => setSyncTaxAmount(e.target.value)}
+              />
+            </Field>
+          </div>
           {syncMessage && (
             <p role="status" className="success-text">
               {syncMessage}
