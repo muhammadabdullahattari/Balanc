@@ -17,6 +17,7 @@ from uuid import UUID, uuid4
 import jwt
 import requests
 from fastapi import APIRouter, Query, Request
+from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -1522,6 +1523,11 @@ def quickbooks_callback(
     )
     encrypted = encryption(settings).encrypt(json.dumps(tokens).encode()).decode()
     save(db, business_id, "quickbooks", {"realm_id": realmId, "tokens": encrypted})
+    if "text/html" in request.headers.get("accept", "").lower():
+        return RedirectResponse(  # type: ignore[return-value]
+            url=f"/settings?quickbooks=connected&business_id={business_id}",
+            status_code=303,
+        )
     return {"connected": True}
 
 
@@ -2008,8 +2014,13 @@ def preview_quickbooks(
             "oauth_configured": oauth_configured,
         }
     if current.get("direct_connect"):
+        tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
+        access_tok = str(tokens.get("access_token", ""))
+        is_demo_token = (
+            access_tok.startswith(("qb_sandbox_", "demo_", "test_", "sandbox_"))
+            or settings.app_env == "test"
+        )
         try:
-            tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
             base_host = (
                 "https://quickbooks.api.intuit.com"
                 if current.get("environment") == "production"
@@ -2019,7 +2030,7 @@ def preview_quickbooks(
                 "GET",
                 f"{base_host}/v3/company/{current['realm_id']}/query",
                 headers={
-                    "Authorization": f"Bearer {tokens['access_token']}",
+                    "Authorization": f"Bearer {access_tok}",
                     "Accept": "application/json",
                 },
                 params={
@@ -2030,6 +2041,8 @@ def preview_quickbooks(
             )
             rows = result["QueryResponse"].get(entity, [])
         except Exception:
+            if not is_demo_token:
+                raise
             rows = _sandbox_qb_preview_records(entity)
         return {
             "entity": entity,
@@ -2530,6 +2543,12 @@ def import_quickbooks(
         }
 
     if current.get("direct_connect"):
+        tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
+        access_tok = str(tokens.get("access_token", ""))
+        is_demo_token = (
+            access_tok.startswith(("qb_sandbox_", "demo_", "test_", "sandbox_"))
+            or settings.app_env == "test"
+        )
         try:
             return execute_quickbooks_import(
                 db=db,
@@ -2542,6 +2561,8 @@ def import_quickbooks(
                 user_id=identity.user.id,
             )
         except Exception:
+            if not is_demo_token:
+                raise
             return _execute_builtin_sandbox_quickbooks_import(
                 db=db,
                 business_id=business_id,

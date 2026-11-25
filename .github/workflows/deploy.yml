@@ -48,7 +48,7 @@ jobs:
       - name: Run Staging Preflight Checks
         run: |
           echo "Executing staging preflight validation..."
-          python scripts/staging_preflight.py --target staging --skip-destructive || true
+          python scripts/staging_preflight.py --target staging --skip-destructive
 
       - name: Run Database Migrations (Migration Role)
         env:

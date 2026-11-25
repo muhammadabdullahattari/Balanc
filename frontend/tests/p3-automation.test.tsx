@@ -43,8 +43,41 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
             default_rail: "stripe_live",
             stripe_live_available: true,
           },
-          beneficiaries: [],
-          payments: [],
+          beneficiaries: [
+            {
+              id: "ben-1",
+              supplier_name: "Amazon Web Services Inc.",
+              account_holder_name: "AWS Treasury",
+              bank_name: "JPMorgan Chase",
+              routing_or_swift: "021000021",
+              account_number_masked: "********4321",
+              currency: "USD",
+              rail: "stripe_live",
+              out_of_band_verified: true,
+              verification_reference: "Callback verified",
+              version: 1,
+            },
+          ],
+          payments: [
+            {
+              id: "pay-1",
+              bill_reference: "BILL-AWS-2026-114",
+              supplier_name: "Amazon Web Services Inc.",
+              beneficiary_id: "ben-1",
+              beneficiary_version: 1,
+              amount: "425.00",
+              currency: "USD",
+              rail: "stripe_live",
+              state: "prepared",
+              requires_dual_approval: false,
+              step_up_verified: false,
+              provider_reference: "",
+              remittance_advice: "",
+              failure_reason: "",
+              created_at: "2026-11-25T00:00:00Z",
+              executed_at: null,
+            },
+          ],
         },
       } as never;
     }
@@ -82,6 +115,18 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
     );
     const stepUpInput = await screen.findByLabelText(/Step-Up 2FA Code/);
     expect((stepUpInput as HTMLInputElement).value).toBe("");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Approve & Release Payment" }),
+    );
+    expect(
+      await screen.findByRole("dialog", {
+        name: "Confirm Supplier Payment Settlement",
+      }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Confirm & Execute Settlement" }),
+    ).toBeDisabled();
   } finally {
     client.clear();
     get.mockRestore();

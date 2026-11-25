@@ -48,7 +48,7 @@ import {
   queryClient,
   result,
 } from "./api/runtime";
-import { Button, ErrorNotice, Loading } from "./components/ui";
+import { Button, ErrorNotice, Loading, Modal } from "./components/ui";
 import { Auth } from "./features/auth";
 import { BusinessContext, AccessContext } from "./features/context";
 const BusinessChooser = lazy(() =>
@@ -202,6 +202,9 @@ function Workspace() {
     return undefined;
   });
   const [mobile, setMobile] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [paletteQuery, setPaletteQuery] = useState("");
+  const [paletteIndex, setPaletteIndex] = useState(0);
   const [narrow, setNarrow] = useState(
     () =>
       typeof matchMedia !== "undefined" &&
@@ -304,8 +307,22 @@ function Workspace() {
   }, [theme]);
   useEffect(() => {
     setMobile(false);
+    setPaletteOpen(false);
     document.getElementById("main-content")?.focus();
   }, [location.pathname]);
+  useEffect(() => {
+    if (!businessId) return;
+    const onGlobalKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen((prev) => !prev);
+        setPaletteQuery("");
+        setPaletteIndex(0);
+      }
+    };
+    window.addEventListener("keydown", onGlobalKey);
+    return () => window.removeEventListener("keydown", onGlobalKey);
+  }, [businessId]);
   const session = useQuery({
     queryKey: keys.session,
     queryFn: async ({ signal }) => {
@@ -605,6 +622,20 @@ function Workspace() {
                 </strong>
               </div>
               <div className="header-actions">
+                <button
+                  type="button"
+                  className="command-palette-trigger"
+                  aria-label="Open command palette (Ctrl+K)"
+                  onClick={() => {
+                    setPaletteOpen(true);
+                    setPaletteQuery("");
+                    setPaletteIndex(0);
+                  }}
+                >
+                  <SearchIcon size={15} />
+                  <span>Jump to…</span>
+                  <kbd>Ctrl+K</kbd>
+                </button>
                 <NavLink
                   to="/search"
                   className="icon-button"
@@ -706,6 +737,140 @@ function Workspace() {
                   {business.data.currency} · {business.data.timezone}
                 </span>
               </footer>
+              {paletteOpen &&
+                (() => {
+                  const paletteItems = [
+                    ...navigation
+                      .filter(
+                        (item) =>
+                          (item.to !== "/prepaids" ||
+                            business.data.p2_prepaids_available) &&
+                          (item.to !== "/projects" ||
+                            business.data.p2_projects_available),
+                      )
+                      .map((item) => ({
+                        id: item.to,
+                        label: item.label,
+                        hint: item.to,
+                        run: () => navigate(item.to),
+                      })),
+                    {
+                      id: "/settings",
+                      label: "Settings & Integrations",
+                      hint: "/settings",
+                      run: () => navigate("/settings"),
+                    },
+                    {
+                      id: "/settings/billing",
+                      label: "Billing & Subscription",
+                      hint: "/settings/billing",
+                      run: () => navigate("/settings/billing"),
+                    },
+                    {
+                      id: "action-theme",
+                      label:
+                        theme === "light"
+                          ? "Switch to Dark Mode"
+                          : "Switch to Light Mode",
+                      hint: "Appearance",
+                      run: () => setTheme(theme === "light" ? "dark" : "light"),
+                    },
+                    {
+                      id: "action-switch-business",
+                      label: "Switch Business Workspace",
+                      hint: business.data.name,
+                      run: () => setBusinessId(undefined),
+                    },
+                  ].filter((item) => {
+                    const q = paletteQuery.trim().toLowerCase();
+                    if (!q) return true;
+                    return (
+                      item.label.toLowerCase().includes(q) ||
+                      item.hint.toLowerCase().includes(q)
+                    );
+                  });
+                  const activeIdx =
+                    paletteItems.length > 0
+                      ? Math.min(paletteIndex, paletteItems.length - 1)
+                      : 0;
+                  return (
+                    <Modal
+                      open={true}
+                      title="Quick Command Palette"
+                      description="Filter and jump to any workspace view or action."
+                      onClose={() => setPaletteOpen(false)}
+                    >
+                      <div className="command-palette">
+                        <input
+                          type="search"
+                          aria-label="Filter workspace commands"
+                          placeholder="Jump to any view or action (e.g. Supplier payments, WhatsApp, Reconciliation)…"
+                          value={paletteQuery}
+                          autoFocus
+                          onChange={(e) => {
+                            setPaletteQuery(e.target.value);
+                            setPaletteIndex(0);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === "ArrowDown") {
+                              e.preventDefault();
+                              setPaletteIndex((i) =>
+                                paletteItems.length
+                                  ? (i + 1) % paletteItems.length
+                                  : 0,
+                              );
+                            } else if (e.key === "ArrowUp") {
+                              e.preventDefault();
+                              setPaletteIndex((i) =>
+                                paletteItems.length
+                                  ? (i - 1 + paletteItems.length) %
+                                    paletteItems.length
+                                  : 0,
+                              );
+                            } else if (
+                              e.key === "Enter" &&
+                              paletteItems[activeIdx]
+                            ) {
+                              e.preventDefault();
+                              const chosen = paletteItems[activeIdx];
+                              setPaletteOpen(false);
+                              chosen.run();
+                            }
+                          }}
+                        />
+                        <div
+                          className="command-palette-list"
+                          role="listbox"
+                          aria-label="Workspace commands"
+                        >
+                          {paletteItems.length === 0 ? (
+                            <p className="muted" style={{ padding: "12px" }}>
+                              No matching workspace views or commands.
+                            </p>
+                          ) : (
+                            paletteItems.map((item, idx) => (
+                              <button
+                                type="button"
+                                key={item.id}
+                                role="option"
+                                aria-selected={idx === activeIdx}
+                                className={`command-palette-item ${idx === activeIdx ? "is-active" : ""}`}
+                                onMouseEnter={() => setPaletteIndex(idx)}
+                                onClick={() => {
+                                  setPaletteOpen(false);
+                                  item.run();
+                                }}
+                              >
+                                <span>{item.label}</span>
+                                <small>{item.hint}</small>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      </div>
+                    </Modal>
+                  );
+                })()}
             </main>
           </div>
         </div>

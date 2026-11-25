@@ -94,7 +94,7 @@ def upgrade() -> None:
             JOIN app.businesses w ON w.id=m.business_id WHERE m.user_id=app.actor()
             AND m.active AND m.role IN ('owner','accountant') LOOP
             PERFORM set_config('app.business_id', b.bid::text,true);
-            RETURN QUERY WITH open_items(kind,source_id,level) AS (
+            RETURN QUERY WITH open_items(kind,source_id,level) AS MATERIALIZED (
               SELECT 'bank',r.id,1 FROM app.bank_rows r WHERE r.business_id=b.bid AND r.state='for_review'
               UNION ALL SELECT 'bill',d.id,2 FROM app.trade_documents d WHERE d.business_id=b.bid
                 AND d.kind='bill' AND NOT EXISTS (SELECT FROM app.evidence_links l WHERE

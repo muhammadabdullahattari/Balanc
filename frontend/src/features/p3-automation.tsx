@@ -6,6 +6,7 @@ import {
   Button,
   ErrorNotice,
   Field,
+  Modal,
   PageHeading,
   SectionTabs,
   Table,
@@ -716,6 +717,10 @@ export function SupplierPortalConnectors() {
     remaining: number;
   } | null>(null);
   const [syncMessage, setSyncMessage] = useState("");
+  const [revokeTarget, setRevokeTarget] = useState<{
+    id: string;
+    vendor_name: string;
+  } | null>(null);
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-portals"],
@@ -1006,7 +1011,12 @@ export function SupplierPortalConnectors() {
                       <Button
                         variant="danger"
                         busy={revokeMutation.isPending}
-                        onClick={() => revokeMutation.mutate(c.id)}
+                        onClick={() =>
+                          setRevokeTarget({
+                            id: c.id,
+                            vendor_name: c.vendor_name,
+                          })
+                        }
                       >
                         Revoke
                       </Button>
@@ -1017,6 +1027,49 @@ export function SupplierPortalConnectors() {
             ]}
           />
         </div>
+      )}
+
+      {revokeTarget && (
+        <Modal
+          open={true}
+          title="Revoke Supplier Portal Connector"
+          description="Deactivate scheduled invoice syncs and stored TOTP credentials for this vendor."
+          onClose={() => setRevokeTarget(null)}
+        >
+          <p>
+            Are you sure you want to revoke the authorized portal connection for{" "}
+            <strong>{revokeTarget.vendor_name}</strong>? Scheduled invoice syncs
+            and stored TOTP credentials will be deactivated immediately.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              justifyContent: "flex-end",
+              marginTop: "16px",
+            }}
+          >
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setRevokeTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="danger"
+              busy={revokeMutation.isPending}
+              onClick={() => {
+                revokeMutation.mutate(revokeTarget.id, {
+                  onSuccess: () => setRevokeTarget(null),
+                });
+              }}
+            >
+              Confirm Revoke
+            </Button>
+          </div>
+        </Modal>
       )}
 
       {query.data && (
@@ -1081,6 +1134,9 @@ export function HumanApprovedSupplierPayments() {
   const [stepUpCode, setStepUpCode] = useState("");
   const [activeRemittance, setActiveRemittance] = useState<string>("");
   const [statusNotice, setStatusNotice] = useState<string>("");
+  const [confirmPayment, setConfirmPayment] = useState<
+    PaymentsData["payments"][number] | null
+  >(null);
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1448,7 +1504,7 @@ export function HumanApprovedSupplierPayments() {
                       canApprove && (
                         <Button
                           busy={approveAndExecute.isPending}
-                          onClick={() => approveAndExecute.mutate(p.id)}
+                          onClick={() => setConfirmPayment(p)}
                         >
                           {p.state === "first_approved"
                             ? "Final Dual Approve & Release"
@@ -1468,6 +1524,88 @@ export function HumanApprovedSupplierPayments() {
               },
             ]}
           />
+          {confirmPayment && (
+            <Modal
+              open={true}
+              title="Confirm Supplier Payment Settlement"
+              description="Verify beneficiary bank account details and provide your Step-Up 2FA code to release funds."
+              onClose={() => setConfirmPayment(null)}
+            >
+              <div className="stack" style={{ gap: "12px" }}>
+                <p className="muted">
+                  Review beneficiary bank details and provide your Step-Up 2FA
+                  verification code before releasing funds.
+                </p>
+                <div
+                  className="panel"
+                  style={{
+                    padding: "12px",
+                    background: "var(--surface-alt)",
+                  }}
+                >
+                  <div>
+                    <strong>Supplier:</strong> {confirmPayment.supplier_name}
+                  </div>
+                  <div>
+                    <strong>Bill Reference:</strong>{" "}
+                    {confirmPayment.bill_reference}
+                  </div>
+                  <div>
+                    <strong>Settlement Amount:</strong>{" "}
+                    {confirmPayment.currency} {confirmPayment.amount}
+                  </div>
+                  <div>
+                    <strong>Payment Rail:</strong>{" "}
+                    <Badge>{confirmPayment.rail}</Badge>
+                  </div>
+                  <div>
+                    <strong>Beneficiary Account:</strong>{" "}
+                    <code>
+                      {query.data.beneficiaries.find(
+                        (ben) => ben.id === confirmPayment.beneficiary_id,
+                      )?.account_number_masked || "Verified Account"}{" "}
+                      (v{confirmPayment.beneficiary_version})
+                    </code>
+                  </div>
+                </div>
+                <Field label="Step-Up 2FA Code (6-digit TOTP or APPROVE)">
+                  <input
+                    value={stepUpCode}
+                    onChange={(e) => setStepUpCode(e.target.value)}
+                    placeholder="Enter 6-digit authenticator code"
+                    autoFocus
+                  />
+                </Field>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "10px",
+                    justifyContent: "flex-end",
+                  }}
+                >
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setConfirmPayment(null)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    type="button"
+                    disabled={!stepUpCode.trim()}
+                    busy={approveAndExecute.isPending}
+                    onClick={() => {
+                      approveAndExecute.mutate(confirmPayment.id, {
+                        onSuccess: () => setConfirmPayment(null),
+                      });
+                    }}
+                  >
+                    Confirm & Execute Settlement
+                  </Button>
+                </div>
+              </div>
+            </Modal>
+          )}
           {activeRemittance && (
             <div
               className="panel"

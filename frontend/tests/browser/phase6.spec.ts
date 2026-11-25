@@ -92,7 +92,11 @@ async function setup(page: Page, role = "accountant") {
   ).toBeVisible();
   // The dashboard loads account choices after rendering its heading. Wait for
   // that request before installing overrides for the chart-of-accounts screen.
-  await expect(page.getByLabel("Cash account").locator("option", { hasText: "Synthetic cash" })).toHaveCount(1);
+  await expect(
+    page
+      .getByLabel("Cash account")
+      .locator("option", { hasText: "Synthetic cash" }),
+  ).toHaveCount(1);
   return failures;
 }
 async function navigate(page: Page, label: string, group?: string) {
@@ -361,9 +365,7 @@ test("pending read shows loading until the response and never fabricates rows", 
     page.getByRole("cell", { name: "Synthetic cash", exact: true }),
   ).toHaveCount(0);
   release();
-  await expect(
-    page.getByText("No accounts yet"),
-  ).toBeVisible();
+  await expect(page.getByText("No accounts yet")).toBeVisible();
 });
 test("read timeout is bounded and presents recovery without replay", async ({
   page,
@@ -409,8 +411,10 @@ test("dashboard preserves exact totals and exposes chart data and freshness", as
   await expect(page.getByRole("img", { name: /Monthly income/ })).toBeVisible();
   if (test.info().project.name === "chromium") {
     for (const theme of ["light", "dark"]) {
-      if (await page.locator("html").getAttribute("data-theme") !== theme)
-        await page.getByRole("button", { name: "Switch to " + theme + " mode" }).click();
+      if ((await page.locator("html").getAttribute("data-theme")) !== theme)
+        await page
+          .getByRole("button", { name: "Switch to " + theme + " mode" })
+          .click();
       await test.info().attach("dashboard-" + theme, {
         body: await page.screenshot({ fullPage: true, animations: "disabled" }),
         contentType: "image/png",
@@ -422,51 +426,81 @@ test("dashboard preserves exact totals and exposes chart data and freshness", as
   await expect(page.getByText(/phase6-report/)).toContainText("accrual basis");
 });
 
-test("import choices remain readable in both themes and fit a narrow screen", async ({ page }) => {
+test("import choices remain readable in both themes and fit a narrow screen", async ({
+  page,
+}) => {
   await setup(page);
-  await page.route("**/quickbooks/preview?*", (route) => route.fulfill({json: {items: []}}));
+  await page.route("**/quickbooks/preview?*", (route) =>
+    route.fulfill({ json: { items: [] } }),
+  );
   await navigate(page, "Settings");
-  await page.getByRole("tab", {name: "Integrations"}).click();
-  const choice = page.getByLabel("Chart of Accounts", {exact: true});
+  await page.getByRole("tab", { name: "Integrations" }).click();
+  const choice = page.getByLabel("Chart of Accounts", { exact: true });
   await expect(choice).toBeVisible();
-  for (const theme of ["light","dark"]) {
-    if (await page.locator("html").getAttribute("data-theme") !== theme)
-      await page.getByRole("button", {name: "Switch to " + theme + " mode"}).click();
+  for (const theme of ["light", "dark"]) {
+    if ((await page.locator("html").getAttribute("data-theme")) !== theme)
+      await page
+        .getByRole("button", { name: "Switch to " + theme + " mode" })
+        .click();
     const contrast = await choice.evaluate((input) => {
       const style = getComputedStyle(input.closest("label")!);
       const luminance = (color: string) => {
-        const [r,g,b] = color.match(/\d+/g)!.slice(0,3).map((v) => {
-          const channel = Number(v)/255;
-          return channel <= .04045 ? channel/12.92 : ((channel+.055)/1.055)**2.4;
-        });
-        return .2126*r+.7152*g+.0722*b;
+        const [r, g, b] = color
+          .match(/\d+/g)!
+          .slice(0, 3)
+          .map((v) => {
+            const channel = Number(v) / 255;
+            return channel <= 0.04045
+              ? channel / 12.92
+              : ((channel + 0.055) / 1.055) ** 2.4;
+          });
+        return 0.2126 * r + 0.7152 * g + 0.0722 * b;
       };
-      const a=luminance(style.color), b=luminance(style.backgroundColor);
-      return (Math.max(a,b)+.05)/(Math.min(a,b)+.05);
+      const a = luminance(style.color),
+        b = luminance(style.backgroundColor);
+      return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
     });
     expect(contrast).toBeGreaterThanOrEqual(4.5);
   }
   for (const width of [2560, 320]) {
-    await page.setViewportSize({width,height:900});
-    await expect.poll(() => page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(width);
+    await page.setViewportSize({ width, height: 900 });
+    await expect
+      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+      .toBeLessThanOrEqual(width);
   }
   await page.context().setOffline(true);
-  await expect(page.getByText("You’re offline. Reconnect before saving changes.")).toBeVisible();
+  await expect(
+    page.getByText("You’re offline. Reconnect before saving changes."),
+  ).toBeVisible();
   await page.context().setOffline(false);
-  await expect(page.getByText("You’re offline. Reconnect before saving changes.")).toBeHidden();
+  await expect(
+    page.getByText("You’re offline. Reconnect before saving changes."),
+  ).toBeHidden();
 });
 
-test("canceling a file choice clears it before the next upload", async ({ page }) => {
+test("canceling a file choice clears it before the next upload", async ({
+  page,
+}) => {
   await setup(page);
   await navigate(page, "Documents");
   const open = page.getByRole("button", { name: "Upload document" });
   await open.click();
   const chooser = page.waitForEvent("filechooser");
   await page.locator('input[type="file"]').click();
-  await (await chooser).setFiles({ name: "receipt.csv", mimeType: "text/csv", buffer: Buffer.from("amount\n1\n") });
-  await expect(page.getByRole("button", { name: "Upload securely" })).toBeEnabled();
+  await (
+    await chooser
+  ).setFiles({
+    name: "receipt.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("amount\n1\n"),
+  });
+  await expect(
+    page.getByRole("button", { name: "Upload securely" }),
+  ).toBeEnabled();
   await page.keyboard.press("Escape");
   await open.click();
-  await expect(page.getByRole("button", { name: "Upload securely" })).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Upload securely" }),
+  ).toBeDisabled();
   await expect(page.getByText(/receipt\.csv/)).toHaveCount(0);
 });

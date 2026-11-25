@@ -451,13 +451,13 @@ export function Reports() {
                 </details>
                 {b.p2_insights_available && (
                   <ForecastAnswers
-                    key={forecast.data.report_id}
+                    key={`answers-${forecast.data.report_id}`}
                     reportId={forecast.data.report_id}
                   />
                 )}
                 {b.p2_insights_available && (
                   <ForecastEvaluation
-                    key={forecast.data.report_id}
+                    key={`evaluation-${forecast.data.report_id}`}
                     reportId={forecast.data.report_id}
                   />
                 )}

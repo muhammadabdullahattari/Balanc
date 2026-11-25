@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
-import { Badge, Button, ErrorNotice, Field, Table } from "../components/ui";
+import {
+  Badge,
+  Button,
+  ErrorNotice,
+  Field,
+  Modal,
+  Table,
+} from "../components/ui";
 import { today, useBusiness } from "./context";
 
 export function QuickBooksImport() {
@@ -122,6 +129,7 @@ export function QuickBooksImport() {
     | undefined;
 
   const [qbStatusNotice, setQbStatusNotice] = useState<string>("");
+  const [confirmLiveImport, setConfirmLiveImport] = useState(false);
 
   const oauthAuthorize = useMutation({
     mutationFn: () =>
@@ -405,19 +413,53 @@ export function QuickBooksImport() {
             !dryRunData?.reconciled ||
             importLive.isSuccess
           }
-          onClick={() => {
-            if (
-              window.confirm(
-                "Post these historical QuickBooks records to the general ledger? This action creates permanent audited journal entries.",
-              )
-            ) {
-              importLive.mutate();
-            }
-          }}
+          onClick={() => setConfirmLiveImport(true)}
         >
           Confirm & Post to Ledger
         </Button>
       </div>
+
+      {confirmLiveImport && (
+        <Modal
+          open={true}
+          title="Confirm QuickBooks General Ledger Import"
+          description="Post reconciled QuickBooks historical books into permanent audited general ledger entries."
+          onClose={() => setConfirmLiveImport(false)}
+        >
+          <p>
+            Post these historical QuickBooks records through cutover date{" "}
+            <strong>{cutoverDate}</strong> to the general ledger? This action
+            creates permanent audited journal entries.
+          </p>
+          <div
+            style={{
+              display: "flex",
+              gap: "10px",
+              justifyContent: "flex-end",
+              marginTop: "16px",
+            }}
+          >
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setConfirmLiveImport(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              busy={importLive.isPending}
+              onClick={() => {
+                importLive.mutate(undefined, {
+                  onSuccess: () => setConfirmLiveImport(false),
+                });
+              }}
+            >
+              Confirm & Post Journals
+            </Button>
+          </div>
+        </Modal>
+      )}
 
       {dryRunData && (
         <div

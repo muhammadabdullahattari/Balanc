@@ -162,12 +162,27 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                         from alembic import command
                         from alembic.config import Config
 
-                        cfg = Config("alembic.ini")
-                        db_url = configured.database_url.get_secret_value()
-                        cfg.set_main_option("sqlalchemy.url", db_url)
-                        command.upgrade(cfg, "head")
-                        logger.info("Automatic database migrations completed successfully.")
-                        break
+                        with application.state.readiness_engine.connect() as lock_conn:
+                            acquired = bool(
+                                lock_conn.execute(
+                                    text("SELECT pg_try_advisory_lock(78291044)")
+                                ).scalar()
+                            )
+                            if not acquired:
+                                logger.info(
+                                    "Another replica holds the migration advisory lock; waiting..."
+                                )
+                                time.sleep(3)
+                                continue
+                            try:
+                                cfg = Config("alembic.ini")
+                                db_url = configured.database_url.get_secret_value()
+                                cfg.set_main_option("sqlalchemy.url", db_url)
+                                command.upgrade(cfg, "head")
+                                logger.info("Automatic database migrations completed successfully.")
+                                break
+                            finally:
+                                lock_conn.execute(text("SELECT pg_advisory_unlock(78291044)"))
                     except Exception as exc:
                         logger.warning(
                             "Automatic database migration attempt %d failed: %s", attempt + 1, exc
@@ -384,7 +399,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 version = connection.execute(
                     text("SELECT version_num FROM app.alembic_version")
                 ).scalar_one_or_none()
-                if version != "0039":
+                if not version or not version.isdigit() or int(version) < 39:
                     raise ValueError
             return JSONResponse({"status": "ready"})
         except (SQLAlchemyError, ValueError):

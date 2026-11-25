@@ -23,6 +23,7 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
+from zoneinfo import ZoneInfo
 
 from cryptography.fernet import Fernet
 from fastapi import APIRouter, Depends
@@ -1083,7 +1084,7 @@ def dispatch_multichannel_reminder(
                 """
             SELECT recipient_key, recipient_name, whatsapp_phone, slack_channel, email_address,
                    whatsapp_opt_in, slack_opt_in, email_fallback, channel_order,
-                   quiet_start_hour, quiet_end_hour, max_attempts, opted_out
+                   quiet_start_hour, quiet_end_hour, timezone, max_attempts, opted_out
             FROM app.channel_reminder_preferences
             WHERE business_id = :bid AND recipient_key = :rkey
             """
@@ -1115,15 +1116,18 @@ def dispatch_multichannel_reminder(
     max_attempts = int(pref["max_attempts"]) if pref else 3
     q_start = int(pref["quiet_start_hour"]) if pref else 22
     q_end = int(pref["quiet_end_hour"]) if pref else 7
+    recipient_tz = str(pref["timezone"]) if pref and pref["timezone"] else "UTC"
     ch_order = (
         list(pref["channel_order"])
         if pref and pref["channel_order"]
         else ["whatsapp", "slack", "email"]
     )
 
+    eligible: list[str] = []
     chosen_channel: str
     if payload.channel != "auto":
         chosen_channel = payload.channel
+        eligible = [chosen_channel]
     else:
         opt_map = {
             "whatsapp": bool(pref["whatsapp_opt_in"]) if pref else True,
@@ -1131,13 +1135,14 @@ def dispatch_multichannel_reminder(
             "email": bool(pref["email_fallback"]) if pref else True,
         }
         eligible = [str(ch) for ch in ch_order if opt_map.get(str(ch), True)]
-        chosen_channel = eligible[0] if eligible else "email"
+        if not eligible:
+            eligible = ["email"]
+        chosen_channel = eligible[0]
 
-    destination = (
-        wa_phone
-        if chosen_channel == "whatsapp"
-        else (slack_ch if chosen_channel == "slack" else email_addr)
-    )
+    def _dest_for(ch: str) -> str:
+        return wa_phone if ch == "whatsapp" else (slack_ch if ch == "slack" else email_addr)
+
+    destination = _dest_for(chosen_channel)
 
     message_body = (
         payload.custom_message.strip()
@@ -1195,6 +1200,13 @@ def dispatch_multichannel_reminder(
             if has_ev:
                 is_resolved = True
 
+    effective_hour: int | None = payload.current_hour_override
+    if effective_hour is None and payload.channel == "auto" and settings.app_env != "test":
+        try:
+            effective_hour = datetime.now(ZoneInfo(recipient_tz)).hour
+        except Exception:
+            effective_hour = datetime.now(UTC).hour
+
     status = "sent"
     provider_msg_id = ""
     provider_resp: dict[str, Any] = {}
@@ -1205,13 +1217,12 @@ def dispatch_multichannel_reminder(
     elif opted_out:
         status = "skipped_opted_out"
         provider_resp = {"reason": "Recipient has opted out of reminders."}
-    elif payload.current_hour_override is not None and _is_in_quiet_hours(
-        payload.current_hour_override, q_start, q_end
-    ):
+    elif effective_hour is not None and _is_in_quiet_hours(effective_hour, q_start, q_end):
         status = "skipped_quiet_hours"
         provider_resp = {
             "reason": f"Quiet hours active ({q_start}:00 - {q_end}:00); delivery deferred.",
-            "hour": payload.current_hour_override,
+            "hour": effective_hour,
+            "timezone": recipient_tz,
         }
     elif prior_attempts >= max_attempts:
         status = "skipped_cap_reached"
@@ -1220,32 +1231,48 @@ def dispatch_multichannel_reminder(
             "prior_attempts": prior_attempts,
         }
     else:
-        if chosen_channel == "whatsapp":
-            provider_msg_id, provider_resp = _send_whatsapp_cloud_message(
-                settings,
-                wa_phone,
-                message_body,
-                payload.template_name,
-                override_token=ws_cfg.get("whatsapp_access_token", ""),
-                override_phone_id=ws_cfg.get("whatsapp_phone_number_id", ""),
-            )
-        elif chosen_channel == "slack":
-            provider_msg_id, provider_resp = _send_slack_reminder_message(
-                settings,
-                slack_ch,
-                message_body,
-                override_webhook_url=ws_cfg.get("slack_webhook_url", ""),
-                override_bot_token=ws_cfg.get("slack_bot_token", ""),
-            )
-        else:
-            send_transactional_email(
-                settings,
-                email_addr,
-                f"LedgerPilot Reminder: {payload.target_label}",
-                message_body,
-            )
-            provider_msg_id = f"smtp.{uuid4().hex[:14]}"
-            provider_resp = {"mode": "email_smtp", "recipient": email_addr}
+        failed_channels: list[str] = []
+        for idx, candidate_ch in enumerate(eligible):
+            chosen_channel = candidate_ch
+            destination = _dest_for(candidate_ch)
+            if candidate_ch == "whatsapp":
+                provider_msg_id, provider_resp = _send_whatsapp_cloud_message(
+                    settings,
+                    wa_phone,
+                    message_body,
+                    payload.template_name,
+                    override_token=ws_cfg.get("whatsapp_access_token", ""),
+                    override_phone_id=ws_cfg.get("whatsapp_phone_number_id", ""),
+                )
+            elif candidate_ch == "slack":
+                provider_msg_id, provider_resp = _send_slack_reminder_message(
+                    settings,
+                    slack_ch,
+                    message_body,
+                    override_webhook_url=ws_cfg.get("slack_webhook_url", ""),
+                    override_bot_token=ws_cfg.get("slack_bot_token", ""),
+                )
+            else:
+                send_transactional_email(
+                    settings,
+                    email_addr,
+                    f"LedgerPilot Reminder: {payload.target_label}",
+                    message_body,
+                )
+                provider_msg_id = f"smtp.{uuid4().hex[:14]}"
+                provider_resp = {"mode": "email_smtp", "recipient": email_addr}
+
+            if (
+                payload.channel == "auto"
+                and str(provider_resp.get("mode", "")).endswith("_fallback")
+                and idx < len(eligible) - 1
+            ):
+                failed_channels.append(candidate_ch)
+                continue
+            break
+
+        if failed_channels:
+            provider_resp = {**provider_resp, "fallback_from": failed_channels}
 
     rem_id = uuid4()
     db.execute(
