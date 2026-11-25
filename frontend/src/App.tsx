@@ -7,6 +7,7 @@ import {
   useRef,
   type ReactNode,
 } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/react";
 import {
   BrowserRouter,
   NavLink,
@@ -722,6 +723,7 @@ export default function App() {
           </Suspense>
         </BrowserRouter>
       </QueryClientProvider>
+      <SpeedInsights />
     </ErrorBoundary>
   );
 }
