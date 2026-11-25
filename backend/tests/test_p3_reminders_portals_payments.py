@@ -389,7 +389,7 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
 
         # Enhancement #5: Real-Time WhatsApp Delivery & Read Webhook Status Transitions
         wh_delivered = await accountant.post(
-            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/webhook-status",
+            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/delivery-status",
             headers=headers,
             json={
                 "event_source": "whatsapp_cloud_webhook",
@@ -401,7 +401,7 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert wh_delivered.json()["status"] == "delivered"
 
         wh_read = await accountant.post(
-            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/webhook-status",
+            f"/api/v1/businesses/{bid}/p3/reminders/{rem1_data['id']}/delivery-status",
             headers=headers,
             json={
                 "event_source": "slack_interactive_webhook",
@@ -948,7 +948,7 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         # 9. P3-I (P3-I1): Contract Revenue, Payroll Clearing & Short-Pay Resolution
         # =====================================================================
         rev_sched = await accountant.post(
-            f"/api/v1/businesses/{bid}/p3/accounting-expansion/execute",
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion/compute",
             headers=headers,
             json={
                 "workflow_kind": "contract_revenue_schedule",
@@ -965,7 +965,7 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert rev_sched.json()["deferred_or_variance_amount"] == "11000.00"
 
         short_pay = await accountant.post(
-            f"/api/v1/businesses/{bid}/p3/accounting-expansion/execute",
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion/compute",
             headers=headers,
             json={
                 "workflow_kind": "short_pay_resolution",

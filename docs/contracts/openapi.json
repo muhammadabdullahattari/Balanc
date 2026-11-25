@@ -43444,9 +43444,9 @@
         ]
       }
     },
-    "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute": {
+    "/api/v1/businesses/{business_id}/p3/accounting-expansion/compute": {
       "post": {
-        "operationId": "execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_execute_post",
+        "operationId": "execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_compute_post",
         "parameters": [
           {
             "in": "path",
@@ -43475,7 +43475,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Execute Accounting Expansion Workflow Api V1 Businesses  Business Id  P3 Accounting Expansion Execute Post",
+                  "title": "Response Execute Accounting Expansion Workflow Api V1 Businesses  Business Id  P3 Accounting Expansion Compute Post",
                   "type": "object"
                 }
               }
@@ -46983,10 +46983,10 @@
         ]
       }
     },
-    "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status": {
+    "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/delivery-status": {
       "post": {
         "description": "Process Meta WhatsApp delivery/read receipt callbacks and Slack interactive button actions.",
-        "operationId": "receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__webhook_status_post",
+        "operationId": "receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__delivery_status_post",
         "parameters": [
           {
             "in": "path",
@@ -47025,7 +47025,7 @@
               "application/json": {
                 "schema": {
                   "additionalProperties": true,
-                  "title": "Response Receive Reminder Webhook Status Api V1 Businesses  Business Id  P3 Reminders  Reminder Id  Webhook Status Post",
+                  "title": "Response Receive Reminder Webhook Status Api V1 Businesses  Business Id  P3 Reminders  Reminder Id  Delivery Status Post",
                   "type": "object"
                 }
               }

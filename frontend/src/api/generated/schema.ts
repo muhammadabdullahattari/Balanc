@@ -2222,7 +2222,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute": {
+    "/api/v1/businesses/{business_id}/p3/accounting-expansion/compute": {
         parameters: {
             query?: never;
             header?: never;
@@ -2232,7 +2232,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Execute Accounting Expansion Workflow */
-        post: operations["execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_execute_post"];
+        post: operations["execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_compute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -2532,7 +2532,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status": {
+    "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/delivery-status": {
         parameters: {
             query?: never;
             header?: never;
@@ -2545,7 +2545,7 @@ export interface paths {
          * Receive Reminder Webhook Status
          * @description Process Meta WhatsApp delivery/read receipt callbacks and Slack interactive button actions.
          */
-        post: operations["receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__webhook_status_post"];
+        post: operations["receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__delivery_status_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -32573,7 +32573,7 @@ export interface operations {
             };
         };
     };
-    execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_execute_post: {
+    execute_accounting_expansion_workflow_api_v1_businesses__business_id__p3_accounting_expansion_compute_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -35471,7 +35471,7 @@ export interface operations {
             };
         };
     };
-    receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__webhook_status_post: {
+    receive_reminder_webhook_status_api_v1_businesses__business_id__p3_reminders__reminder_id__delivery_status_post: {
         parameters: {
             query?: never;
             header?: never;

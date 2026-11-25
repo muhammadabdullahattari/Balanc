@@ -219,136 +219,137 @@ def _insert_document_create_draft(
     """Insert a 100% DocumentCreate-compliant row into app.source_drafts when accounts exist."""
     draft_id = uuid4()
     try:
-        ctrl_code = "ap" if kind == "bill" else "ar"
-        ctrl_kind = "liability" if kind == "bill" else "asset"
-        line_kind = "expense" if kind == "bill" else "income"
-        party_role = "supplier" if kind == "bill" else "customer"
+        with db.begin_nested():
+            ctrl_code = "ap" if kind == "bill" else "ar"
+            ctrl_kind = "liability" if kind == "bill" else "asset"
+            line_kind = "expense" if kind == "bill" else "income"
+            party_role = "supplier" if kind == "bill" else "customer"
 
-        ctrl_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :ckind AND control = :ctrl AND active = true LIMIT 1"
-            ),
-            {"bid": business_id, "ckind": ctrl_kind, "ctrl": ctrl_code},
-        ).scalar_one_or_none()
-        if not ctrl_acc:
-            ctrl_acc = uuid4()
-            db.execute(
-                text(
-                    """
-                    INSERT INTO app.accounts (id, business_id, code, name, kind, control, active, version)
-                    VALUES (:id, :bid, :code, :name, :ckind, :ctrl, true, 0)
-                    ON CONFLICT DO NOTHING
-                    """
-                ),
-                {
-                    "id": ctrl_acc,
-                    "bid": business_id,
-                    "code": "2000" if kind == "bill" else "1100",
-                    "name": "Accounts Payable" if kind == "bill" else "Accounts Receivable",
-                    "ckind": ctrl_kind,
-                    "ctrl": ctrl_code,
-                },
-            )
             ctrl_acc = db.execute(
                 text(
                     "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :ckind AND control = :ctrl AND active = true LIMIT 1"
                 ),
                 {"bid": business_id, "ckind": ctrl_kind, "ctrl": ctrl_code},
             ).scalar_one_or_none()
+            if not ctrl_acc:
+                ctrl_acc = uuid4()
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO app.accounts (id, business_id, code, name, kind, control, active, version)
+                        VALUES (:id, :bid, :code, :name, :ckind, :ctrl, true, 0)
+                        ON CONFLICT DO NOTHING
+                        """
+                    ),
+                    {
+                        "id": ctrl_acc,
+                        "bid": business_id,
+                        "code": "2000" if kind == "bill" else "1100",
+                        "name": "Accounts Payable" if kind == "bill" else "Accounts Receivable",
+                        "ckind": ctrl_kind,
+                        "ctrl": ctrl_code,
+                    },
+                )
+                ctrl_acc = db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :ckind AND control = :ctrl AND active = true LIMIT 1"
+                    ),
+                    {"bid": business_id, "ckind": ctrl_kind, "ctrl": ctrl_code},
+                ).scalar_one_or_none()
 
-        line_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :lkind AND control IS NULL AND active = true LIMIT 1"
-            ),
-            {"bid": business_id, "lkind": line_kind},
-        ).scalar_one_or_none()
-        if not line_acc:
-            line_acc = uuid4()
-            db.execute(
-                text(
-                    """
-                    INSERT INTO app.accounts (id, business_id, code, name, kind, control, active, version)
-                    VALUES (:id, :bid, :code, :name, :lkind, NULL, true, 0)
-                    ON CONFLICT DO NOTHING
-                    """
-                ),
-                {
-                    "id": line_acc,
-                    "bid": business_id,
-                    "code": "5000" if kind == "bill" else "4000",
-                    "name": "Operating Expenses" if kind == "bill" else "Sales Revenue",
-                    "lkind": line_kind,
-                },
-            )
             line_acc = db.execute(
                 text(
                     "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :lkind AND control IS NULL AND active = true LIMIT 1"
                 ),
                 {"bid": business_id, "lkind": line_kind},
             ).scalar_one_or_none()
-
-        biz_ver = db.execute(
-            text("SELECT version FROM app.businesses WHERE id = :bid"),
-            {"bid": business_id},
-        ).scalar_one_or_none()
-
-        if ctrl_acc and line_acc and biz_ver is not None:
-            party_id = db.execute(
-                text(
-                    "SELECT id FROM app.parties WHERE business_id = :bid AND lower(name) = lower(:pname) LIMIT 1"
-                ),
-                {"bid": business_id, "pname": party_name.strip()},
-            ).scalar_one_or_none()
-            if not party_id:
-                party_id = uuid4()
+            if not line_acc:
+                line_acc = uuid4()
                 db.execute(
                     text(
                         """
-                        INSERT INTO app.parties (id, business_id, name, roles, active, version)
-                        VALUES (:pid, :bid, :pname, CAST(:roles AS jsonb), true, 0)
+                        INSERT INTO app.accounts (id, business_id, code, name, kind, control, active, version)
+                        VALUES (:id, :bid, :code, :name, :lkind, NULL, true, 0)
+                        ON CONFLICT DO NOTHING
                         """
                     ),
                     {
-                        "pid": party_id,
+                        "id": line_acc,
                         "bid": business_id,
-                        "pname": party_name.strip()[:160],
-                        "roles": json.dumps([party_role]),
+                        "code": "5000" if kind == "bill" else "4000",
+                        "name": "Operating Expenses" if kind == "bill" else "Sales Revenue",
+                        "lkind": line_kind,
                     },
                 )
-            safe_due = max(due_date, accounting_date)
-            draft_payload = {
-                "idempotency_key": idempotency_key[:80],
-                "expected_version": int(biz_ver),
-                "kind": kind,
-                "number": number[:80],
-                "party_id": str(party_id),
-                "accounting_date": accounting_date.isoformat(),
-                "due_date": safe_due.isoformat(),
-                "control_account_id": str(ctrl_acc),
-                "lines": [
+                line_acc = db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = :lkind AND control IS NULL AND active = true LIMIT 1"
+                    ),
+                    {"bid": business_id, "lkind": line_kind},
+                ).scalar_one_or_none()
+
+            biz_ver = db.execute(
+                text("SELECT version FROM app.businesses WHERE id = :bid"),
+                {"bid": business_id},
+            ).scalar_one_or_none()
+
+            if ctrl_acc and line_acc and biz_ver is not None:
+                party_id = db.execute(
+                    text(
+                        "SELECT id FROM app.parties WHERE business_id = :bid AND lower(name) = lower(:pname) LIMIT 1"
+                    ),
+                    {"bid": business_id, "pname": party_name.strip()},
+                ).scalar_one_or_none()
+                if not party_id:
+                    party_id = uuid4()
+                    db.execute(
+                        text(
+                            """
+                            INSERT INTO app.parties (id, business_id, name, roles, active, version)
+                            VALUES (:pid, :bid, :pname, CAST(:roles AS jsonb), true, 0)
+                            """
+                        ),
+                        {
+                            "pid": party_id,
+                            "bid": business_id,
+                            "pname": party_name.strip()[:160],
+                            "roles": json.dumps([party_role]),
+                        },
+                    )
+                safe_due = max(due_date, accounting_date)
+                draft_payload = {
+                    "idempotency_key": idempotency_key[:80],
+                    "expected_version": int(biz_ver),
+                    "kind": kind,
+                    "number": number[:80],
+                    "party_id": str(party_id),
+                    "accounting_date": accounting_date.isoformat(),
+                    "due_date": safe_due.isoformat(),
+                    "control_account_id": str(ctrl_acc),
+                    "lines": [
+                        {
+                            "account_id": str(line_acc),
+                            "description": description[:280],
+                            "amount": f"{total_amount:.2f}",
+                            "tax_amount": "0.00",
+                        }
+                    ],
+                }
+                db.execute(
+                    text(
+                        """
+                        INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
+                        VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
+                        """
+                    ),
                     {
-                        "account_id": str(line_acc),
-                        "description": description[:280],
-                        "amount": f"{total_amount:.2f}",
-                        "tax_amount": "0.00",
-                    }
-                ],
-            }
-            db.execute(
-                text(
-                    """
-                    INSERT INTO app.source_drafts (id, business_id, key, payload, status, version, prepared_by)
-                    VALUES (:id, :bid, :key, CAST(:payload AS jsonb), 'draft', 0, :actor)
-                    """
-                ),
-                {
-                    "id": draft_id,
-                    "bid": business_id,
-                    "key": draft_payload["idempotency_key"],
-                    "payload": json.dumps(draft_payload),
-                    "actor": actor_id,
-                },
-            )
+                        "id": draft_id,
+                        "bid": business_id,
+                        "key": draft_payload["idempotency_key"],
+                        "payload": json.dumps(draft_payload),
+                        "actor": actor_id,
+                    },
+                )
     except Exception:
         pass
     return draft_id
@@ -1226,7 +1227,7 @@ def opt_out_reminder_recipient(
     return {"recipient_key": payload.recipient_key.strip(), "opted_out": True}
 
 
-@router.post("/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status")
+@router.post("/businesses/{business_id}/p3/reminders/{reminder_id}/delivery-status")
 def receive_reminder_webhook_status(
     business_id: UUID,
     reminder_id: UUID,
@@ -2948,12 +2949,13 @@ def approve_and_execute_supplier_payment(
 
             from ledgerpilot.identity.security import encryption as mfa_encryption
 
-            enc_secret = db.execute(
-                text(
-                    "SELECT encrypted_secret FROM app.mfa_factors WHERE user_id = :uid AND verified = true"
-                ),
-                {"uid": _actor_id(user)},
-            ).scalar_one_or_none()
+            with db.begin_nested():
+                enc_secret = db.execute(
+                    text(
+                        "SELECT encrypted_secret FROM app.mfa_factors WHERE user_id = :uid AND verified = true"
+                    ),
+                    {"uid": _actor_id(user)},
+                ).scalar_one_or_none()
             if enc_secret and isinstance(enc_secret, str):
                 totp_secret = mfa_encryption(settings).decrypt(enc_secret.encode()).decode()
                 if not pyotp.TOTP(totp_secret).verify(code, valid_window=2):
@@ -3005,29 +3007,30 @@ def approve_and_execute_supplier_payment(
         and UUID(str(pay["first_approved_by"])) == _actor_id(user)
     ):
         try:
-            is_owner = bool(
-                db.execute(
-                    text("SELECT app.has_role(:bid, ARRAY['owner'])"),
-                    {"bid": business_id},
-                ).scalar_one_or_none()
-            )
-            other_approvers = (
-                1
-                if not is_owner
-                else int(
+            with db.begin_nested():
+                is_owner = bool(
                     db.execute(
-                        text(
-                            """
-                            SELECT count(*) FROM app.memberships
-                            WHERE business_id = :bid AND active = true
-                              AND role IN ('owner', 'accountant') AND user_id != :actor
-                            """
-                        ),
-                        {"bid": business_id, "actor": _actor_id(user)},
-                    ).scalar_one()
-                    or 0
+                        text("SELECT app.has_role(:bid, ARRAY['owner'])"),
+                        {"bid": business_id},
+                    ).scalar_one_or_none()
                 )
-            )
+                other_approvers = (
+                    1
+                    if not is_owner
+                    else int(
+                        db.execute(
+                            text(
+                                """
+                                SELECT count(*) FROM app.memberships
+                                WHERE business_id = :bid AND active = true
+                                  AND role IN ('owner', 'accountant') AND user_id != :actor
+                                """
+                            ),
+                            {"bid": business_id, "actor": _actor_id(user)},
+                        ).scalar_one()
+                        or 0
+                    )
+                )
         except Exception:
             other_approvers = 0
         if other_approvers > 0:
@@ -3087,135 +3090,137 @@ def approve_and_execute_supplier_payment(
     linked_bill_id: UUID | None = pay["bill_id"]
     if not linked_bill_id and pay["bill_reference"]:
         try:
-            linked_bill_id = db.execute(
-                text(
-                    "SELECT id FROM app.trade_documents WHERE business_id = :bid AND kind = 'bill' AND number = :bref LIMIT 1"
-                ),
-                {"bid": business_id, "bref": str(pay["bill_reference"]).strip()},
-            ).scalar_one_or_none()
+            with db.begin_nested():
+                linked_bill_id = db.execute(
+                    text(
+                        "SELECT id FROM app.trade_documents WHERE business_id = :bid AND kind = 'bill' AND number = :bref LIMIT 1"
+                    ),
+                    {"bid": business_id, "bref": str(pay["bill_reference"]).strip()},
+                ).scalar_one_or_none()
         except Exception:
             linked_bill_id = None
     try:
-        can_post = bool(
-            db.execute(
-                text("SELECT app.can_post(:bid)"),
-                {"bid": business_id},
-            ).scalar_one_or_none()
-        )
-        ap_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'liability' AND control = 'ap' AND active = true LIMIT 1"
-            ),
-            {"bid": business_id},
-        ).scalar_one_or_none()
-        bank_acc = db.execute(
-            text(
-                "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'asset' AND control IS NULL AND active = true LIMIT 1"
-            ),
-            {"bid": business_id},
-        ).scalar_one_or_none()
-        biz_row = (
-            db.execute(
-                text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
-                {"bid": business_id},
-            )
-            .mappings()
-            .first()
-        )
-        if can_post and ap_acc and bank_acc and biz_row and str(biz_row["currency"]) == curr:
-            lines_json = json.dumps(
-                [
-                    {
-                        "account_id": str(ap_acc),
-                        "debit": f"{amt:.2f}",
-                        "credit": "0.00",
-                    },
-                    {
-                        "account_id": str(bank_acc),
-                        "debit": "0.00",
-                        "credit": f"{amt:.2f}",
-                    },
-                ]
-            )
-            idem_j = f"p3-pay-settle-{payment_id}"
-            req_hash = hashlib.sha256(f"{idem_j}:{lines_json}".encode()).hexdigest()
-            settlement_journal_id = db.execute(
-                text(
-                    """
-                    SELECT app.post_journal(
-                      :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
-                    )
-                    """
-                ),
-                {
-                    "bid": business_id,
-                    "adate": date.today(),
-                    "memo": f"Supplier Payment Settlement: {pay['supplier_name']} ({pay['bill_reference']}) [{provider_ref}]",
-                    "curr": curr,
-                    "idem": idem_j,
-                    "rhash": req_hash,
-                    "bver": int(biz_row["version"]),
-                    "lines": lines_json,
-                },
-            ).scalar_one_or_none()
-            if settlement_journal_id and linked_bill_id:
-                bill_party_id = db.execute(
-                    text(
-                        "SELECT party_id FROM app.trade_documents WHERE business_id = :bid AND id = :lbid"
-                    ),
-                    {"bid": business_id, "lbid": linked_bill_id},
+        with db.begin_nested():
+            can_post = bool(
+                db.execute(
+                    text("SELECT app.can_post(:bid)"),
+                    {"bid": business_id},
                 ).scalar_one_or_none()
-                if bill_party_id:
-                    pay_rec_id = uuid4()
-                    alloc_id = uuid4()
-                    alloc_json = json.dumps(
-                        [{"document_id": str(linked_bill_id), "amount": f"{amt:.2f}"}]
-                    )
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO app.payments (
-                              id, business_id, kind, party_id, accounting_date,
-                              bank_account_id, control_account_id, total, fee_amount,
-                              journal_id, allocations
-                            ) VALUES (
-                              :id, :bid, 'payment', :pid, :adate,
-                              :bank_id, :ap_id, :tot, 0,
-                              :jid, CAST(:allocs AS jsonb)
-                            )
-                            """
-                        ),
+            )
+            ap_acc = db.execute(
+                text(
+                    "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'liability' AND control = 'ap' AND active = true LIMIT 1"
+                ),
+                {"bid": business_id},
+            ).scalar_one_or_none()
+            bank_acc = db.execute(
+                text(
+                    "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'asset' AND control IS NULL AND active = true LIMIT 1"
+                ),
+                {"bid": business_id},
+            ).scalar_one_or_none()
+            biz_row = (
+                db.execute(
+                    text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
+                    {"bid": business_id},
+                )
+                .mappings()
+                .first()
+            )
+            if can_post and ap_acc and bank_acc and biz_row and str(biz_row["currency"]) == curr:
+                lines_json = json.dumps(
+                    [
                         {
-                            "id": pay_rec_id,
-                            "bid": business_id,
-                            "pid": bill_party_id,
-                            "adate": date.today(),
-                            "bank_id": bank_acc,
-                            "ap_id": ap_acc,
-                            "tot": amt,
-                            "jid": settlement_journal_id,
-                            "allocs": alloc_json,
+                            "account_id": str(ap_acc),
+                            "debit": f"{amt:.2f}",
+                            "credit": "0.00",
                         },
-                    )
-                    db.execute(
-                        text(
-                            """
-                            INSERT INTO app.allocations (
-                              id, business_id, payment_id, document_id, amount, accounting_date
-                            ) VALUES (
-                              :id, :bid, :pay_id, :doc_id, :amt, :adate
-                            )
-                            """
-                        ),
                         {
-                            "id": alloc_id,
-                            "bid": business_id,
-                            "pay_id": pay_rec_id,
-                            "doc_id": linked_bill_id,
-                            "amt": amt,
-                            "adate": date.today(),
+                            "account_id": str(bank_acc),
+                            "debit": "0.00",
+                            "credit": f"{amt:.2f}",
                         },
-                    )
+                    ]
+                )
+                idem_j = f"p3-pay-settle-{payment_id}"
+                req_hash = hashlib.sha256(f"{idem_j}:{lines_json}".encode()).hexdigest()
+                settlement_journal_id = db.execute(
+                    text(
+                        """
+                        SELECT app.post_journal(
+                          :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
+                        )
+                        """
+                    ),
+                    {
+                        "bid": business_id,
+                        "adate": date.today(),
+                        "memo": f"Supplier Payment Settlement: {pay['supplier_name']} ({pay['bill_reference']}) [{provider_ref}]",
+                        "curr": curr,
+                        "idem": idem_j,
+                        "rhash": req_hash,
+                        "bver": int(biz_row["version"]),
+                        "lines": lines_json,
+                    },
+                ).scalar_one_or_none()
+                if settlement_journal_id and linked_bill_id:
+                    bill_party_id = db.execute(
+                        text(
+                            "SELECT party_id FROM app.trade_documents WHERE business_id = :bid AND id = :lbid"
+                        ),
+                        {"bid": business_id, "lbid": linked_bill_id},
+                    ).scalar_one_or_none()
+                    if bill_party_id:
+                        pay_rec_id = uuid4()
+                        alloc_id = uuid4()
+                        alloc_json = json.dumps(
+                            [{"document_id": str(linked_bill_id), "amount": f"{amt:.2f}"}]
+                        )
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO app.payments (
+                                  id, business_id, kind, party_id, accounting_date,
+                                  bank_account_id, control_account_id, total, fee_amount,
+                                  journal_id, allocations
+                                ) VALUES (
+                                  :id, :bid, 'payment', :pid, :adate,
+                                  :bank_id, :ap_id, :tot, 0,
+                                  :jid, CAST(:allocs AS jsonb)
+                                )
+                                """
+                            ),
+                            {
+                                "id": pay_rec_id,
+                                "bid": business_id,
+                                "pid": bill_party_id,
+                                "adate": date.today(),
+                                "bank_id": bank_acc,
+                                "ap_id": ap_acc,
+                                "tot": amt,
+                                "jid": settlement_journal_id,
+                                "allocs": alloc_json,
+                            },
+                        )
+                        db.execute(
+                            text(
+                                """
+                                INSERT INTO app.allocations (
+                                  id, business_id, payment_id, document_id, amount, accounting_date
+                                ) VALUES (
+                                  :id, :bid, :pay_id, :doc_id, :amt, :adate
+                                )
+                                """
+                            ),
+                            {
+                                "id": alloc_id,
+                                "bid": business_id,
+                                "pay_id": pay_rec_id,
+                                "doc_id": linked_bill_id,
+                                "amt": amt,
+                                "adate": date.today(),
+                            },
+                        )
     except Exception:
         settlement_journal_id = None
 
@@ -3343,11 +3348,19 @@ def _compute_live_sla_metrics(db: Session, business_id: UUID) -> dict[str, Any]:
         or 0
     )
 
+    biz_currency = str(
+        db.execute(
+            text("SELECT currency FROM app.businesses WHERE id = :bid"),
+            {"bid": business_id},
+        ).scalar_one_or_none()
+        or "USD"
+    )
+
     unlinked_bills = (
         db.execute(
             text(
                 """
-                SELECT d.id, d.number, d.total, d.currency, d.accounting_date
+                SELECT d.id, d.number, d.total, d.accounting_date
                 FROM app.trade_documents d
                 WHERE d.business_id = :bid AND d.kind = 'bill'
                   AND NOT EXISTS (
@@ -3423,7 +3436,7 @@ def _compute_live_sla_metrics(db: Session, business_id: UUID) -> dict[str, Any]:
                 "id": str(b["id"]),
                 "number": b["number"],
                 "total": f"{Decimal(b['total']):.2f}",
-                "currency": b["currency"],
+                "currency": biz_currency,
                 "accounting_date": b["accounting_date"].isoformat(),
             }
             for b in unlinked_bills
@@ -4178,56 +4191,59 @@ def reconcile_gross_to_net_payout(
     status = "previewed"
 
     try:
-        can_post = bool(
-            db.execute(text("SELECT app.can_post(:bid)"), {"bid": business_id}).scalar_one_or_none()
-        )
-        biz_row = (
-            db.execute(
-                text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
-                {"bid": business_id},
+        with db.begin_nested():
+            can_post = bool(
+                db.execute(
+                    text("SELECT app.can_post(:bid)"), {"bid": business_id}
+                ).scalar_one_or_none()
             )
-            .mappings()
-            .first()
-        )
-        if (
-            can_post
-            and bank_acc
-            and rev_acc
-            and exp_acc
-            and biz_row
-            and str(biz_row["currency"]) == curr
-        ):
-            post_lines = [
-                {
-                    "account_id": line["account_id"],
-                    "debit": line["debit"],
-                    "credit": line["credit"],
-                }
-                for line in split_lines
-            ]
-            lines_json = json.dumps(post_lines)
-            req_hash = hashlib.sha256(f"{idem_key}:{lines_json}".encode()).hexdigest()
-            journal_id = db.execute(
-                text(
-                    """
-                    SELECT app.post_journal(
-                      :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
-                    )
-                    """
-                ),
-                {
-                    "bid": business_id,
-                    "adate": pdate,
-                    "memo": f"Gross-to-Net Payout Split: {payload.payout_reference} (Gross {curr} {gross:.2f} -> Net {curr} {net:.2f})",
-                    "curr": curr,
-                    "idem": idem_key[:64],
-                    "rhash": req_hash,
-                    "bver": int(biz_row["version"]),
-                    "lines": lines_json,
-                },
-            ).scalar_one_or_none()
-            if journal_id:
-                status = "reconciled_posted"
+            biz_row = (
+                db.execute(
+                    text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
+                    {"bid": business_id},
+                )
+                .mappings()
+                .first()
+            )
+            if (
+                can_post
+                and bank_acc
+                and rev_acc
+                and exp_acc
+                and biz_row
+                and str(biz_row["currency"]) == curr
+            ):
+                post_lines = [
+                    {
+                        "account_id": line["account_id"],
+                        "debit": line["debit"],
+                        "credit": line["credit"],
+                    }
+                    for line in split_lines
+                ]
+                lines_json = json.dumps(post_lines)
+                req_hash = hashlib.sha256(f"{idem_key}:{lines_json}".encode()).hexdigest()
+                journal_id = db.execute(
+                    text(
+                        """
+                        SELECT app.post_journal(
+                          :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
+                        )
+                        """
+                    ),
+                    {
+                        "bid": business_id,
+                        "adate": pdate,
+                        "memo": f"Gross-to-Net Payout Split: {payload.payout_reference} (Gross {curr} {gross:.2f} -> Net {curr} {net:.2f})",
+                        "curr": curr,
+                        "idem": idem_key[:64],
+                        "rhash": req_hash,
+                        "bver": int(biz_row["version"]),
+                        "lines": lines_json,
+                    },
+                ).scalar_one_or_none()
+                if journal_id:
+                    status = "reconciled_posted"
     except Exception:
         journal_id = None
 
@@ -4584,71 +4600,78 @@ def review_voice_note_instruction(
 
     if payload.decision == "approve":
         try:
-            can_post = bool(
-                db.execute(
-                    text("SELECT app.can_post(:bid)"), {"bid": business_id}
-                ).scalar_one_or_none()
-            )
-            exp_acc = db.execute(
-                text(
-                    "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'expense' AND active = true LIMIT 1"
-                ),
-                {"bid": business_id},
-            ).scalar_one_or_none()
-            cred_acc = db.execute(
-                text(
-                    "SELECT id FROM app.accounts WHERE business_id = :bid AND ((kind = 'liability' AND control = 'ap') OR (kind = 'asset' AND control IS NULL)) AND active = true ORDER BY kind DESC LIMIT 1"
-                ),
-                {"bid": business_id},
-            ).scalar_one_or_none()
-            biz_row = (
-                db.execute(
-                    text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
-                    {"bid": business_id},
+            with db.begin_nested():
+                can_post = bool(
+                    db.execute(
+                        text("SELECT app.can_post(:bid)"), {"bid": business_id}
+                    ).scalar_one_or_none()
                 )
-                .mappings()
-                .first()
-            )
-            amt = Decimal(row["extracted_amount"])
-            curr = str(row["extracted_currency"])
-            if can_post and exp_acc and cred_acc and biz_row and str(biz_row["currency"]) == curr:
-                lines_json = json.dumps(
-                    [
-                        {
-                            "account_id": str(exp_acc),
-                            "debit": f"{amt:.2f}",
-                            "credit": "0.00",
-                        },
-                        {
-                            "account_id": str(cred_acc),
-                            "debit": "0.00",
-                            "credit": f"{amt:.2f}",
-                        },
-                    ]
-                )
-                idem_j = f"p3-voice-post-{instruction_id}"
-                rhash = hashlib.sha256(f"{idem_j}:{lines_json}".encode()).hexdigest()
-                journal_id = db.execute(
+                exp_acc = db.execute(
                     text(
-                        """
-                        SELECT app.post_journal(
-                          :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
-                        )
-                        """
+                        "SELECT id FROM app.accounts WHERE business_id = :bid AND kind = 'expense' AND active = true LIMIT 1"
                     ),
-                    {
-                        "bid": business_id,
-                        "adate": row["extracted_date"],
-                        "memo": str(row["extracted_memo"])[:200],
-                        "curr": curr,
-                        "idem": idem_j,
-                        "rhash": rhash,
-                        "bver": int(biz_row["version"]),
-                        "lines": lines_json,
-                    },
+                    {"bid": business_id},
                 ).scalar_one_or_none()
-                if journal_id:
-                    new_status = "posted"
+                cred_acc = db.execute(
+                    text(
+                        "SELECT id FROM app.accounts WHERE business_id = :bid AND ((kind = 'liability' AND control = 'ap') OR (kind = 'asset' AND control IS NULL)) AND active = true ORDER BY kind DESC LIMIT 1"
+                    ),
+                    {"bid": business_id},
+                ).scalar_one_or_none()
+                biz_row = (
+                    db.execute(
+                        text("SELECT currency, version FROM app.businesses WHERE id = :bid"),
+                        {"bid": business_id},
+                    )
+                    .mappings()
+                    .first()
+                )
+                amt = Decimal(row["extracted_amount"])
+                curr = str(row["extracted_currency"])
+                if (
+                    can_post
+                    and exp_acc
+                    and cred_acc
+                    and biz_row
+                    and str(biz_row["currency"]) == curr
+                ):
+                    lines_json = json.dumps(
+                        [
+                            {
+                                "account_id": str(exp_acc),
+                                "debit": f"{amt:.2f}",
+                                "credit": "0.00",
+                            },
+                            {
+                                "account_id": str(cred_acc),
+                                "debit": "0.00",
+                                "credit": f"{amt:.2f}",
+                            },
+                        ]
+                    )
+                    idem_j = f"p3-voice-post-{instruction_id}"
+                    rhash = hashlib.sha256(f"{idem_j}:{lines_json}".encode()).hexdigest()
+                    journal_id = db.execute(
+                        text(
+                            """
+                            SELECT app.post_journal(
+                              :bid, :adate, :memo, :curr, :idem, :rhash, :bver, CAST(:lines AS jsonb), NULL
+                            )
+                            """
+                        ),
+                        {
+                            "bid": business_id,
+                            "adate": row["extracted_date"],
+                            "memo": str(row["extracted_memo"])[:200],
+                            "curr": curr,
+                            "idem": idem_j,
+                            "rhash": rhash,
+                            "bver": int(biz_row["version"]),
+                            "lines": lines_json,
+                        },
+                    ).scalar_one_or_none()
+                    if journal_id:
+                        new_status = "posted"
         except Exception:
             journal_id = None
 
@@ -5307,7 +5330,7 @@ def list_accounting_expansion_workflows(
     }
 
 
-@router.post("/businesses/{business_id}/p3/accounting-expansion/execute")
+@router.post("/businesses/{business_id}/p3/accounting-expansion/compute")
 def execute_accounting_expansion_workflow(
     business_id: UUID,
     payload: AccountingExpansionExecuteInput,

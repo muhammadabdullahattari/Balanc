@@ -771,7 +771,7 @@
     {
       "file": "features/p3-automation.tsx",
       "method": "POST",
-      "path": "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status"
+      "path": "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/delivery-status"
     },
     {
       "file": "features/p3-automation.tsx",
@@ -911,7 +911,7 @@
     {
       "file": "features/p3-automation.tsx",
       "method": "POST",
-      "path": "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute"
+      "path": "/api/v1/businesses/{business_id}/p3/accounting-expansion/compute"
     },
     {
       "file": "features/p3-automation.tsx",

@@ -254,7 +254,7 @@ export function MultichannelReminders() {
     }) =>
       result(
         api.POST(
-          "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/webhook-status",
+          "/api/v1/businesses/{business_id}/p3/reminders/{reminder_id}/delivery-status",
           {
             params: {
               path: { business_id: b.id, reminder_id: payload.reminderId },
@@ -3285,7 +3285,7 @@ export function AccountingExpansionHub() {
     mutationFn: async () =>
       (await result(
         api.POST(
-          "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute",
+          "/api/v1/businesses/{business_id}/p3/accounting-expansion/compute",
           {
             params: { path },
             body: {
