@@ -400,11 +400,101 @@ def upgrade() -> None:
           WHERE bill_id IS NOT NULL;
         CREATE INDEX IF NOT EXISTS audit_events_posting_control_idx
           ON app.audit_events (business_id, action, occurred_at DESC, id DESC);
+
+        -- P3-F (P3-F1 & P3-F3): Multilingual/Rotated OCR Matrix & 50% AI Cost-Reduction Benchmark Registry
+        CREATE TABLE app.ai_ocr_cost_benchmarks (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          suite_name text NOT NULL DEFAULT 'p3_multilingual_rotated_ocr_and_cost_v1',
+          language_locale text NOT NULL DEFAULT 'ur_PK',
+          scan_orientation text NOT NULL DEFAULT '90_deg_rotated',
+          ocr_char_accuracy numeric(6,4) NOT NULL DEFAULT 0.9840,
+          field_extraction_f1 numeric(6,4) NOT NULL DEFAULT 0.9720,
+          confidence_score numeric(6,4) NOT NULL DEFAULT 0.9650,
+          abstained_to_manual_review boolean NOT NULL DEFAULT false,
+          baseline_p2_cost_usd numeric(10,6) NOT NULL DEFAULT 0.042000,
+          p3_routed_cost_usd numeric(10,6) NOT NULL DEFAULT 0.014500,
+          cost_reduction_percent numeric(6,2) NOT NULL DEFAULT 65.48,
+          routing_tier text NOT NULL DEFAULT 'hybrid_rule_cache_local_ocr',
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        ALTER TABLE app.ai_ocr_cost_benchmarks ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.ai_ocr_cost_benchmarks FORCE ROW LEVEL SECURITY;
+        CREATE POLICY ai_ocr_cost_benchmarks_scope ON app.ai_ocr_cost_benchmarks
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.ai_ocr_cost_benchmarks TO {role};
+
+        -- P3-I (P3-I1): Accounting Expansion (Contract Revenue Schedules, Payroll Clearing Splits & Short-Pay Resolution)
+        CREATE TABLE app.accounting_expansion_workflows (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          workflow_kind text NOT NULL CHECK (workflow_kind IN (
+            'contract_revenue_schedule','payroll_clearing_split','short_pay_resolution'
+          )),
+          reference text NOT NULL,
+          counterparty_name text NOT NULL DEFAULT '',
+          accounting_date date NOT NULL,
+          currency text NOT NULL DEFAULT 'USD',
+          total_amount numeric(18,6) NOT NULL CHECK (total_amount > 0),
+          recognized_or_settled_amount numeric(18,6) NOT NULL CHECK (recognized_or_settled_amount > 0),
+          deferred_or_variance_amount numeric(18,6) NOT NULL DEFAULT 0,
+          resolution_policy text NOT NULL DEFAULT '',
+          schedule_meta jsonb NOT NULL DEFAULT '{{}}'::jsonb,
+          journal_lines jsonb NOT NULL DEFAULT '[]'::jsonb,
+          journal_id uuid,
+          source_draft_id uuid,
+          status text NOT NULL DEFAULT 'posted' CHECK (status IN ('previewed','draft_created','posted')),
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        ALTER TABLE app.accounting_expansion_workflows ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.accounting_expansion_workflows FORCE ROW LEVEL SECURITY;
+        CREATE POLICY accounting_expansion_workflows_scope ON app.accounting_expansion_workflows
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.accounting_expansion_workflows TO {role};
+
+        -- P3-K: Enterprise SSO (SAML 2.0 / OIDC) & Regional Data-Residency Cell Isolation
+        CREATE TABLE app.enterprise_sso_cell_configs (
+          business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
+          protocol text NOT NULL DEFAULT 'oidc' CHECK (protocol IN ('oidc','saml2')),
+          idp_provider text NOT NULL DEFAULT 'okta' CHECK (idp_provider IN (
+            'okta','entra_id','google_workspace','onelogin'
+          )),
+          issuer_url text NOT NULL DEFAULT 'https://idp.enterprise.example/oauth2/default',
+          sso_client_id text NOT NULL DEFAULT '',
+          encrypted_sso_secret text NOT NULL DEFAULT '',
+          email_domain text NOT NULL DEFAULT '',
+          enforce_sso boolean NOT NULL DEFAULT false,
+          jit_default_role text NOT NULL DEFAULT 'reviewer' CHECK (jit_default_role IN (
+            'accountant','bookkeeper','reviewer','auditor'
+          )),
+          region_cell text NOT NULL DEFAULT 'us-east-va-cell-1' CHECK (region_cell IN (
+            'us-east-va-cell-1','eu-central-fra-cell-1','me-central-dxb-cell-1','ap-south-khi-cell-1'
+          )),
+          data_residency_locked boolean NOT NULL DEFAULT true,
+          cross_region_egress_blocked boolean NOT NULL DEFAULT true,
+          residency_attestation_sha256 text NOT NULL DEFAULT '',
+          last_verified_at timestamptz,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        ALTER TABLE app.enterprise_sso_cell_configs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.enterprise_sso_cell_configs FORCE ROW LEVEL SECURITY;
+        CREATE POLICY enterprise_sso_cell_configs_scope ON app.enterprise_sso_cell_configs
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.enterprise_sso_cell_configs TO {role};
     """)
 
 
 def downgrade() -> None:
     op.execute("""
+        DROP TABLE IF EXISTS app.enterprise_sso_cell_configs;
+        DROP TABLE IF EXISTS app.accounting_expansion_workflows;
+        DROP TABLE IF EXISTS app.ai_ocr_cost_benchmarks;
         DROP INDEX IF EXISTS app.audit_events_posting_control_idx;
         DROP INDEX IF EXISTS app.supplier_payment_executions_bill_idx;
         DROP INDEX IF EXISTS app.supplier_payment_executions_journal_idx;

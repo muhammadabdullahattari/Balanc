@@ -732,6 +732,20 @@ function Workspace() {
                     path="/encryption-keys"
                     element={<P3AutomationHub initialTab="encryption" />}
                   />
+                  <Route
+                    path="/ai-benchmarks"
+                    element={<P3AutomationHub initialTab="ai-benchmarks" />}
+                  />
+                  <Route
+                    path="/accounting-expansion"
+                    element={
+                      <P3AutomationHub initialTab="accounting-expansion" />
+                    }
+                  />
+                  <Route
+                    path="/enterprise-sso"
+                    element={<P3AutomationHub initialTab="enterprise-sso" />}
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/billing"
@@ -824,6 +838,25 @@ function Workspace() {
                       label: "3.4 · Per-Tenant Envelope Encryption & Key Shred",
                       hint: "/encryption-keys",
                       run: () => navigate("/encryption-keys"),
+                    },
+                    {
+                      id: "/ai-benchmarks",
+                      label: "P3-F · Multilingual OCR & 50% AI Cost Benchmark",
+                      hint: "/ai-benchmarks",
+                      run: () => navigate("/ai-benchmarks"),
+                    },
+                    {
+                      id: "/accounting-expansion",
+                      label:
+                        "P3-I · Contract Revenue, Payroll Split & Short-Pay",
+                      hint: "/accounting-expansion",
+                      run: () => navigate("/accounting-expansion"),
+                    },
+                    {
+                      id: "/enterprise-sso",
+                      label: "P3-K · Enterprise SSO & Regional Cell Isolation",
+                      hint: "/enterprise-sso",
+                      run: () => navigate("/enterprise-sso"),
                     },
                     {
                       id: "/settings",

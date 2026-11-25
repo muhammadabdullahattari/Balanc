@@ -191,7 +191,13 @@ def test_p3_live_provider_http_and_multifernet_rotation(
 
     # 1. SEC-06: MultiFernet rotation allows decrypting secrets encrypted with session_signing_key
     # even after dedicated evidence_encryption_key / mfa_encryption_key are configured
-    base_settings = Settings(app_env="local")
+    monkeypatch.delenv("EVIDENCE_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("MFA_ENCRYPTION_KEY", raising=False)
+    base_settings = Settings(
+        app_env="local",
+        evidence_encryption_key=SecretStr(""),
+        mfa_encryption_key=SecretStr(""),
+    )
     legacy_cipher = encrypt_secret(base_settings, "legacy-portal-secret")
     rotated_settings = base_settings.model_copy(
         update={
@@ -919,3 +925,81 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert d_data["status"] == "destroyed"
         assert d_data["provably_unrecoverable"] is True
         assert len(d_data["destruction_certificate_sha256"]) == 64
+
+        # =====================================================================
+        # 8. P3-F (P3-F1 & P3-F3): Multilingual/Rotated OCR & 50% AI Cost Benchmark
+        # =====================================================================
+        ai_eval = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/ai-benchmarks/evaluate",
+            headers=headers,
+            json={
+                "language_locale": "ur_PK",
+                "scan_orientation": "90_deg_rotated",
+                "simulate_low_quality_blur": False,
+                "routing_tier": "hybrid_rule_cache_local_ocr",
+            },
+        )
+        assert ai_eval.status_code == 200, ai_eval.text
+        assert ai_eval.json()["target_50_percent_met"] is True
+        assert ai_eval.json()["cost_reduction_percent"] >= 50.0
+
+        # =====================================================================
+        # 9. P3-I (P3-I1): Contract Revenue, Payroll Clearing & Short-Pay Resolution
+        # =====================================================================
+        rev_sched = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion/execute",
+            headers=headers,
+            json={
+                "workflow_kind": "contract_revenue_schedule",
+                "reference": "SAAS-2026-12M",
+                "counterparty_name": "Acme Enterprise Corp",
+                "currency": "USD",
+                "total_amount": "12000.00",
+                "months": 12,
+                "installment_number": 1,
+            },
+        )
+        assert rev_sched.status_code == 200, rev_sched.text
+        assert rev_sched.json()["recognized_or_settled_amount"] == "1000.00"
+        assert rev_sched.json()["deferred_or_variance_amount"] == "11000.00"
+
+        short_pay = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/accounting-expansion/execute",
+            headers=headers,
+            json={
+                "workflow_kind": "short_pay_resolution",
+                "reference": "INV-SHORT-101",
+                "counterparty_name": "Global Client LLC",
+                "currency": "USD",
+                "total_amount": "1000.00",
+                "settled_amount": "975.00",
+                "resolution_policy": "early_payment_discount",
+            },
+        )
+        assert short_pay.status_code == 200, short_pay.text
+        assert short_pay.json()["recognized_or_settled_amount"] == "975.00"
+        assert short_pay.json()["deferred_or_variance_amount"] == "25.00"
+
+        # =====================================================================
+        # 10. P3-K: Enterprise SSO & Regional Cell Isolation
+        # =====================================================================
+        sso_cfg = await accountant.post(
+            f"/api/v1/businesses/{bid}/p3/enterprise-sso-cell",
+            headers=headers,
+            json={
+                "protocol": "oidc",
+                "idp_provider": "okta",
+                "issuer_url": "https://acme.okta.com/oauth2/default",
+                "sso_client_id": "0oa1balancenterprise",
+                "sso_client_secret_or_cert": "top-secret-oidc-key",
+                "email_domain": "acme.example",
+                "enforce_sso": True,
+                "jit_default_role": "reviewer",
+                "region_cell": "eu-central-fra-cell-1",
+                "data_residency_locked": True,
+                "cross_region_egress_blocked": True,
+            },
+        )
+        assert sso_cfg.status_code == 200, sso_cfg.text
+        assert sso_cfg.json()["region_cell"] == "eu-central-fra-cell-1"
+        assert len(sso_cfg.json()["residency_attestation_sha256"]) == 64

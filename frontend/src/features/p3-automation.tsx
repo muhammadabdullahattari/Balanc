@@ -2973,6 +2973,735 @@ export function TenantEncryptionKeyVault() {
   );
 }
 
+export function AiOcrCostBenchmarkHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [locale, setLocale] = useState<
+    "en_US" | "ur_PK" | "ar_AE" | "es_ES" | "fr_FR"
+  >("ur_PK");
+  const [orientation, setOrientation] = useState<
+    | "0_deg_clean"
+    | "90_deg_rotated"
+    | "180_deg_upside_down"
+    | "270_deg_rotated"
+    | "skewed_thermal_receipt"
+  >("90_deg_rotated");
+  const [routingTier, setRoutingTier] = useState<
+    | "hybrid_rule_cache_local_ocr"
+    | "deterministic_template_cache"
+    | "cloud_vlm_fallback"
+  >("hybrid_rule_cache_local_ocr");
+  const [simulateBlur, setSimulateBlur] = useState(false);
+  const [benchNotice, setBenchNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-ai-benchmarks"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/ai-benchmarks", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        summary: {
+          baseline_p2_cost_per_doc_usd: string;
+          current_p3_cost_per_doc_usd: string;
+          cost_reduction_percent: number;
+          target_reduction_percent: number;
+          target_met: boolean;
+        };
+        runs: Array<{
+          id: string;
+          language_locale: string;
+          scan_orientation: string;
+          ocr_char_accuracy: number;
+          field_extraction_f1: number;
+          confidence_score: number;
+          abstained_to_manual_review: boolean;
+          baseline_p2_cost_usd: string;
+          p3_routed_cost_usd: string;
+          cost_reduction_percent: number;
+          routing_tier: string;
+        }>;
+      },
+  });
+
+  const evalMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/ai-benchmarks/evaluate", {
+          params: { path },
+          body: {
+            language_locale: locale,
+            scan_orientation: orientation,
+            simulate_low_quality_blur: simulateBlur,
+            routing_tier: routingTier,
+          },
+        }),
+      )) as unknown as {
+        language_locale: string;
+        scan_orientation: string;
+        field_extraction_f1: number;
+        cost_reduction_percent: number;
+        abstained_to_manual_review: boolean;
+      },
+    onSuccess: (res) => {
+      setBenchNotice(
+        `Evaluated ${res.language_locale} (${res.scan_orientation}): Field F1 ${(res.field_extraction_f1 * 100).toFixed(1)}%, Cost Reduction ${res.cost_reduction_percent}% (${res.abstained_to_manual_review ? "Abstained to Human Review" : "Auto-Draft Passed"}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-ai-benchmarks"],
+      });
+    },
+  });
+
+  const s = query.data?.summary;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P3-F (P3-F1 & P3-F3) · Multilingual/Rotated OCR Matrix & 50% AI
+          Cost-Reduction Benchmark
+        </h2>
+        <p className="muted">
+          Evaluates multilingual invoice/receipt OCR across rotated/skewed scans
+          with low-confidence abstention gates, and verifies the &ge;50% AI
+          per-document inference cost reduction via deterministic template
+          caching and quantized local PaddleOCR routing.
+        </p>
+        {s && (
+          <div className="p3-badge-row">
+            <Badge>
+              P2 Baseline Cost: ${s.baseline_p2_cost_per_doc_usd}/doc
+            </Badge>
+            <Badge>P3 Routed Cost: ${s.current_p3_cost_per_doc_usd}/doc</Badge>
+            <Badge>
+              AI Cost Reduction: {s.cost_reduction_percent}% (Target &ge;
+              {s.target_reduction_percent}%:{" "}
+              {s.target_met ? "MET" : "IN PROGRESS"})
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Run Multilingual & Rotated Scan Evaluation</h3>
+        <ErrorNotice error={evalMutation.error} />
+        <div className="form-grid">
+          <Field label="Document Language & Script Locale">
+            <select
+              value={locale}
+              onChange={(e) => setLocale(e.target.value as typeof locale)}
+            >
+              <option value="ur_PK">Urdu / Pakistan (ur_PK · PKR)</option>
+              <option value="ar_AE">Arabic / UAE (ar_AE · AED)</option>
+              <option value="en_US">English / US (en_US · USD)</option>
+              <option value="es_ES">Spanish / EU (es_ES · EUR)</option>
+              <option value="fr_FR">French / EU (fr_FR · EUR)</option>
+            </select>
+          </Field>
+          <Field label="Scan Orientation & Physical Condition">
+            <select
+              value={orientation}
+              onChange={(e) =>
+                setOrientation(e.target.value as typeof orientation)
+              }
+            >
+              <option value="90_deg_rotated">90° Rotated Mobile Photo</option>
+              <option value="180_deg_upside_down">180° Upside-Down Scan</option>
+              <option value="270_deg_rotated">270° Rotated Scan</option>
+              <option value="skewed_thermal_receipt">
+                Skewed Thermal POS Receipt
+              </option>
+              <option value="0_deg_clean">0° Clean Flatbed / PDF</option>
+            </select>
+          </Field>
+          <Field label="P3 Cost-Optimization Routing Tier">
+            <select
+              value={routingTier}
+              onChange={(e) =>
+                setRoutingTier(e.target.value as typeof routingTier)
+              }
+            >
+              <option value="hybrid_rule_cache_local_ocr">
+                Hybrid Rule Cache + Local Quantized OCR (65.5% Savings)
+              </option>
+              <option value="deterministic_template_cache">
+                Deterministic Vendor Template Cache (84.5% Savings)
+              </option>
+              <option value="cloud_vlm_fallback">
+                Cloud VLM Escalation Tier (51.2% Savings)
+              </option>
+            </select>
+          </Field>
+        </div>
+        <div className="p3-actions-row">
+          <label>
+            <input
+              type="checkbox"
+              checked={simulateBlur}
+              onChange={(e) => setSimulateBlur(e.target.checked)}
+            />{" "}
+            Simulate Degraded / Blurred Scan (Test Abstention Gate &lt; 85%)
+          </label>
+          <Button
+            busy={evalMutation.isPending}
+            onClick={() => evalMutation.mutate()}
+          >
+            Evaluate OCR Quality & Cost Benchmark
+          </Button>
+        </div>
+        {benchNotice && (
+          <p role="status" className="success-text">
+            {benchNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Recorded Multilingual OCR & Cost-Reduction Runs</h3>
+          <Table
+            caption="Multilingual OCR and AI Cost Benchmark Runs"
+            rows={query.data.runs}
+            rowKey={(r) => r.id}
+            columns={[
+              {
+                label: "Locale",
+                render: (r) => <Badge>{r.language_locale}</Badge>,
+              },
+              { label: "Orientation", render: (r) => r.scan_orientation },
+              {
+                label: "Char Acc / Field F1",
+                render: (r) =>
+                  `${(r.ocr_char_accuracy * 100).toFixed(1)}% / ${(r.field_extraction_f1 * 100).toFixed(1)}%`,
+              },
+              {
+                label: "Cost (P2 -> P3)",
+                render: (r) =>
+                  `$${r.baseline_p2_cost_usd} -> $${r.p3_routed_cost_usd} (-${r.cost_reduction_percent}%)`,
+              },
+              {
+                label: "Safety Gate",
+                render: (r) => (
+                  <Badge>
+                    {r.abstained_to_manual_review
+                      ? "ABSTAINED TO MANUAL REVIEW"
+                      : "PASSED"}
+                  </Badge>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function AccountingExpansionHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [workflowKind, setWorkflowKind] = useState<
+    | "contract_revenue_schedule"
+    | "payroll_clearing_split"
+    | "short_pay_resolution"
+  >("contract_revenue_schedule");
+  const [reference, setReference] = useState("SAAS-CONTRACT-2026-Q4");
+  const [counterparty, setCounterparty] = useState("Acme Enterprise Corp");
+  const [totalAmount, setTotalAmount] = useState("12000.00");
+  const [months, setMonths] = useState(12);
+  const [installmentNum, setInstallmentNum] = useState(1);
+  const [employerTax, setEmployerTax] = useState("850.00");
+  const [employeeWithholding, setEmployeeWithholding] = useState("1400.00");
+  const [benefitsDeduction, setBenefitsDeduction] = useState("400.00");
+  const [settledAmount, setSettledAmount] = useState("11700.00");
+  const [resolutionPolicy, setResolutionPolicy] = useState<
+    "early_payment_discount" | "bank_fee_writeoff" | "disputed_credit_memo"
+  >("early_payment_discount");
+  const [expNotice, setExpNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-accounting-expansion"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/accounting-expansion", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        workflows: Array<{
+          id: string;
+          workflow_kind: string;
+          reference: string;
+          counterparty_name: string;
+          accounting_date: string;
+          currency: string;
+          total_amount: string;
+          recognized_or_settled_amount: string;
+          deferred_or_variance_amount: string;
+          resolution_policy: string;
+          journal_lines: Array<{
+            label: string;
+            debit: string;
+            credit: string;
+          }>;
+          source_draft_id: string | null;
+          status: string;
+        }>;
+      },
+  });
+
+  const executeMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute",
+          {
+            params: { path },
+            body: {
+              workflow_kind: workflowKind,
+              reference,
+              counterparty_name: counterparty,
+              currency: b.currency || "USD",
+              total_amount: totalAmount,
+              months,
+              installment_number: installmentNum,
+              employer_tax_amount: employerTax,
+              employee_withholding_amount: employeeWithholding,
+              benefits_deduction_amount: benefitsDeduction,
+              settled_amount:
+                workflowKind === "short_pay_resolution" ? settledAmount : null,
+              resolution_policy: resolutionPolicy,
+            },
+          },
+        ),
+      )) as unknown as {
+        workflow_kind: string;
+        reference: string;
+        recognized_or_settled_amount: string;
+        deferred_or_variance_amount: string;
+        currency: string;
+      },
+    onSuccess: (res) => {
+      setExpNotice(
+        `Prepared ${res.workflow_kind} (${res.reference}): Recognized/Settled ${res.currency} ${res.recognized_or_settled_amount} · Deferred/Variance ${res.currency} ${res.deferred_or_variance_amount}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-accounting-expansion"],
+      });
+    },
+  });
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P3-I (P3-I1) · Contract Revenue Schedules, Payroll Clearing Splits &
+          Short-Pay Resolution
+        </h2>
+        <p className="muted">
+          Automated ratable contract revenue recognition with penny-exact final
+          installment rounding, gross-to-net payroll clearing splits (wages,
+          employer taxes, withholdings, benefits), and customer short-pay
+          discrepancy resolution.
+        </p>
+      </div>
+
+      <div className="panel">
+        <h3>1. Prepare Accounting Expansion Schedule or Split</h3>
+        <ErrorNotice error={executeMutation.error} />
+        <div className="form-grid">
+          <Field label="Accounting Expansion Module">
+            <select
+              value={workflowKind}
+              onChange={(e) =>
+                setWorkflowKind(e.target.value as typeof workflowKind)
+              }
+            >
+              <option value="contract_revenue_schedule">
+                Contract Revenue Recognition Schedule (ASC 606 / IFRS 15)
+              </option>
+              <option value="payroll_clearing_split">
+                Payroll Clearing & Tax/Benefit Split
+              </option>
+              <option value="short_pay_resolution">
+                Customer Invoice Short-Pay Resolution
+              </option>
+            </select>
+          </Field>
+          <Field label="Contract / Payroll / Invoice Reference">
+            <input
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+            />
+          </Field>
+          <Field label="Counterparty / Payroll Batch Name">
+            <input
+              value={counterparty}
+              onChange={(e) => setCounterparty(e.target.value)}
+            />
+          </Field>
+          <Field label="Total Contract / Gross Payroll / Invoice Amount">
+            <input
+              type="number"
+              step="0.01"
+              value={totalAmount}
+              onChange={(e) => setTotalAmount(e.target.value)}
+            />
+          </Field>
+          {workflowKind === "contract_revenue_schedule" && (
+            <>
+              <Field label="Contract Term (Months)">
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={months}
+                  onChange={(e) => setMonths(Number(e.target.value) || 12)}
+                />
+              </Field>
+              <Field label="Installment Number to Recognize">
+                <input
+                  type="number"
+                  min={1}
+                  max={60}
+                  value={installmentNum}
+                  onChange={(e) =>
+                    setInstallmentNum(Number(e.target.value) || 1)
+                  }
+                />
+              </Field>
+            </>
+          )}
+          {workflowKind === "payroll_clearing_split" && (
+            <>
+              <Field label="Employer Payroll Taxes">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={employerTax}
+                  onChange={(e) => setEmployerTax(e.target.value)}
+                />
+              </Field>
+              <Field label="Employee Withholding Tax">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={employeeWithholding}
+                  onChange={(e) => setEmployeeWithholding(e.target.value)}
+                />
+              </Field>
+              <Field label="Employee Benefits / Provident Deduction">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={benefitsDeduction}
+                  onChange={(e) => setBenefitsDeduction(e.target.value)}
+                />
+              </Field>
+            </>
+          )}
+          {workflowKind === "short_pay_resolution" && (
+            <>
+              <Field label="Cash Received (Short-Paid Settlement)">
+                <input
+                  type="number"
+                  step="0.01"
+                  value={settledAmount}
+                  onChange={(e) => setSettledAmount(e.target.value)}
+                />
+              </Field>
+              <Field label="Short-Pay Variance Policy">
+                <select
+                  value={resolutionPolicy}
+                  onChange={(e) =>
+                    setResolutionPolicy(
+                      e.target.value as typeof resolutionPolicy,
+                    )
+                  }
+                >
+                  <option value="early_payment_discount">
+                    Early Payment Cash Discount Allowed
+                  </option>
+                  <option value="bank_fee_writeoff">
+                    Intermediary Bank Wire Fee Write-Off
+                  </option>
+                  <option value="disputed_credit_memo">
+                    Disputed Allowance / Credit Adjustment
+                  </option>
+                </select>
+              </Field>
+            </>
+          )}
+        </div>
+        <Button
+          busy={executeMutation.isPending}
+          onClick={() => executeMutation.mutate()}
+        >
+          Compute Balanced Journal Split & Create Review Draft
+        </Button>
+        {expNotice && (
+          <p role="status" className="success-text">
+            {expNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Executed Accounting Expansion Schedules & Splits</h3>
+          <Table
+            caption="Accounting Expansion Workflows"
+            rows={query.data.workflows}
+            rowKey={(w) => w.id}
+            columns={[
+              {
+                label: "Module",
+                render: (w) => <Badge>{w.workflow_kind}</Badge>,
+              },
+              { label: "Reference", render: (w) => w.reference },
+              {
+                label: "Total",
+                render: (w) => `${w.currency} ${w.total_amount}`,
+              },
+              {
+                label: "Recognized / Settled",
+                render: (w) =>
+                  `${w.currency} ${w.recognized_or_settled_amount}`,
+              },
+              {
+                label: "Deferred / Variance",
+                render: (w) => `${w.currency} ${w.deferred_or_variance_amount}`,
+              },
+              {
+                label: "Balanced Lines",
+                render: (w) => (
+                  <span style={{ fontSize: "0.78rem" }}>
+                    {(w.journal_lines || [])
+                      .map((l) =>
+                        Number(l.debit) > 0
+                          ? `DR ${l.label}: ${l.debit}`
+                          : `CR ${l.label}: ${l.credit}`,
+                      )
+                      .join(" · ")}
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function EnterpriseSsoCellHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [protocol, setProtocol] = useState<"oidc" | "saml2">("oidc");
+  const [idpProvider, setIdpProvider] = useState<
+    "okta" | "entra_id" | "google_workspace" | "onelogin"
+  >("okta");
+  const [issuerUrl, setIssuerUrl] = useState(
+    "https://acme.okta.com/oauth2/default",
+  );
+  const [ssoClientId, setSsoClientId] = useState("0oa1balancenterprise");
+  const [ssoSecret, setSsoSecret] = useState("");
+  const [emailDomain, setEmailDomain] = useState("acme-enterprise.example");
+  const [regionCell, setRegionCell] = useState<
+    | "us-east-va-cell-1"
+    | "eu-central-fra-cell-1"
+    | "me-central-dxb-cell-1"
+    | "ap-south-khi-cell-1"
+  >("us-east-va-cell-1");
+  const [ssoNotice, setSsoNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p3-enterprise-sso-cell"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p3/enterprise-sso-cell", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        config: {
+          protocol: string;
+          idp_provider: string;
+          issuer_url: string;
+          sso_client_id: string;
+          sso_secret_configured: boolean;
+          email_domain: string;
+          enforce_sso: boolean;
+          jit_default_role: string;
+          region_cell: string;
+          data_residency_locked: boolean;
+          cross_region_egress_blocked: boolean;
+          residency_attestation_sha256: string;
+          last_verified_at: string | null;
+        };
+      },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p3/enterprise-sso-cell", {
+          params: { path },
+          body: {
+            protocol,
+            idp_provider: idpProvider,
+            issuer_url: issuerUrl,
+            sso_client_id: ssoClientId,
+            sso_client_secret_or_cert: ssoSecret,
+            email_domain: emailDomain,
+            enforce_sso: true,
+            jit_default_role: "reviewer",
+            region_cell: regionCell,
+            data_residency_locked: true,
+            cross_region_egress_blocked: true,
+          },
+        }),
+      )) as unknown as {
+        region_cell: string;
+        residency_attestation_sha256: string;
+      },
+    onSuccess: (res) => {
+      setSsoNotice(
+        `Enterprise SSO & Regional Cell pinned to ${res.region_cell}. Attestation SHA-256: ${res.residency_attestation_sha256.slice(0, 20)}…`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p3-enterprise-sso-cell"],
+      });
+    },
+  });
+
+  const cfg = query.data?.config;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P3-K · Enterprise SSO (OIDC / SAML 2.0) & Regional Data-Residency Cell
+          Isolation
+        </h2>
+        <p className="muted">
+          Bind workspace identity to enterprise IdPs (Okta, Microsoft Entra ID,
+          Google Workspace, OneLogin) and pin tenant storage and compute to an
+          isolated regional deployment cell with cross-region egress blocking
+          and cryptographic residency attestation.
+        </p>
+        {cfg && (
+          <div className="p3-badge-row">
+            <Badge>
+              SSO Protocol: {cfg.protocol.toUpperCase()} ({cfg.idp_provider})
+            </Badge>
+            <Badge>Pinned Regional Cell: {cfg.region_cell}</Badge>
+            <Badge>
+              Cross-Region Egress:{" "}
+              {cfg.cross_region_egress_blocked ? "BLOCKED" : "OPEN"}
+            </Badge>
+            <Badge>
+              Attestation: {cfg.residency_attestation_sha256.slice(0, 14)}…
+            </Badge>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>Configure Enterprise SSO Federation & Regional Isolation Cell</h3>
+        <ErrorNotice error={saveMutation.error} />
+        <div className="form-grid">
+          <Field label="Federation Protocol">
+            <select
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value as "oidc" | "saml2")}
+            >
+              <option value="oidc">OpenID Connect (OIDC + PKCE)</option>
+              <option value="saml2">SAML 2.0 Enterprise Assertion</option>
+            </select>
+          </Field>
+          <Field label="Identity Provider (IdP)">
+            <select
+              value={idpProvider}
+              onChange={(e) =>
+                setIdpProvider(e.target.value as typeof idpProvider)
+              }
+            >
+              <option value="okta">Okta Workforce Identity</option>
+              <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
+              <option value="google_workspace">
+                Google Workspace Enterprise
+              </option>
+              <option value="onelogin">OneLogin Enterprise</option>
+            </select>
+          </Field>
+          <Field label="IdP Issuer URL / Entity ID">
+            <input
+              value={issuerUrl}
+              onChange={(e) => setIssuerUrl(e.target.value)}
+            />
+          </Field>
+          <Field label="SSO Client ID / Audience URI">
+            <input
+              value={ssoClientId}
+              onChange={(e) => setSsoClientId(e.target.value)}
+            />
+          </Field>
+          <Field label="Client Secret or X.509 Signing Certificate (Encrypted)">
+            <input
+              type="password"
+              value={ssoSecret}
+              onChange={(e) => setSsoSecret(e.target.value)}
+              placeholder="Fernet-encrypted under tenant DEK"
+            />
+          </Field>
+          <Field label="Verified Enterprise Email Domain">
+            <input
+              value={emailDomain}
+              onChange={(e) => setEmailDomain(e.target.value)}
+            />
+          </Field>
+          <Field label="Pinned Regional Data-Residency Cell">
+            <select
+              value={regionCell}
+              onChange={(e) =>
+                setRegionCell(e.target.value as typeof regionCell)
+              }
+            >
+              <option value="us-east-va-cell-1">
+                US East (N. Virginia · us-east-va-cell-1)
+              </option>
+              <option value="eu-central-fra-cell-1">
+                EU Central (Frankfurt GDPR · eu-central-fra-cell-1)
+              </option>
+              <option value="me-central-dxb-cell-1">
+                Middle East (Dubai DIFC · me-central-dxb-cell-1)
+              </option>
+              <option value="ap-south-khi-cell-1">
+                South Asia (Karachi Sovereign · ap-south-khi-cell-1)
+              </option>
+            </select>
+          </Field>
+        </div>
+        <Button
+          busy={saveMutation.isPending}
+          onClick={() => saveMutation.mutate()}
+        >
+          Save Enterprise SSO & Pin Regional Cell
+        </Button>
+        {ssoNotice && (
+          <p role="status" className="success-text">
+            {ssoNotice}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function P3AutomationHub({
   initialTab = "reminders",
 }: {
@@ -2983,7 +3712,10 @@ export function P3AutomationHub({
     | "sla"
     | "payouts"
     | "voice"
-    | "encryption";
+    | "encryption"
+    | "ai-benchmarks"
+    | "accounting-expansion"
+    | "enterprise-sso";
 }) {
   const [tab, setTab] = useState<string>(initialTab);
   useEffect(() => {
@@ -3000,6 +3732,9 @@ export function P3AutomationHub({
         payouts: "/payout-reconciliation",
         voice: "/voice-instructions",
         encryption: "/encryption-keys",
+        "ai-benchmarks": "/ai-benchmarks",
+        "accounting-expansion": "/accounting-expansion",
+        "enterprise-sso": "/enterprise-sso",
       };
       const targetPath = tabRoutes[nextTab];
       if (
@@ -3030,6 +3765,9 @@ export function P3AutomationHub({
           ["payouts", "3.2 · Bank Feed & Gross-to-Net"],
           ["voice", "3.3 · Voice-Note Accounting"],
           ["encryption", "3.4 · Envelope Encryption & Shred"],
+          ["ai-benchmarks", "P3-F · Multilingual OCR & AI Cost"],
+          ["accounting-expansion", "P3-I · Revenue, Payroll & Short-Pay"],
+          ["enterprise-sso", "P3-K · Enterprise SSO & Cell"],
         ]}
       />
       {tab === "reminders" && <MultichannelReminders />}
@@ -3039,6 +3777,9 @@ export function P3AutomationHub({
       {tab === "payouts" && <PayoutReconciliationHub />}
       {tab === "voice" && <VoiceNoteInstructionReview />}
       {tab === "encryption" && <TenantEncryptionKeyVault />}
+      {tab === "ai-benchmarks" && <AiOcrCostBenchmarkHub />}
+      {tab === "accounting-expansion" && <AccountingExpansionHub />}
+      {tab === "enterprise-sso" && <EnterpriseSsoCellHub />}
     </>
   );
 }

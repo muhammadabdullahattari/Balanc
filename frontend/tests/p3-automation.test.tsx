@@ -150,6 +150,50 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
         },
       } as never;
     }
+    if (url.endsWith("/p3/ai-benchmarks")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          summary: {
+            baseline_p2_cost_per_doc_usd: "0.0420",
+            current_p3_cost_per_doc_usd: "0.0145",
+            cost_reduction_percent: 65.48,
+            target_reduction_percent: 50.0,
+            target_met: true,
+          },
+          runs: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p3/accounting-expansion")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: { workflows: [] },
+      } as never;
+    }
+    if (url.endsWith("/p3/enterprise-sso-cell")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          config: {
+            protocol: "oidc",
+            idp_provider: "okta",
+            issuer_url: "https://acme.okta.com/oauth2/default",
+            sso_client_id: "0oa1balancenterprise",
+            sso_secret_configured: true,
+            email_domain: "acme.example",
+            enforce_sso: true,
+            jit_default_role: "reviewer",
+            region_cell: "eu-central-fra-cell-1",
+            data_residency_locked: true,
+            cross_region_egress_blocked: true,
+            residency_attestation_sha256:
+              "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+            last_verified_at: null,
+          },
+        },
+      } as never;
+    }
     return {
       response: new Response(null, { status: 200 }),
       data: { connections: [], ingestions: [] },
@@ -224,6 +268,29 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
     );
     expect(
       await screen.findByText(/Per-Tenant Envelope Encryption Keys/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P3-F · Multilingual OCR & AI Cost/ }),
+    );
+    expect(
+      await screen.findByText(/50% AI Cost-Reduction Benchmark/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", {
+        name: /P3-I · Revenue, Payroll & Short-Pay/,
+      }),
+    );
+    expect(
+      await screen.findByText(/Contract Revenue Schedules/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P3-K · Enterprise SSO & Cell/ }),
+    );
+    expect(
+      await screen.findByText(/Regional Data-Residency Cell Isolation/),
     ).toBeInTheDocument();
   } finally {
     client.clear();

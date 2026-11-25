@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 251,
-  "distinct_operations": 208,
+  "call_sites": 257,
+  "distinct_operations": 214,
   "operations": [
     {
       "file": "App.tsx",
@@ -892,6 +892,36 @@
       "file": "features/p3-automation.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/p3/encryption-keys/destroy"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/ai-benchmarks"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/ai-benchmarks/evaluate"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/accounting-expansion"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/accounting-expansion/execute"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p3/enterprise-sso-cell"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p3/enterprise-sso-cell"
     },
     {
       "file": "features/portfolio-triage.tsx",
