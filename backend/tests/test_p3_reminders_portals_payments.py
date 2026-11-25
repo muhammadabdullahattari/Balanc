@@ -175,6 +175,125 @@ def test_p3_cde_live_stripe_slack_and_whatsapp_integration_with_totp() -> None:
     assert payload["amount_cents"] == 42500
 
 
+def test_p3_live_provider_http_and_multifernet_rotation(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Cover live HTTP execution/fallback paths (OPS-03) and MultiFernet key rotation (SEC-06)."""
+    import io
+    import json
+    import urllib.error
+    import urllib.request
+
+    from cryptography.fernet import Fernet
+    from pydantic import SecretStr
+
+    from ledgerpilot.workspace.p3_automation import _execute_live_stripe_supplier_settlement
+
+    # 1. SEC-06: MultiFernet rotation allows decrypting secrets encrypted with session_signing_key
+    # even after dedicated evidence_encryption_key / mfa_encryption_key are configured
+    base_settings = Settings(app_env="local")
+    legacy_cipher = encrypt_secret(base_settings, "legacy-portal-secret")
+    rotated_settings = base_settings.model_copy(
+        update={
+            "evidence_encryption_key": SecretStr(Fernet.generate_key().decode()),
+            "mfa_encryption_key": SecretStr(Fernet.generate_key().decode()),
+        }
+    )
+    assert decrypt_secret(rotated_settings, legacy_cipher) == "legacy-portal-secret"
+    new_cipher = encrypt_secret(rotated_settings, "new-rotated-secret")
+    assert decrypt_secret(rotated_settings, new_cipher) == "new-rotated-secret"
+
+    # 2. OPS-03: Live HTTP provider execution under app_env != "test" with mocked urlopen
+    class _FakeResp:
+        status = 200
+
+        def __init__(self, payload: dict[str, object]) -> None:
+            self._buf = io.BytesIO(json.dumps(payload).encode("utf-8"))
+
+        def read(self) -> bytes:
+            return self._buf.read()
+
+        def __enter__(self) -> _FakeResp:
+            return self
+
+        def __exit__(self, *args: object) -> None:
+            return None
+
+    def _mock_urlopen_ok(req: urllib.request.Request, timeout: int = 10) -> _FakeResp:
+        url = req.full_url
+        if "graph.facebook.com" in url:
+            return _FakeResp({"messages": [{"id": "wamid.live.mocked123"}]})
+        if "hooks.slack.com" in url:
+            return _FakeResp({"ok": True})
+        if "api.stripe.com" in url:
+            return _FakeResp(
+                {
+                    "id": "pi_live_mocked999",
+                    "status": "succeeded",
+                    "amount": 42500,
+                    "currency": "usd",
+                }
+            )
+        return _FakeResp({"ok": True})
+
+    monkeypatch.setattr(urllib.request, "urlopen", _mock_urlopen_ok)
+    live_settings = Settings(app_env="local")
+
+    wa_id, wa_meta = _send_whatsapp_cloud_message(
+        live_settings,
+        "+923412685261",
+        "Live WhatsApp check",
+        override_token="EAA_mock_token",
+        override_phone_id="1391722684032246",
+    )
+    assert wa_id == "wamid.live.mocked123"
+    assert wa_meta["mode"] == "meta_cloud_text_live"
+
+    sl_id, sl_meta = _send_slack_reminder_message(
+        live_settings,
+        "#all-balanc",
+        "Live Slack check",
+        override_webhook_url="https://hooks.slack.com/services/T0/B0/X0",
+    )
+    assert sl_id.startswith("slack.webhook.")
+    assert sl_meta["mode"] == "slack_webhook_live"
+
+    monkeypatch.setenv("STRIPE_SECRET_KEY", "sk_test_mock_live_rail")
+    pi_id, pi_meta = _execute_live_stripe_supplier_settlement(
+        settings=live_settings,
+        amount=Decimal("425.00"),
+        currency="USD",
+        supplier_name="AWS",
+        bill_reference="BILL-1",
+        beneficiary_account_masked="••••4321",
+        idempotency_key="idem-live-1",
+    )
+    assert pi_id == "pi_live_mocked999"
+    assert pi_meta["mode"] == "stripe_live_api"
+
+    # 3. OPS-03: Verify graceful *_fallback when upstream HTTP raises URLError
+    def _mock_urlopen_err(req: urllib.request.Request, timeout: int = 10) -> _FakeResp:
+        raise urllib.error.URLError("upstream timeout")
+
+    monkeypatch.setattr(urllib.request, "urlopen", _mock_urlopen_err)
+    _, wa_fb = _send_whatsapp_cloud_message(
+        live_settings,
+        "+923412685261",
+        "Fallback check",
+        override_token="EAA_mock_token",
+        override_phone_id="1391722684032246",
+    )
+    assert wa_fb["mode"] == "whatsapp_sandbox_fallback"
+
+    _, sl_fb = _send_slack_reminder_message(
+        live_settings,
+        "#all-balanc",
+        "Fallback check",
+        override_webhook_url="https://hooks.slack.com/services/T0/B0/X0",
+    )
+    assert sl_fb["mode"] == "slack_sandbox_fallback"
+
+
 @pytest.mark.skipif(
     os.environ.get("RUN_PHASE2_INTEGRATION") != "1",
     reason="Requires live PostgreSQL RLS database",

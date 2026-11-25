@@ -71,3 +71,8 @@ testpaths = ["tests"]
 [tool.coverage.run]
 branch = true
 source = ["ledgerpilot"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+fail_under = 80

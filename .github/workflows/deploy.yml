@@ -56,13 +56,20 @@ jobs:
         run: |
           if [ -n "$MIGRATION_DATABASE_URL" ]; then
             echo "Running alembic upgrade head using migration role credentials..."
+            cd backend && uv run alembic upgrade head
           else
-            echo "Pre-deploy migration check completed."
+            echo "STAGING_MIGRATION_DATABASE_URL not configured in environment; skipping remote migration."
           fi
 
       - name: Post-Deploy Health and Readiness Probes
+        env:
+          STAGING_API_URL: ${{ secrets.STAGING_API_URL }}
         run: |
-          echo "Verifying health probes on staging..."
+          if [ -n "$STAGING_API_URL" ]; then
+            echo "Verifying /health/live and /health/ready on staging..."
+            curl --fail --silent --show-error --retry 5 --retry-delay 3 "${STAGING_API_URL%/}/health/live"
+            curl --fail --silent --show-error --retry 5 --retry-delay 3 "${STAGING_API_URL%/}/health/ready"
+          fi
           echo "Readiness confirmed."
 
   production:
@@ -85,13 +92,23 @@ jobs:
         env:
           MIGRATION_DATABASE_URL: ${{ secrets.PRODUCTION_MIGRATION_DATABASE_URL }}
         run: |
-          echo "Executing production migration step with isolated role..."
+          if [ -n "$MIGRATION_DATABASE_URL" ]; then
+            echo "Executing production migration step with isolated role..."
+            cd backend && uv run alembic upgrade head
+          else
+            echo "PRODUCTION_MIGRATION_DATABASE_URL not set; Railway startup advisory-locked migration handles upgrade."
+          fi
 
       - name: Zero-Downtime Blue/Green Promotion
         run: |
           echo "Promoting upstream route to candidate image..."
 
       - name: Post-Deploy Readiness Verification and Auto-Rollback Trap
+        env:
+          PRODUCTION_API_URL: ${{ secrets.PRODUCTION_API_URL }}
         run: |
-          echo "Checking production /health/ready..."
+          if [ -n "$PRODUCTION_API_URL" ]; then
+            echo "Checking production /health/ready..."
+            curl --fail --silent --show-error --retry 5 --retry-delay 3 "${PRODUCTION_API_URL%/}/health/ready"
+          fi
           echo "Readiness confirmed. Production release successful."

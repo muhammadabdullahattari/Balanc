@@ -198,7 +198,8 @@ function Workspace() {
     const params = new URLSearchParams(window.location.search);
     if (params.has("onboarding_checkout")) return undefined;
     const returnedBid = params.get("business_id");
-    if (returnedBid && params.has("billing")) return returnedBid;
+    if (returnedBid && (params.has("billing") || params.has("quickbooks")))
+      return returnedBid;
     return undefined;
   });
   const [mobile, setMobile] = useState(false);

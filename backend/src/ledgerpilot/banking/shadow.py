@@ -46,9 +46,14 @@ def get_workspace_posting_control(db: Session, bid: UUID) -> dict[str, Any]:
                 "updated_at": row["occurred_at"].isoformat() if row["occurred_at"] else None,
                 "updated_by": str(row["user_id"]),
             }
+        return {"paused": False, "reason": None, "updated_at": None, "updated_by": None}
     except Exception:
-        pass
-    return {"paused": False, "reason": None, "updated_at": None, "updated_by": None}
+        return {
+            "paused": True,
+            "reason": "Auto-posting paused (control state verification error).",
+            "updated_at": None,
+            "updated_by": None,
+        }
 
 
 def set_workspace_posting_control(

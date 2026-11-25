@@ -40,6 +40,9 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
       ) {
         return "billing";
       }
+      if (params.has("quickbooks")) {
+        return "quickbooks";
+      }
     }
     return "business";
   });

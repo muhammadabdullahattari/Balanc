@@ -1261,6 +1261,10 @@ export function HumanApprovedSupplierPayments() {
   const [confirmPayment, setConfirmPayment] = useState<
     PaymentsData["payments"][number] | null
   >(null);
+  const [killSwitchModalOpen, setKillSwitchModalOpen] = useState(false);
+  const [killSwitchReason, setKillSwitchReason] = useState(
+    "Paused by Owner/Accountant via Emergency Kill Switch",
+  );
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1282,9 +1286,7 @@ export function HumanApprovedSupplierPayments() {
             params: { path },
             body: {
               kill_switch_active: active,
-              kill_switch_reason: active
-                ? "Paused by Owner/Accountant via Emergency Kill Switch"
-                : "",
+              kill_switch_reason: active ? killSwitchReason.trim() : "",
               single_payment_limit:
                 query.data?.controls.single_payment_limit || "50000.00",
               dual_approval_threshold:
@@ -1295,6 +1297,7 @@ export function HumanApprovedSupplierPayments() {
         ),
       ),
     onSuccess: () => {
+      setKillSwitchModalOpen(false);
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-payments"],
       });
@@ -1441,9 +1444,13 @@ export function HumanApprovedSupplierPayments() {
               <Button
                 variant={ctrl.kill_switch_active ? "secondary" : "danger"}
                 busy={toggleKillSwitch.isPending}
-                onClick={() =>
-                  toggleKillSwitch.mutate(!ctrl.kill_switch_active)
-                }
+                onClick={() => {
+                  if (ctrl.kill_switch_active) {
+                    toggleKillSwitch.mutate(false);
+                  } else {
+                    setKillSwitchModalOpen(true);
+                  }
+                }}
               >
                 {ctrl.kill_switch_active
                   ? "Deactivate Kill Switch (Resume Payouts)"
@@ -1451,6 +1458,42 @@ export function HumanApprovedSupplierPayments() {
               </Button>
             )}
           </div>
+        )}
+        {killSwitchModalOpen && (
+          <Modal
+            open={true}
+            title="Activate Emergency Payment Kill Switch"
+            description="Immediately freeze all outbound supplier payment executions across Stripe, NACHA ACH, and SWIFT rails for this workspace."
+            onClose={() => setKillSwitchModalOpen(false)}
+          >
+            <div className="stack" style={{ gap: "12px" }}>
+              <Field label="Emergency Pause Reason (Audited)">
+                <input
+                  value={killSwitchReason}
+                  onChange={(e) => setKillSwitchReason(e.target.value)}
+                  required
+                />
+              </Field>
+              <div className="p3-modal-actions">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  onClick={() => setKillSwitchModalOpen(false)}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="button"
+                  variant="danger"
+                  disabled={!killSwitchReason.trim()}
+                  busy={toggleKillSwitch.isPending}
+                  onClick={() => toggleKillSwitch.mutate(true)}
+                >
+                  Confirm & Freeze All Payouts
+                </Button>
+              </div>
+            </div>
+          </Modal>
         )}
       </div>
 
@@ -2946,6 +2989,27 @@ export function P3AutomationHub({
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
+  const handleTabChange = (nextTab: string) => {
+    setTab(nextTab);
+    if (typeof window !== "undefined") {
+      const tabRoutes: Record<string, string> = {
+        reminders: "/reminders",
+        portals: "/supplier-portals",
+        payments: "/supplier-payments",
+        sla: "/reconciliation-sla",
+        payouts: "/payout-reconciliation",
+        voice: "/voice-instructions",
+        encryption: "/encryption-keys",
+      };
+      const targetPath = tabRoutes[nextTab];
+      if (
+        targetPath &&
+        Object.values(tabRoutes).includes(window.location.pathname)
+      ) {
+        window.history.replaceState(null, "", targetPath);
+      }
+    }
+  };
   return (
     <>
       <PageHeading
@@ -2957,7 +3021,7 @@ export function P3AutomationHub({
         id="p3-automation"
         label="P3 Automation sections"
         value={tab}
-        onChange={setTab}
+        onChange={handleTabChange}
         items={[
           ["reminders", "C · WhatsApp & Slack Reminders"],
           ["portals", "D · Supplier Portal Connectors (2FA TOTP)"],

@@ -25,7 +25,7 @@ from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, MultiFernet
 from fastapi import APIRouter, Depends
 from pydantic import Field
 from sqlalchemy import text
@@ -85,19 +85,33 @@ def _record_p3_audit(
 # ---------------------------------------------------------------------------
 
 
-def _fernet(settings: Settings) -> Fernet:
-    secret = settings.evidence_encryption_key or settings.mfa_encryption_key
-    if secret is not None:
-        raw = secret.get_secret_value()
+def _fernet(settings: Settings) -> MultiFernet:
+    keys: list[Fernet] = []
+    for candidate in (
+        settings.evidence_encryption_key,
+        settings.mfa_encryption_key,
+        os.environ.get("EVIDENCE_ENCRYPTION_KEY", ""),
+        os.environ.get("MFA_ENCRYPTION_KEY", ""),
+    ):
+        if not candidate:
+            continue
+        raw = (
+            candidate.get_secret_value()
+            if hasattr(candidate, "get_secret_value")
+            else str(candidate)
+        ).strip()
+        if not raw:
+            continue
         try:
-            return Fernet(raw.encode())
+            keys.append(Fernet(raw.encode()))
         except Exception:
             derived = base64.urlsafe_b64encode(hashlib.sha256(raw.encode()).digest())
-            return Fernet(derived)
+            keys.append(Fernet(derived))
     fallback = base64.urlsafe_b64encode(
         hashlib.sha256(settings.session_signing_key.get_secret_value().encode()).digest()
     )
-    return Fernet(fallback)
+    keys.append(Fernet(fallback))
+    return MultiFernet(keys)
 
 
 def encrypt_secret(settings: Settings, plaintext: str) -> str:
@@ -427,6 +441,39 @@ def _mask_secret(raw: str) -> str:
 def _load_workspace_channel_config(
     db: Session, settings: Settings, business_id: UUID
 ) -> dict[str, str]:
+    dedicated = (
+        db.execute(
+            text(
+                """
+                SELECT default_whatsapp_recipient, default_slack_channel, encrypted_config
+                FROM app.workspace_channel_connections
+                WHERE business_id = :bid
+                """
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .first()
+    )
+    if dedicated:
+        blob = str(dedicated["encrypted_config"] or "").strip()
+        parsed_ded: dict[str, str] = {}
+        if blob:
+            try:
+                plain = decrypt_secret(settings, blob)
+                data = json.loads(plain)
+                if isinstance(data, dict):
+                    parsed_ded = {str(k): str(v) for k, v in data.items() if v is not None}
+            except Exception:
+                parsed_ded = {}
+        if dedicated["default_whatsapp_recipient"] and not parsed_ded.get(
+            "default_whatsapp_recipient"
+        ):
+            parsed_ded["default_whatsapp_recipient"] = str(dedicated["default_whatsapp_recipient"])
+        if dedicated["default_slack_channel"] and not parsed_ded.get("default_slack_channel"):
+            parsed_ded["default_slack_channel"] = str(dedicated["default_slack_channel"])
+        return parsed_ded
+
     row = (
         db.execute(
             text(
@@ -951,29 +998,24 @@ def connect_workspace_reminder_channels(
             current["default_slack_channel"] = payload.default_slack_channel.strip()
 
     enc_blob = encrypt_secret(settings, json.dumps(current)) if current else ""
-    conn_id = uuid4()
     db.execute(
         text(
             """
-            INSERT INTO app.channel_reminder_preferences (
-              id, business_id, recipient_key, recipient_name, whatsapp_phone,
-              slack_channel, email_address, actor
+            INSERT INTO app.workspace_channel_connections (
+              business_id, default_whatsapp_recipient, default_slack_channel, encrypted_config, actor
             ) VALUES (
-              :id, :bid, :rkey, 'Workspace Channel Connector', :wa_phone,
-              :slack_ch, :blob, :actor
+              :bid, :wa_phone, :slack_ch, :blob, :actor
             )
-            ON CONFLICT (business_id, recipient_key) DO UPDATE SET
-              whatsapp_phone = EXCLUDED.whatsapp_phone,
-              slack_channel = EXCLUDED.slack_channel,
-              email_address = EXCLUDED.email_address,
+            ON CONFLICT (business_id) DO UPDATE SET
+              default_whatsapp_recipient = EXCLUDED.default_whatsapp_recipient,
+              default_slack_channel = EXCLUDED.default_slack_channel,
+              encrypted_config = EXCLUDED.encrypted_config,
               actor = EXCLUDED.actor,
               updated_at = clock_timestamp()
             """
         ),
         {
-            "id": conn_id,
             "bid": business_id,
-            "rkey": WORKSPACE_CHANNEL_CONNECTOR_KEY,
             "wa_phone": current.get("default_whatsapp_recipient", "+923412685261"),
             "slack_ch": current.get("default_slack_channel", "#all-balanc"),
             "blob": enc_blob,
@@ -1367,7 +1409,8 @@ def dispatch_multichannel_reminder(
     attempt_num = prior_attempts + 1
 
     # 2. Recheck payment / evidence resolution state before send
-    is_resolved = payload.is_resolved_override
+    allow_test_overrides = settings.app_env in {"local", "test"}
+    is_resolved = payload.is_resolved_override if allow_test_overrides else False
     if not is_resolved and payload.target_id is not None:
         doc_resolved = db.execute(
             text(
@@ -1398,8 +1441,8 @@ def dispatch_multichannel_reminder(
             if has_ev:
                 is_resolved = True
 
-    effective_hour: int | None = payload.current_hour_override
-    if effective_hour is None and payload.channel == "auto" and settings.app_env != "test":
+    effective_hour: int | None = payload.current_hour_override if allow_test_overrides else None
+    if effective_hour is None and settings.app_env != "test":
         try:
             effective_hour = datetime.now(ZoneInfo(recipient_tz)).hour
         except Exception:
@@ -2941,6 +2984,17 @@ def approve_and_execute_supplier_payment(
     )
 
     settlement_journal_id: UUID | None = None
+    linked_bill_id: UUID | None = pay["bill_id"]
+    if not linked_bill_id and pay["bill_reference"]:
+        try:
+            linked_bill_id = db.execute(
+                text(
+                    "SELECT id FROM app.trade_documents WHERE business_id = :bid AND kind = 'bill' AND number = :bref LIMIT 1"
+                ),
+                {"bid": business_id, "bref": str(pay["bill_reference"]).strip()},
+            ).scalar_one_or_none()
+        except Exception:
+            linked_bill_id = None
     try:
         can_post = bool(
             db.execute(
@@ -3018,6 +3072,7 @@ def approve_and_execute_supplier_payment(
                 provider_reference = :pref,
                 provider_payload = CAST(:ppayload AS jsonb),
                 remittance_advice = :remit,
+                bill_id = COALESCE(:lbid, bill_id),
                 settlement_journal_id = COALESCE(:sjid, settlement_journal_id),
                 executed_at = clock_timestamp()
             WHERE business_id = :bid AND id = :pid
@@ -3028,6 +3083,7 @@ def approve_and_execute_supplier_payment(
             "pref": provider_ref,
             "ppayload": json.dumps(provider_payload),
             "remit": remittance,
+            "lbid": linked_bill_id,
             "sjid": settlement_journal_id,
             "bid": business_id,
             "pid": payment_id,
@@ -4502,6 +4558,15 @@ def _count_tenant_encrypted_records(db: Session, business_id: UUID) -> int:
         ).scalar_one()
         or 0
     )
+    ded_cnt = int(
+        db.execute(
+            text(
+                "SELECT count(*) FROM app.workspace_channel_connections WHERE business_id = :bid AND encrypted_config != ''"
+            ),
+            {"bid": business_id},
+        ).scalar_one()
+        or 0
+    )
     ch_cnt = int(
         db.execute(
             text(
@@ -4511,7 +4576,7 @@ def _count_tenant_encrypted_records(db: Session, business_id: UUID) -> int:
         ).scalar_one()
         or 0
     )
-    return portal_cnt + ch_cnt
+    return portal_cnt + ded_cnt + ch_cnt
 
 
 def _ensure_initial_tenant_dek(
@@ -4753,6 +4818,19 @@ def destroy_tenant_encryption_key(
             {"bid": business_id},
         ).all()
     )
+    shredded_ded_channels = len(
+        db.execute(
+            text(
+                """
+                UPDATE app.workspace_channel_connections
+                SET encrypted_config = ''
+                WHERE business_id = :bid AND encrypted_config != ''
+                RETURNING business_id
+                """
+            ),
+            {"bid": business_id},
+        ).all()
+    )
     shredded_channels = len(
         db.execute(
             text(
@@ -4803,7 +4881,7 @@ def destroy_tenant_encryption_key(
         "status": "destroyed",
         "wrapped_dek_wiped": True,
         "provably_unrecoverable": True,
-        "shredded_records_count": int(shredded_portals + shredded_channels),
+        "shredded_records_count": int(shredded_portals + shredded_ded_channels + shredded_channels),
         "destruction_certificate_sha256": cert_hash,
         "destroyed_at": now_iso,
     }

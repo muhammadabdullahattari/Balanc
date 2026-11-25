@@ -58,6 +58,7 @@ if existing_conn is not None and not getattr(existing_conn, "closed", False):
         compare_server_default=False,
     )
     with context.begin_transaction():
+        existing_conn.execute(text("SELECT pg_advisory_xact_lock(78291045)"))
         context.run_migrations()
 else:
     values = read_values(ROOT / ".env")
@@ -84,8 +85,7 @@ else:
         or (
             url
             and any(
-                s in url
-                for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
+                s in url for s in (".railway.internal", ".internal", ".rlwy.net", ".railway.app")
             )
         )
     )
@@ -220,5 +220,6 @@ else:
             compare_server_default=False,
         )
         with context.begin_transaction():
+            connection.execute(text("SELECT pg_advisory_xact_lock(78291045)"))
             context.run_migrations()
     engine.dispose()

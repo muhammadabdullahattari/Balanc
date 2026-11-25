@@ -47,6 +47,21 @@ def upgrade() -> None:
           WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
         GRANT SELECT,INSERT,UPDATE,DELETE ON app.channel_reminder_preferences TO {role};
 
+        CREATE TABLE app.workspace_channel_connections (
+          business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
+          default_whatsapp_recipient text NOT NULL DEFAULT '+923412685261',
+          default_slack_channel text NOT NULL DEFAULT '#all-balanc',
+          encrypted_config text NOT NULL DEFAULT '',
+          actor uuid NOT NULL REFERENCES app.users(id),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        ALTER TABLE app.workspace_channel_connections ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.workspace_channel_connections FORCE ROW LEVEL SECURITY;
+        CREATE POLICY workspace_channel_connections_scope ON app.workspace_channel_connections
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE,DELETE ON app.workspace_channel_connections TO {role};
+
         CREATE TABLE app.channel_reminders (
           id uuid PRIMARY KEY,
           business_id uuid NOT NULL REFERENCES app.businesses(id),
@@ -372,11 +387,28 @@ def upgrade() -> None:
           USING (business_id=app.scope() AND app.has_access(business_id))
           WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
         GRANT SELECT,INSERT,UPDATE ON app.tenant_encryption_keys TO {role};
+
+        -- DB-03 & DB-04: Supporting indexes for portal drafts, payment journals/bills, and auto-posting control
+        CREATE INDEX IF NOT EXISTS supplier_portal_ingestions_draft_idx
+          ON app.supplier_portal_ingestions (business_id, trade_draft_id)
+          WHERE trade_draft_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS supplier_payment_executions_journal_idx
+          ON app.supplier_payment_executions (business_id, settlement_journal_id)
+          WHERE settlement_journal_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS supplier_payment_executions_bill_idx
+          ON app.supplier_payment_executions (business_id, bill_id)
+          WHERE bill_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS audit_events_posting_control_idx
+          ON app.audit_events (business_id, action, occurred_at DESC, id DESC);
     """)
 
 
 def downgrade() -> None:
     op.execute("""
+        DROP INDEX IF EXISTS app.audit_events_posting_control_idx;
+        DROP INDEX IF EXISTS app.supplier_payment_executions_bill_idx;
+        DROP INDEX IF EXISTS app.supplier_payment_executions_journal_idx;
+        DROP INDEX IF EXISTS app.supplier_portal_ingestions_draft_idx;
         DROP TABLE IF EXISTS app.tenant_encryption_keys;
         DROP TABLE IF EXISTS app.voice_note_instructions;
         DROP TABLE IF EXISTS app.gross_to_net_payout_reconciliations;
@@ -387,5 +419,6 @@ def downgrade() -> None:
         DROP TABLE IF EXISTS app.supplier_portal_ingestions;
         DROP TABLE IF EXISTS app.supplier_portal_connections;
         DROP TABLE IF EXISTS app.channel_reminders;
+        DROP TABLE IF EXISTS app.workspace_channel_connections;
         DROP TABLE IF EXISTS app.channel_reminder_preferences;
     """)

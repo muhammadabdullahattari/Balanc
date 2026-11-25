@@ -338,14 +338,7 @@ export function QuickBooksImport() {
       </div>
 
       <h3>1. Select Entities for Import</h3>
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
-          gap: "0.5rem",
-          marginBottom: "1rem",
-        }}
-      >
+      <div className="qb-entity-grid">
         {[
           ["Account", "Chart of Accounts"],
           ["Customer", "Customers"],
@@ -358,20 +351,7 @@ export function QuickBooksImport() {
           ["BillPayment", "Bill Payments (Supplier Settlement)"],
           ["VendorCredit", "Vendor Credits (Applied Credits)"],
         ].map(([key, label]) => (
-          <label
-            key={key}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "0.5rem",
-              padding: "0.5rem",
-              background: "var(--surface-alt)",
-              border: "1px solid var(--line)",
-              borderRadius: "4px",
-              cursor: "pointer",
-              color: "var(--ink)",
-            }}
-          >
+          <label key={key} className="qb-entity-card">
             <input
               type="checkbox"
               checked={selectedEntities.includes(key)}
@@ -502,7 +482,7 @@ export function QuickBooksImport() {
 
           {unmapped.length > 0 && (
             <div style={{ marginTop: "1rem" }}>
-              <h5 style={{ color: "var(--danger, #ff5555)" }}>
+              <h5 className="qb-unmapped-heading">
                 Unmapped Accounts Detected ({unmapped.length})
               </h5>
               <p className="muted" style={{ fontSize: "0.85rem" }}>
