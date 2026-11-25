@@ -193,10 +193,11 @@ def test_p3_live_provider_http_and_multifernet_rotation(
     # even after dedicated evidence_encryption_key / mfa_encryption_key are configured
     monkeypatch.delenv("EVIDENCE_ENCRYPTION_KEY", raising=False)
     monkeypatch.delenv("MFA_ENCRYPTION_KEY", raising=False)
-    base_settings = Settings(
-        app_env="local",
-        evidence_encryption_key=SecretStr(""),
-        mfa_encryption_key=SecretStr(""),
+    base_settings = Settings(app_env="local").model_copy(
+        update={
+            "evidence_encryption_key": None,
+            "mfa_encryption_key": None,
+        }
     )
     legacy_cipher = encrypt_secret(base_settings, "legacy-portal-secret")
     rotated_settings = base_settings.model_copy(
