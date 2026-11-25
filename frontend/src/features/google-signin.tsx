@@ -122,6 +122,11 @@ export function GoogleSignIn({
               current.current.onLinked?.();
             } else {
               await result(api.POST("/api/v1/auth/google/login", { body }));
+              queryClient.removeQueries({
+                predicate: (query) =>
+                  query.queryKey[0] !== "auth-configuration" &&
+                  query.queryKey[0] !== "session",
+              });
               await queryClient.invalidateQueries({ queryKey: keys.session });
             }
           })()
@@ -202,6 +207,11 @@ export function GoogleSignIn({
         }),
       );
       proof.current = null;
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] !== "auth-configuration" &&
+          query.queryKey[0] !== "session",
+      });
       await queryClient.invalidateQueries({ queryKey: keys.session });
     } catch (failure) {
       if (

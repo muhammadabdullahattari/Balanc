@@ -366,8 +366,27 @@ function Workspace() {
         }),
       ),
   });
+  const activeUserRef = useRef<string | null>(null);
   useEffect(() => {
-    if (session.data === null) setBusinessId(undefined);
+    const nextUserId = session.data?.id ?? null;
+    if (session.data === null) {
+      activeUserRef.current = null;
+      setBusinessId(undefined);
+      return;
+    }
+    if (
+      nextUserId &&
+      activeUserRef.current &&
+      activeUserRef.current !== nextUserId
+    ) {
+      setBusinessId(undefined);
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] !== "session" &&
+          query.queryKey[0] !== "auth-configuration",
+      });
+    }
+    if (nextUserId) activeUserRef.current = nextUserId;
   }, [session.data]);
   useEffect(() => {
     if (

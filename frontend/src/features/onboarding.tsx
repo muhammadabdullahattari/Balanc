@@ -163,7 +163,7 @@ export function BusinessChooser({
   const [cursor, setCursor] = useState<string | undefined>();
 
   const businesses = useQuery({
-    queryKey: [...keys.businesses, cursor, portfolio, search],
+    queryKey: [...keys.businesses, identity.id, cursor, portfolio, search],
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/businesses", {
@@ -189,7 +189,12 @@ export function BusinessChooser({
   });
 
   const onboardingStatus = useQuery({
-    queryKey: ["billing", "onboarding", initialOnboardingSessionId || "latest"],
+    queryKey: [
+      "billing",
+      "onboarding",
+      identity.id,
+      initialOnboardingSessionId || "latest",
+    ],
     retry: false,
     enabled:
       identity.mfa &&

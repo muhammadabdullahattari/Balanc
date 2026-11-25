@@ -228,3 +228,66 @@ async def test_ocr_rejects_non_ascii_bearer_headers_without_parser_or_traceback(
             "/extract", content=b"untrusted", headers=[(b"authorization", b"Bearer \xff")]
         )
     assert reply.status_code == 401 and reply.json() == {"error": "unauthorized"}
+
+
+def test_businesses_listing_explicitly_scopes_active_memberships_in_sql() -> None:
+    """GET /businesses must explicitly filter by active membership even when RLS is bypassed."""
+    from types import SimpleNamespace
+    from typing import Any
+
+    from sqlalchemy.dialects import postgresql
+
+    from ledgerpilot.tenancy.router import businesses as list_businesses
+
+    actor_id = uuid4()
+    cursor_id = uuid4()
+    identity: Any = SimpleNamespace(user=SimpleNamespace(id=actor_id))
+    captured: list[tuple[str, dict[str, Any]]] = []
+
+    class CapturingDB:
+        def execute(self, stmt: Any) -> list[Any]:
+            compiled = stmt.compile(dialect=postgresql.dialect())
+            captured.append((str(compiled), dict(compiled.params)))
+            return []
+
+    db: Any = CapturingDB()
+    list_businesses(identity=identity, db=db, limit=50, cursor=None, sort="id", search="")
+    list_businesses(identity=identity, db=db, limit=50, cursor=cursor_id, sort="name", search="ac")
+
+    assert len(captured) == 2
+    for sql, params in captured:
+        assert "JOIN app.memberships" in sql, sql
+        assert "app.memberships.user_id =" in sql, sql
+        assert "app.memberships.active IS true" in sql, sql
+        assert actor_id in params.values(), params
+
+    # Name-sorted cursor anchor subquery must also be restricted to the caller's active memberships.
+    name_sql, name_params = captured[1]
+    assert name_sql.count("JOIN app.memberships") >= 2, name_sql
+    assert sum(1 for value in name_params.values() if value == actor_id) >= 2, name_params
+
+
+@REAL
+async def test_businesses_listing_isolates_accounts_across_logins(
+    client: httpx.AsyncClient, database_settings: FileSettings
+) -> None:
+    """Creating a workspace in Account A must never be visible when Account B logs in."""
+    async with (
+        accountant_context(client, database_settings) as (bid_a, api_a),
+        accountant_context(client, database_settings) as (bid_b, api_b),
+    ):
+        list_a = await api_a.get("/api/v1/businesses")
+        assert list_a.status_code == 200, list_a.text
+        ids_a = {item["id"] for item in list_a.json()["items"]}
+        assert bid_a in ids_a and bid_b not in ids_a
+
+        for query in [
+            "",
+            "?sort=name",
+            f"?sort=name&cursor={bid_a}",
+            f"?sort=id&cursor={bid_a}",
+        ]:
+            list_b = await api_b.get("/api/v1/businesses" + query)
+            assert list_b.status_code == 200, list_b.text
+            ids_b = {item["id"] for item in list_b.json()["items"]}
+            assert bid_a not in ids_b, (query, ids_b)

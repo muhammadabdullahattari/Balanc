@@ -12,7 +12,7 @@ from ledgerpilot.shared import contracts
 from ledgerpilot.shared.responses import BusinessRead, BusinessSummary, Identifier, Page
 from ledgerpilot.shared.schemas import Schema
 from ledgerpilot.tenancy import service
-from ledgerpilot.tenancy.models import Business, PolicyHistory
+from ledgerpilot.tenancy.models import Business, Membership, PolicyHistory
 from ledgerpilot.tenancy.schemas import BusinessCreate, InviteCreate, PolicyChange
 
 router = APIRouter(tags=["businesses"])
@@ -42,14 +42,34 @@ def businesses(
         .limit(1)
         .scalar_subquery()
     )
-    query = select(Business, func.coalesce(active_basis, Business.basis)).limit(limit + 1)
+    query = (
+        select(Business, func.coalesce(active_basis, Business.basis))
+        .join(
+            Membership,
+            (Membership.business_id == Business.id)
+            & (Membership.user_id == identity.user.id)
+            & Membership.active.is_(True),
+        )
+        .limit(limit + 1)
+    )
     name = func.lower(Business.name)
     if search.strip():
         query = query.where(name.contains(search.strip().lower(), autoescape=True))
     if sort == "name":
         query = query.order_by(name, Business.id)
         if cursor:
-            anchor = select(name).where(Business.id == cursor).correlate(None).scalar_subquery()
+            anchor = (
+                select(name)
+                .join(
+                    Membership,
+                    (Membership.business_id == Business.id)
+                    & (Membership.user_id == identity.user.id)
+                    & Membership.active.is_(True),
+                )
+                .where(Business.id == cursor)
+                .correlate(None)
+                .scalar_subquery()
+            )
             query = query.where(tuple_(name, Business.id) > tuple_(anchor, cursor))
     else:
         query = query.order_by(Business.id)

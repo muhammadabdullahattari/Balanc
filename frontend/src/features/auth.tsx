@@ -172,9 +172,14 @@ export function Auth() {
       }
     },
     onSuccess: (_data, values) => {
-      if (mode === "login")
+      if (mode === "login") {
+        queryClient.removeQueries({
+          predicate: (query) =>
+            query.queryKey[0] !== "auth-configuration" &&
+            query.queryKey[0] !== "session",
+        });
         void queryClient.invalidateQueries({ queryKey: keys.session });
-      else {
+      } else {
         setKnownEmail(true);
         setValue("password", "");
         setVerificationEmail(values.email);
@@ -196,6 +201,11 @@ export function Auth() {
         }),
       );
       passwordProof.current = null;
+      queryClient.removeQueries({
+        predicate: (query) =>
+          query.queryKey[0] !== "auth-configuration" &&
+          query.queryKey[0] !== "session",
+      });
       await queryClient.invalidateQueries({ queryKey: keys.session });
     } catch (error) {
       if (
