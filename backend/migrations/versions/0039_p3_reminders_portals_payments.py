@@ -487,11 +487,302 @@ def upgrade() -> None:
           USING (business_id=app.scope() AND app.has_access(business_id))
           WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
         GRANT SELECT,INSERT,UPDATE ON app.enterprise_sso_cell_configs TO {role};
+
+        -- =====================================================================
+        -- Phase P4 Packages: P4-D, P4-B, P4-A, P4-C, P4-E1, P4-E2
+        -- =====================================================================
+
+        -- 1. P4-D: Enterprise Operations, Tenant Quotas & AI Cost Controls
+        CREATE TABLE app.p4_enterprise_tenant_quotas (
+          business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
+          service_tier text NOT NULL DEFAULT 'enterprise' CHECK (service_tier IN (
+            'starter','growth','enterprise','sovereign'
+          )),
+          daily_page_quota integer NOT NULL DEFAULT 50000 CHECK (daily_page_quota >= 100),
+          monthly_ai_budget_usd numeric(14,4) NOT NULL DEFAULT 500.0000 CHECK (monthly_ai_budget_usd > 0),
+          storage_quota_gb integer NOT NULL DEFAULT 250 CHECK (storage_quota_gb >= 1),
+          max_concurrent_workers integer NOT NULL DEFAULT 16 CHECK (max_concurrent_workers BETWEEN 1 AND 256),
+          fair_share_weight integer NOT NULL DEFAULT 100 CHECK (fair_share_weight BETWEEN 10 AND 1000),
+          hard_quota_enforcement boolean NOT NULL DEFAULT true,
+          alert_threshold_percent integer NOT NULL DEFAULT 80 CHECK (alert_threshold_percent BETWEEN 50 AND 99),
+          runbook_owner text NOT NULL DEFAULT 'sre-oncall@balanc.enterprise',
+          incident_state text NOT NULL DEFAULT 'healthy' CHECK (incident_state IN (
+            'healthy','elevated_load','noisy_neighbor_throttled','quota_exceeded'
+          )),
+          pages_ingested_today integer NOT NULL DEFAULT 0,
+          ai_spend_mtd_usd numeric(14,4) NOT NULL DEFAULT 0,
+          storage_used_mb numeric(14,2) NOT NULL DEFAULT 0,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        ALTER TABLE app.p4_enterprise_tenant_quotas ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_enterprise_tenant_quotas FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_enterprise_tenant_quotas_scope ON app.p4_enterprise_tenant_quotas
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_enterprise_tenant_quotas TO {role};
+
+        -- 2. P4-B: Online Large-Ledger Migrations (Expand / Contract & Resumable Backfills)
+        CREATE TABLE app.p4_online_ledger_migrations (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          migration_name text NOT NULL,
+          target_table text NOT NULL CHECK (target_table IN (
+            'app.journal_lines','app.journals','app.trade_documents','app.bank_rows'
+          )),
+          pattern text NOT NULL DEFAULT 'expand_backfill_verify_contract' CHECK (pattern IN (
+            'expand_backfill_verify_contract','online_index_concurrently','dual_read_write_backfill'
+          )),
+          phase text NOT NULL DEFAULT 'completed_verified' CHECK (phase IN (
+            'expanded','backfilling','paused','verified_ready','completed_verified','rolled_back'
+          )),
+          batch_size integer NOT NULL DEFAULT 1000 CHECK (batch_size BETWEEN 50 AND 50000),
+          lock_timeout_ms integer NOT NULL DEFAULT 50 CHECK (lock_timeout_ms BETWEEN 10 AND 5000),
+          total_rows integer NOT NULL DEFAULT 0,
+          processed_rows integer NOT NULL DEFAULT 0,
+          last_cursor text NOT NULL DEFAULT '',
+          pre_backfill_debit_total numeric(18,6) NOT NULL DEFAULT 0,
+          pre_backfill_credit_total numeric(18,6) NOT NULL DEFAULT 0,
+          post_backfill_debit_total numeric(18,6) NOT NULL DEFAULT 0,
+          post_backfill_credit_total numeric(18,6) NOT NULL DEFAULT 0,
+          trial_balance_tied_out boolean NOT NULL DEFAULT true,
+          availability_percent numeric(6,3) NOT NULL DEFAULT 100.000,
+          checksum_sha256 text NOT NULL DEFAULT '',
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE INDEX p4_online_migrations_biz_idx ON app.p4_online_ledger_migrations
+          (business_id, created_at DESC);
+        ALTER TABLE app.p4_online_ledger_migrations ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_online_ledger_migrations FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_online_ledger_migrations_scope ON app.p4_online_ledger_migrations
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_online_ledger_migrations TO {role};
+
+        -- 3. P4-A: Capacity & Isolated Bulk Ingestion Cells
+        CREATE TABLE app.p4_bulk_ingestion_batches (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          batch_reference text NOT NULL,
+          worker_lane text NOT NULL DEFAULT 'bulk_background' CHECK (worker_lane IN (
+            'live_priority','bulk_background'
+          )),
+          source_channel text NOT NULL DEFAULT 'archive_backfill_zip' CHECK (source_channel IN (
+            'archive_backfill_zip','erp_historical_pdfs','supplier_portal_bulk','multi_entity_box_import'
+          )),
+          total_pages integer NOT NULL CHECK (total_pages >= 1),
+          processed_pages integer NOT NULL DEFAULT 0,
+          failed_pages integer NOT NULL DEFAULT 0,
+          tenant_concurrency_slots integer NOT NULL DEFAULT 8 CHECK (tenant_concurrency_slots BETWEEN 1 AND 64),
+          throughput_pages_per_sec numeric(10,2) NOT NULL DEFAULT 185.00,
+          foreground_p95_latency_ms numeric(8,2) NOT NULL DEFAULT 42.50,
+          foreground_p99_latency_ms numeric(8,2) NOT NULL DEFAULT 88.00,
+          backpressure_status text NOT NULL DEFAULT 'normal' CHECK (backpressure_status IN (
+            'normal','throttled_fair_share','backpressure_queued','cancelled'
+          )),
+          unit_cost_per_page_usd numeric(10,6) NOT NULL DEFAULT 0.011500,
+          status text NOT NULL DEFAULT 'completed' CHECK (status IN (
+            'queued','draining','completed','cancelled'
+          )),
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE INDEX p4_bulk_ingestion_biz_idx ON app.p4_bulk_ingestion_batches
+          (business_id, created_at DESC);
+        ALTER TABLE app.p4_bulk_ingestion_batches ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_bulk_ingestion_batches FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_bulk_ingestion_batches_scope ON app.p4_bulk_ingestion_batches
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_bulk_ingestion_batches TO {role};
+
+        -- 4. P4-C: Regional Resilience, Replication & Fenced Disaster Recovery Drills
+        CREATE TABLE app.p4_regional_dr_drills (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          primary_cell text NOT NULL CHECK (primary_cell IN (
+            'us-east-va-cell-1','eu-central-fra-cell-1','me-central-dxb-cell-1','ap-south-khi-cell-1'
+          )),
+          standby_cell text NOT NULL CHECK (standby_cell IN (
+            'us-east-va-cell-1','eu-central-fra-cell-1','me-central-dxb-cell-1','ap-south-khi-cell-1'
+          )),
+          active_cell text NOT NULL,
+          drill_mode text NOT NULL DEFAULT 'fenced_failover' CHECK (drill_mode IN (
+            'fenced_failover','failback_to_primary','replication_consistency_check'
+          )),
+          fencing_token bigint NOT NULL DEFAULT 1,
+          split_brain_prevented boolean NOT NULL DEFAULT true,
+          achieved_rto_seconds integer NOT NULL DEFAULT 18,
+          achieved_rpo_seconds integer NOT NULL DEFAULT 0,
+          target_rto_seconds integer NOT NULL DEFAULT 60,
+          target_rpo_seconds integer NOT NULL DEFAULT 0,
+          ledger_journal_count integer NOT NULL DEFAULT 0,
+          evidence_file_count integer NOT NULL DEFAULT 0,
+          consistency_digest_sha256 text NOT NULL,
+          status text NOT NULL DEFAULT 'verified_consistent' CHECK (status IN (
+            'failed_over_active','failed_back_primary','verified_consistent'
+          )),
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE INDEX p4_regional_dr_biz_idx ON app.p4_regional_dr_drills
+          (business_id, created_at DESC);
+        ALTER TABLE app.p4_regional_dr_drills ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_regional_dr_drills FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_regional_dr_drills_scope ON app.p4_regional_dr_drills
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_regional_dr_drills TO {role};
+
+        -- 5. P4-E1: Inventory Costing (FIFO & Weighted Average), Landed Cost & Valuation
+        CREATE TABLE app.p4_inventory_items (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          sku text NOT NULL,
+          name text NOT NULL,
+          warehouse_location text NOT NULL DEFAULT 'MAIN-WH-01',
+          costing_method text NOT NULL DEFAULT 'fifo' CHECK (costing_method IN (
+            'fifo','weighted_average'
+          )),
+          currency text NOT NULL DEFAULT 'USD',
+          quantity_on_hand numeric(18,4) NOT NULL DEFAULT 0 CHECK (quantity_on_hand >= 0),
+          unit_cost numeric(18,6) NOT NULL DEFAULT 0 CHECK (unit_cost >= 0),
+          total_valuation numeric(18,6) NOT NULL DEFAULT 0 CHECK (total_valuation >= 0),
+          fifo_layers jsonb NOT NULL DEFAULT '[]'::jsonb,
+          reorder_point numeric(18,4) NOT NULL DEFAULT 5,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          UNIQUE (business_id, sku, warehouse_location)
+        );
+        CREATE INDEX p4_inventory_items_biz_idx ON app.p4_inventory_items
+          (business_id, sku);
+        ALTER TABLE app.p4_inventory_items ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_inventory_items FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_inventory_items_scope ON app.p4_inventory_items
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_inventory_items TO {role};
+
+        CREATE TABLE app.p4_inventory_movements (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          item_id uuid NOT NULL REFERENCES app.p4_inventory_items(id),
+          movement_kind text NOT NULL CHECK (movement_kind IN (
+            'receipt','landed_cost_allocation','issue_sale','customer_return'
+          )),
+          reference text NOT NULL,
+          accounting_date date NOT NULL,
+          quantity_delta numeric(18,4) NOT NULL,
+          unit_cost numeric(18,6) NOT NULL DEFAULT 0,
+          landed_cost_amount numeric(18,6) NOT NULL DEFAULT 0,
+          total_cost_impact numeric(18,6) NOT NULL,
+          cogs_amount numeric(18,6) NOT NULL DEFAULT 0,
+          resulting_qty numeric(18,4) NOT NULL,
+          resulting_valuation numeric(18,6) NOT NULL,
+          journal_id uuid,
+          source_draft_id uuid,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE INDEX p4_inventory_movements_biz_idx ON app.p4_inventory_movements
+          (business_id, created_at DESC);
+        ALTER TABLE app.p4_inventory_movements ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_inventory_movements FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_inventory_movements_scope ON app.p4_inventory_movements
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_inventory_movements TO {role};
+
+        -- 6. P4-E2: Multi-Entity Group Accounting, Intercompany Eliminations & Consolidation
+        CREATE TABLE app.p4_group_entities (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          entity_code text NOT NULL,
+          entity_name text NOT NULL,
+          jurisdiction text NOT NULL DEFAULT 'US-DE',
+          functional_currency text NOT NULL DEFAULT 'USD',
+          ownership_percent numeric(6,2) NOT NULL DEFAULT 100.00 CHECK (
+            ownership_percent > 0 AND ownership_percent <= 100
+          ),
+          consolidation_method text NOT NULL DEFAULT 'full_consolidation' CHECK (consolidation_method IN (
+            'full_consolidation','equity_method'
+          )),
+          effective_from date NOT NULL,
+          closing_fx_rate numeric(16,6) NOT NULL DEFAULT 1.000000 CHECK (closing_fx_rate > 0),
+          average_fx_rate numeric(16,6) NOT NULL DEFAULT 1.000000 CHECK (average_fx_rate > 0),
+          standalone_assets numeric(18,6) NOT NULL DEFAULT 0,
+          standalone_liabilities numeric(18,6) NOT NULL DEFAULT 0,
+          standalone_revenue numeric(18,6) NOT NULL DEFAULT 0,
+          standalone_expenses numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_receivable numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_payable numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_revenue numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_expense numeric(18,6) NOT NULL DEFAULT 0,
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+          UNIQUE (business_id, entity_code)
+        );
+        CREATE INDEX p4_group_entities_biz_idx ON app.p4_group_entities
+          (business_id, entity_code);
+        ALTER TABLE app.p4_group_entities ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_group_entities FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_group_entities_scope ON app.p4_group_entities
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_group_entities TO {role};
+
+        CREATE TABLE app.p4_group_consolidation_runs (
+          id uuid PRIMARY KEY,
+          business_id uuid NOT NULL REFERENCES app.businesses(id),
+          period_label text NOT NULL,
+          reporting_currency text NOT NULL DEFAULT 'USD',
+          entities_count integer NOT NULL DEFAULT 0,
+          intercompany_ar_eliminated numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_ap_eliminated numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_rev_eliminated numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_exp_eliminated numeric(18,6) NOT NULL DEFAULT 0,
+          intercompany_mismatch_amount numeric(18,6) NOT NULL DEFAULT 0,
+          fx_cta_adjustment numeric(18,6) NOT NULL DEFAULT 0,
+          minority_interest_nci_share numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_assets numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_liabilities numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_equity numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_revenue numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_expenses numeric(18,6) NOT NULL DEFAULT 0,
+          consolidated_net_income numeric(18,6) NOT NULL DEFAULT 0,
+          parent_attributable_net_income numeric(18,6) NOT NULL DEFAULT 0,
+          elimination_lines jsonb NOT NULL DEFAULT '[]'::jsonb,
+          status text NOT NULL DEFAULT 'consolidated_balanced' CHECK (status IN (
+            'consolidated_balanced','intercompany_mismatch_flagged'
+          )),
+          actor uuid NOT NULL REFERENCES app.users(id),
+          created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+        );
+        CREATE INDEX p4_group_consolidation_runs_biz_idx ON app.p4_group_consolidation_runs
+          (business_id, created_at DESC);
+        ALTER TABLE app.p4_group_consolidation_runs ENABLE ROW LEVEL SECURITY;
+        ALTER TABLE app.p4_group_consolidation_runs FORCE ROW LEVEL SECURITY;
+        CREATE POLICY p4_group_consolidation_runs_scope ON app.p4_group_consolidation_runs
+          USING (business_id=app.scope() AND app.has_access(business_id))
+          WITH CHECK (business_id=app.scope() AND app.has_access(business_id));
+        GRANT SELECT,INSERT,UPDATE ON app.p4_group_consolidation_runs TO {role};
     """)
 
 
 def downgrade() -> None:
     op.execute("""
+        DROP TABLE IF EXISTS app.p4_group_consolidation_runs;
+        DROP TABLE IF EXISTS app.p4_group_entities;
+        DROP TABLE IF EXISTS app.p4_inventory_movements;
+        DROP TABLE IF EXISTS app.p4_inventory_items;
+        DROP TABLE IF EXISTS app.p4_regional_dr_drills;
+        DROP TABLE IF EXISTS app.p4_bulk_ingestion_batches;
+        DROP TABLE IF EXISTS app.p4_online_ledger_migrations;
+        DROP TABLE IF EXISTS app.p4_enterprise_tenant_quotas;
         DROP TABLE IF EXISTS app.enterprise_sso_cell_configs;
         DROP TABLE IF EXISTS app.accounting_expansion_workflows;
         DROP TABLE IF EXISTS app.ai_ocr_cost_benchmarks;

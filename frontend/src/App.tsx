@@ -140,6 +140,12 @@ const navigation = [
   { to: "/reminders", label: "WhatsApp & Slack", icon: CheckSquare },
   { to: "/supplier-portals", label: "Supplier portals", icon: FolderOpen },
   { to: "/supplier-payments", label: "Supplier payments", icon: Landmark },
+  { to: "/p4-operations", label: "Enterprise quotas", icon: SettingsIcon },
+  { to: "/p4-migrations", label: "Online migrations", icon: BookOpen },
+  { to: "/p4-bulk-ingestion", label: "Bulk ingestion", icon: FolderOpen },
+  { to: "/p4-disaster-recovery", label: "Regional DR", icon: Landmark },
+  { to: "/p4-inventory", label: "Inventory costing", icon: BarChart3 },
+  { to: "/p4-group-consolidation", label: "Group consolidation", icon: Users },
   { to: "/reconciliation", label: "Reconciliation", icon: CheckSquare },
   { to: "/ledger", label: "General ledger", icon: BookOpen },
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -554,6 +560,17 @@ function Workspace() {
                     "/search",
                   ],
                 },
+                {
+                  title: "Enterprise (P4)",
+                  paths: [
+                    "/p4-operations",
+                    "/p4-migrations",
+                    "/p4-bulk-ingestion",
+                    "/p4-disaster-recovery",
+                    "/p4-inventory",
+                    "/p4-group-consolidation",
+                  ],
+                },
               ].map((group) => (
                 <div key={group.title} className="nav-group">
                   {group.title === "Workspace" ? (
@@ -746,6 +763,34 @@ function Workspace() {
                     path="/enterprise-sso"
                     element={<P3AutomationHub initialTab="enterprise-sso" />}
                   />
+                  <Route
+                    path="/p4-operations"
+                    element={<P3AutomationHub initialTab="p4-operations" />}
+                  />
+                  <Route
+                    path="/p4-migrations"
+                    element={<P3AutomationHub initialTab="p4-migrations" />}
+                  />
+                  <Route
+                    path="/p4-bulk-ingestion"
+                    element={<P3AutomationHub initialTab="p4-bulk-ingestion" />}
+                  />
+                  <Route
+                    path="/p4-disaster-recovery"
+                    element={
+                      <P3AutomationHub initialTab="p4-disaster-recovery" />
+                    }
+                  />
+                  <Route
+                    path="/p4-inventory"
+                    element={<P3AutomationHub initialTab="p4-inventory" />}
+                  />
+                  <Route
+                    path="/p4-group-consolidation"
+                    element={
+                      <P3AutomationHub initialTab="p4-group-consolidation" />
+                    }
+                  />
                   <Route path="/settings" element={<Settings />} />
                   <Route
                     path="/settings/billing"
@@ -857,6 +902,46 @@ function Workspace() {
                       label: "P3-K · Enterprise SSO & Regional Cell Isolation",
                       hint: "/enterprise-sso",
                       run: () => navigate("/enterprise-sso"),
+                    },
+                    {
+                      id: "/p4-operations",
+                      label:
+                        "P4-D · Enterprise Quotas, Fair-Share & AI Cost Caps",
+                      hint: "/p4-operations",
+                      run: () => navigate("/p4-operations"),
+                    },
+                    {
+                      id: "/p4-migrations",
+                      label: "P4-B · Online Large-Ledger Migrations & Tie-Out",
+                      hint: "/p4-migrations",
+                      run: () => navigate("/p4-migrations"),
+                    },
+                    {
+                      id: "/p4-bulk-ingestion",
+                      label:
+                        "P4-A · Isolated Bulk Ingestion Cells & Backpressure",
+                      hint: "/p4-bulk-ingestion",
+                      run: () => navigate("/p4-bulk-ingestion"),
+                    },
+                    {
+                      id: "/p4-disaster-recovery",
+                      label: "P4-C · Regional DR Failover & Monotonic Fencing",
+                      hint: "/p4-disaster-recovery",
+                      run: () => navigate("/p4-disaster-recovery"),
+                    },
+                    {
+                      id: "/p4-inventory",
+                      label:
+                        "P4-E1 · Inventory FIFO / Weighted Cost & Landed Cost",
+                      hint: "/p4-inventory",
+                      run: () => navigate("/p4-inventory"),
+                    },
+                    {
+                      id: "/p4-group-consolidation",
+                      label:
+                        "P4-E2 · Multi-Entity Consolidation & IC Eliminations",
+                      hint: "/p4-group-consolidation",
+                      run: () => navigate("/p4-group-consolidation"),
                     },
                     {
                       id: "/settings",

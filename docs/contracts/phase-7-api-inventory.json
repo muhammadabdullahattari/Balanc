@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 257,
-  "distinct_operations": 214,
+  "call_sites": 274,
+  "distinct_operations": 231,
   "operations": [
     {
       "file": "App.tsx",
@@ -922,6 +922,91 @@
       "file": "features/p3-automation.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/p3/enterprise-sso-cell"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/operations"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/operations/quotas"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/operations/meter-workload"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/online-migrations"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/online-migrations/run"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/online-migrations/{job_id}/transition"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/bulk-ingestion"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/bulk-ingestion/submit"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/bulk-ingestion/{batch_id}/cancel"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/disaster-recovery"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/disaster-recovery/drill"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/inventory"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/inventory/items"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/inventory/movements"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/p4/group-consolidation"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/group-consolidation/entities"
+    },
+    {
+      "file": "features/p3-automation.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/p4/group-consolidation/run"
     },
     {
       "file": "features/portfolio-triage.tsx",

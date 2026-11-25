@@ -18,6 +18,8 @@ from ledgerpilot.local_setup import FileSettings
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.workspace.p3_automation import (
     _build_remittance_advice,
+    _compute_fifo_issue_cogs,
+    _compute_group_consolidation_math,
     _evaluate_sla_status,
     _extract_accounting_intent_from_transcript,
     _is_in_quiet_hours,
@@ -1092,3 +1094,369 @@ async def test_p3_cde_end_to_end_under_real_postgres_rls(
         assert sso_get_saved.status_code == 200, sso_get_saved.text
         assert sso_get_saved.json()["config"]["region_cell"] == "eu-central-fra-cell-1"
         assert sso_get_saved.json()["config"]["sso_secret_configured"] is True
+
+        # =====================================================================
+        # 11. P4-D: Enterprise Quotas, Fair-Share & Hard AI Budget Gate
+        # =====================================================================
+        ops_init = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/operations",
+            headers=headers,
+        )
+        assert ops_init.status_code == 200, ops_init.text
+        assert ops_init.json()["quotas"]["service_tier"] == "enterprise"
+
+        ops_save = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/operations/quotas",
+            headers=headers,
+            json={
+                "service_tier": "sovereign",
+                "daily_page_quota": 2000,
+                "monthly_ai_budget_usd": "100.00",
+                "storage_quota_gb": 120,
+                "max_concurrent_workers": 6,
+                "fair_share_weight": 200,
+                "hard_quota_enforcement": True,
+                "alert_threshold_percent": 80,
+                "runbook_owner": "enterprise-sre@balanc.example",
+            },
+        )
+        assert ops_save.status_code == 200, ops_save.text
+        assert ops_save.json()["service_tier"] == "sovereign"
+
+        ops_meter_ok = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/operations/meter-workload",
+            headers=headers,
+            json={
+                "pages_count": 500,
+                "ai_cost_usd": "12.50",
+                "storage_mb": "150.00",
+                "simulate_noisy_neighbor": True,
+            },
+        )
+        assert ops_meter_ok.status_code == 200, ops_meter_ok.text
+        assert ops_meter_ok.json()["incident_state"] == "noisy_neighbor_throttled"
+        assert ops_meter_ok.json()["noisy_neighbor_throttled"] is True
+
+        ops_quota_breach = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/operations/meter-workload",
+            headers=headers,
+            json={
+                "pages_count": 5000,
+                "ai_cost_usd": "10.00",
+                "storage_mb": "10.00",
+                "simulate_noisy_neighbor": False,
+            },
+        )
+        assert ops_quota_breach.status_code == 429, ops_quota_breach.text
+
+        # =====================================================================
+        # 12. P4-B: Zero-Downtime Online Large-Ledger Migrations & Tie-Out
+        # =====================================================================
+        mig_run = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/online-migrations/run",
+            headers=headers,
+            json={
+                "migration_name": "2026_11_add_dimension_tag",
+                "target_table": "app.journal_lines",
+                "pattern": "expand_backfill_verify_contract",
+                "batch_size": 500,
+                "lock_timeout_ms": 50,
+            },
+        )
+        assert mig_run.status_code == 200, mig_run.text
+        mig_id = mig_run.json()["id"]
+        assert mig_run.json()["trial_balance_tied_out"] is True
+        assert mig_run.json()["availability_percent"] == 100.0
+
+        mig_pause = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/online-migrations/{mig_id}/transition",
+            headers=headers,
+            json={"target_phase": "paused"},
+        )
+        assert mig_pause.status_code == 200, mig_pause.text
+        assert mig_pause.json()["phase"] == "paused"
+
+        mig_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/online-migrations",
+            headers=headers,
+        )
+        assert mig_list.status_code == 200, mig_list.text
+        assert mig_list.json()["live_ledger_invariants"]["trial_balance_balanced"] is True
+
+        # =====================================================================
+        # 13. P4-A: Capacity & Isolated Bulk Ingestion Cells
+        # =====================================================================
+        bulk_sub = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/bulk-ingestion/submit",
+            headers=headers,
+            json={
+                "batch_reference": "ARCHIVE-HIST-600K",
+                "worker_lane": "bulk_background",
+                "source_channel": "archive_backfill_zip",
+                "total_pages": 600000,
+                "tenant_concurrency_slots": 12,
+            },
+        )
+        assert bulk_sub.status_code == 200, bulk_sub.text
+        batch_id = bulk_sub.json()["id"]
+        assert bulk_sub.json()["backpressure_status"] == "backpressure_queued"
+        assert bulk_sub.json()["tenant_concurrency_slots"] == 6
+
+        bulk_cancel = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/bulk-ingestion/{batch_id}/cancel",
+            headers=headers,
+        )
+        assert bulk_cancel.status_code == 200, bulk_cancel.text
+        assert bulk_cancel.json()["status"] == "cancelled"
+
+        bulk_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/bulk-ingestion",
+            headers=headers,
+        )
+        assert bulk_list.status_code == 200, bulk_list.text
+        assert len(bulk_list.json()["batches"]) >= 1
+
+        # =====================================================================
+        # 14. P4-C: Regional Resilience & Monotonically Fenced DR Drills
+        # =====================================================================
+        dr_same_cell = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/disaster-recovery/drill",
+            headers=headers,
+            json={
+                "primary_cell": "eu-central-fra-cell-1",
+                "standby_cell": "eu-central-fra-cell-1",
+                "drill_mode": "fenced_failover",
+            },
+        )
+        assert dr_same_cell.status_code == 422
+
+        dr_failover = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/disaster-recovery/drill",
+            headers=headers,
+            json={
+                "primary_cell": "eu-central-fra-cell-1",
+                "standby_cell": "us-east-va-cell-1",
+                "drill_mode": "fenced_failover",
+            },
+        )
+        assert dr_failover.status_code == 200, dr_failover.text
+        fence_1 = dr_failover.json()["fencing_token"]
+        assert dr_failover.json()["active_cell"] == "us-east-va-cell-1"
+        assert dr_failover.json()["split_brain_prevented"] is True
+
+        dr_failback = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/disaster-recovery/drill",
+            headers=headers,
+            json={
+                "primary_cell": "eu-central-fra-cell-1",
+                "standby_cell": "us-east-va-cell-1",
+                "drill_mode": "failback_to_primary",
+            },
+        )
+        assert dr_failback.status_code == 200, dr_failback.text
+        assert dr_failback.json()["fencing_token"] == fence_1 + 1
+        assert dr_failback.json()["active_cell"] == "eu-central-fra-cell-1"
+
+        dr_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/disaster-recovery",
+            headers=headers,
+        )
+        assert dr_list.status_code == 200, dr_list.text
+        assert dr_list.json()["topology"]["latest_fencing_token"] == fence_1 + 1
+
+        # =====================================================================
+        # 15. P4-E1: Inventory Costing (FIFO), Landed Cost & Negative Stock Guard
+        # =====================================================================
+        inv_item = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/inventory/items",
+            headers=headers,
+            json={
+                "sku": "SKU-P4-TEST",
+                "name": "P4 Servo Controller",
+                "warehouse_location": "MAIN-WH-01",
+                "costing_method": "fifo",
+                "currency": "USD",
+                "initial_quantity": "10",
+                "initial_unit_cost": "10.00",
+                "initial_landed_cost": "20.00",
+                "reorder_point": "3",
+            },
+        )
+        assert inv_item.status_code == 200, inv_item.text
+        item_id = inv_item.json()["id"]
+        assert inv_item.json()["total_valuation"] == "120.00"
+
+        inv_landed = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/inventory/movements",
+            headers=headers,
+            json={
+                "item_id": item_id,
+                "movement_kind": "landed_cost_allocation",
+                "reference": "DUTY-2026-01",
+                "quantity": "0",
+                "unit_cost": "0",
+                "landed_cost_amount": "30.00",
+            },
+        )
+        assert inv_landed.status_code == 200, inv_landed.text
+        assert inv_landed.json()["resulting_valuation"] == "150.00"
+
+        inv_sale = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/inventory/movements",
+            headers=headers,
+            json={
+                "item_id": item_id,
+                "movement_kind": "issue_sale",
+                "reference": "SO-2026-901",
+                "quantity": "4",
+                "unit_cost": "0",
+                "landed_cost_amount": "0",
+            },
+        )
+        assert inv_sale.status_code == 200, inv_sale.text
+        assert inv_sale.json()["resulting_qty"] == "6.00"
+        assert inv_sale.json()["cogs_amount"] == "60.00"
+        assert inv_sale.json()["source_draft_id"] is not None
+
+        inv_neg = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/inventory/movements",
+            headers=headers,
+            json={
+                "item_id": item_id,
+                "movement_kind": "issue_sale",
+                "reference": "SO-OVER-999",
+                "quantity": "50",
+                "unit_cost": "0",
+                "landed_cost_amount": "0",
+            },
+        )
+        assert inv_neg.status_code == 409
+
+        inv_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/inventory",
+            headers=headers,
+        )
+        assert inv_list.status_code == 200, inv_list.text
+        assert inv_list.json()["valuation_summary"]["total_subledger_valuation"] == "90.00"
+
+        # =====================================================================
+        # 16. P4-E2: Multi-Entity Consolidation, FX Translation & IC Eliminations
+        # =====================================================================
+        ent_parent = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/group-consolidation/entities",
+            headers=headers,
+            json={
+                "entity_code": "PARENT-US",
+                "entity_name": "Balanc Parent Inc.",
+                "jurisdiction": "US-DE",
+                "functional_currency": "USD",
+                "ownership_percent": "100.00",
+                "closing_fx_rate": "1.000000",
+                "average_fx_rate": "1.000000",
+                "standalone_assets": "500000.00",
+                "standalone_liabilities": "150000.00",
+                "standalone_revenue": "300000.00",
+                "standalone_expenses": "200000.00",
+                "intercompany_receivable": "25000.00",
+                "intercompany_payable": "0.00",
+                "intercompany_revenue": "40000.00",
+                "intercompany_expense": "0.00",
+            },
+        )
+        assert ent_parent.status_code == 200, ent_parent.text
+
+        ent_sub = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/group-consolidation/entities",
+            headers=headers,
+            json={
+                "entity_code": "SUB-EU",
+                "entity_name": "Balanc Europe GmbH",
+                "jurisdiction": "DE-BE",
+                "functional_currency": "EUR",
+                "ownership_percent": "80.00",
+                "closing_fx_rate": "1.100000",
+                "average_fx_rate": "1.000000",
+                "standalone_assets": "200000.00",
+                "standalone_liabilities": "80000.00",
+                "standalone_revenue": "150000.00",
+                "standalone_expenses": "100000.00",
+                "intercompany_receivable": "0.00",
+                "intercompany_payable": "22727.27",
+                "intercompany_revenue": "0.00",
+                "intercompany_expense": "40000.00",
+            },
+        )
+        assert ent_sub.status_code == 200, ent_sub.text
+
+        cons_run = await accountant.post(
+            f"/api/v1/businesses/{bid}/p4/group-consolidation/run",
+            headers=headers,
+            json={
+                "period_label": "2026-Q4 Audited Consolidation",
+                "reporting_currency": "USD",
+            },
+        )
+        assert cons_run.status_code == 200, cons_run.text
+        c_data = cons_run.json()
+        assert c_data["entities_count"] == 2
+        assert c_data["minority_interest_nci_share"] == "10000.00"
+        assert c_data["fx_cta_adjustment"] == "5000.00"
+        assert c_data["intercompany_rev_eliminated"] == "40000.00"
+
+        cons_list = await accountant.get(
+            f"/api/v1/businesses/{bid}/p4/group-consolidation",
+            headers=headers,
+        )
+        assert cons_list.status_code == 200, cons_list.text
+        assert len(cons_list.json()["entities"]) == 2
+        assert len(cons_list.json()["runs"]) >= 1
+
+
+def test_p4_fifo_issue_cogs_and_group_consolidation_math() -> None:
+    cogs, rem_layers = _compute_fifo_issue_cogs(
+        [
+            {"qty": "10.0000", "unit_cost": "5.000000"},
+            {"qty": "8.0000", "unit_cost": "7.500000"},
+        ],
+        Decimal("14"),
+    )
+    assert cogs == Decimal("80.00")
+    assert len(rem_layers) == 1
+    assert Decimal(rem_layers[0]["qty"]) == Decimal("4.0000")
+
+    cons = _compute_group_consolidation_math(
+        [
+            {
+                "ownership_percent": "100.00",
+                "closing_fx_rate": "1.000000",
+                "average_fx_rate": "1.000000",
+                "standalone_assets": "300000.00",
+                "standalone_liabilities": "100000.00",
+                "standalone_revenue": "200000.00",
+                "standalone_expenses": "140000.00",
+                "intercompany_receivable": "10000.00",
+                "intercompany_payable": "0.00",
+                "intercompany_revenue": "20000.00",
+                "intercompany_expense": "0.00",
+            },
+            {
+                "ownership_percent": "80.00",
+                "closing_fx_rate": "1.000000",
+                "average_fx_rate": "1.000000",
+                "standalone_assets": "150000.00",
+                "standalone_liabilities": "50000.00",
+                "standalone_revenue": "100000.00",
+                "standalone_expenses": "60000.00",
+                "intercompany_receivable": "0.00",
+                "intercompany_payable": "10000.00",
+                "intercompany_revenue": "0.00",
+                "intercompany_expense": "20000.00",
+            },
+        ]
+    )
+    assert cons["status"] == "consolidated_balanced"
+    assert cons["intercompany_ar_eliminated"] == Decimal("10000.00")
+    assert cons["intercompany_rev_eliminated"] == Decimal("20000.00")
+    assert cons["minority_interest_nci_share"] == Decimal("8000.00")
+    assert cons["consolidated_net_income"] == Decimal("100000.00")
+    assert cons["parent_attributable_net_income"] == Decimal("92000.00")

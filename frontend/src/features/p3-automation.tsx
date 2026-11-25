@@ -3885,6 +3885,2274 @@ export function EnterpriseSsoCellHub() {
   );
 }
 
+export function P4EnterpriseOperationsHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [serviceTier, setServiceTier] = useState<
+    "starter" | "growth" | "enterprise" | "sovereign"
+  >("enterprise");
+  const [dailyPageQuota, setDailyPageQuota] = useState("50000");
+  const [monthlyAiBudget, setMonthlyAiBudget] = useState("500.00");
+  const [storageQuotaGb, setStorageQuotaGb] = useState("250");
+  const [maxConcurrentWorkers, setMaxConcurrentWorkers] = useState("16");
+  const [fairShareWeight, setFairShareWeight] = useState("100");
+  const [hardQuotaEnforcement, setHardQuotaEnforcement] = useState(true);
+  const [alertThresholdPercent, setAlertThresholdPercent] = useState("80");
+  const [runbookOwner, setRunbookOwner] = useState(
+    "sre-oncall@balanc.enterprise",
+  );
+  const [pagesCount, setPagesCount] = useState("1200");
+  const [aiCostUsd, setAiCostUsd] = useState("14.40");
+  const [storageMb, setStorageMb] = useState("240.00");
+  const [simulateNoisyNeighbor, setSimulateNoisyNeighbor] = useState(false);
+  const [opsNotice, setOpsNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-operations"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/operations", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        quotas: {
+          service_tier: string;
+          daily_page_quota: number;
+          monthly_ai_budget_usd: string;
+          storage_quota_gb: number;
+          max_concurrent_workers: number;
+          fair_share_weight: number;
+          hard_quota_enforcement: boolean;
+          alert_threshold_percent: number;
+          runbook_owner: string;
+          incident_state: string;
+        };
+        telemetry: {
+          pages_ingested_today: number;
+          page_utilization_percent: number;
+          ai_spend_mtd_usd: string;
+          ai_budget_remaining_usd: string;
+          ai_budget_utilization_percent: number;
+          storage_used_mb: string;
+          alert_triggered: boolean;
+          noisy_neighbor_isolation: string;
+        };
+      },
+  });
+
+  const saveQuotasMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p4/operations/quotas", {
+          params: { path },
+          body: {
+            service_tier: serviceTier,
+            daily_page_quota: Math.max(100, Number(dailyPageQuota) || 50000),
+            monthly_ai_budget_usd: monthlyAiBudget || "500.00",
+            storage_quota_gb: Math.max(1, Number(storageQuotaGb) || 250),
+            max_concurrent_workers: Math.max(
+              1,
+              Number(maxConcurrentWorkers) || 16,
+            ),
+            fair_share_weight: Math.max(10, Number(fairShareWeight) || 100),
+            hard_quota_enforcement: hardQuotaEnforcement,
+            alert_threshold_percent: Math.min(
+              99,
+              Math.max(50, Number(alertThresholdPercent) || 80),
+            ),
+            runbook_owner: runbookOwner || "sre-oncall@balanc.enterprise",
+          },
+        }),
+      )) as unknown as {
+        service_tier: string;
+        daily_page_quota: number;
+        monthly_ai_budget_usd: string;
+        incident_state: string;
+      },
+    onSuccess: (res) => {
+      setOpsNotice(
+        `Saved ${res.service_tier.toUpperCase()} tenant policy: ${res.daily_page_quota.toLocaleString()} pages/day cap, $${res.monthly_ai_budget_usd} monthly AI budget (${res.incident_state}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-operations"],
+      });
+    },
+  });
+
+  const meterMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/operations/meter-workload",
+          {
+            params: { path },
+            body: {
+              pages_count: Math.max(1, Number(pagesCount) || 1200),
+              ai_cost_usd: aiCostUsd || "0.00",
+              storage_mb: storageMb || "0.00",
+              simulate_noisy_neighbor: simulateNoisyNeighbor,
+            },
+          },
+        ),
+      )) as unknown as {
+        pages_ingested_today: number;
+        ai_spend_mtd_usd: string;
+        storage_used_mb: string;
+        incident_state: string;
+        noisy_neighbor_throttled: boolean;
+      },
+    onSuccess: (res) => {
+      setOpsNotice(
+        `Workload metered: ${res.pages_ingested_today.toLocaleString()} pages today, $${res.ai_spend_mtd_usd} AI spend MTD — State: ${res.incident_state.toUpperCase()}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-operations"],
+      });
+    },
+  });
+
+  const q = query.data?.quotas;
+  const tel = query.data?.telemetry;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P4-D · Enterprise Operations, Tenant Quotas, Fair-Share & AI Cost
+          Controls
+        </h2>
+        <p className="muted">
+          Enforce per-tenant page ingestion limits, monthly AI unit-cost
+          budgets, fair-share scheduler weights, and noisy-neighbor throttling
+          before workloads impact shared SLAs.
+        </p>
+        {q && tel && (
+          <>
+            <div className="p4-kpi-grid">
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">Tier & Incident State</span>
+                <span className="p4-kpi-value">
+                  {q.service_tier.toUpperCase()}
+                </span>
+                <span className="p4-kpi-sub">
+                  <Badge
+                    tone={q.incident_state === "healthy" ? "good" : "warning"}
+                  >
+                    {q.incident_state.toUpperCase()}
+                  </Badge>
+                </span>
+              </div>
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">Daily Page Quota</span>
+                <span className="p4-kpi-value">
+                  {tel.pages_ingested_today.toLocaleString()} /{" "}
+                  {q.daily_page_quota.toLocaleString()}
+                </span>
+                <span className="p4-kpi-sub">
+                  {tel.page_utilization_percent}% utilized ·{" "}
+                  {q.hard_quota_enforcement ? "Hard Gate" : "Soft Alert"}
+                </span>
+              </div>
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">Monthly AI Budget (MTD)</span>
+                <span className="p4-kpi-value">${tel.ai_spend_mtd_usd}</span>
+                <span className="p4-kpi-sub">
+                  ${tel.ai_budget_remaining_usd} remaining of $
+                  {q.monthly_ai_budget_usd} ({tel.ai_budget_utilization_percent}
+                  %)
+                </span>
+              </div>
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">Worker Fair-Share</span>
+                <span className="p4-kpi-value">
+                  {q.max_concurrent_workers} Workers · W={q.fair_share_weight}
+                </span>
+                <span className="p4-kpi-sub">
+                  Storage {tel.storage_used_mb} MB / {q.storage_quota_gb} GB
+                </span>
+              </div>
+            </div>
+            <div className="p3-badge-row">
+              <Badge tone={tel.alert_triggered ? "warning" : "good"}>
+                {tel.alert_triggered
+                  ? `ALERT >= ${q.alert_threshold_percent}% THRESHOLD`
+                  : `WITHIN BUDGET (< ${q.alert_threshold_percent}%)`}
+              </Badge>
+              <Badge>{tel.noisy_neighbor_isolation}</Badge>
+              <Badge>Runbook Owner: {q.runbook_owner}</Badge>
+            </div>
+            <div
+              className="p3-progress-track"
+              style={{ marginTop: "14px", marginBottom: 0 }}
+              aria-label="Daily page quota utilization"
+            >
+              <div
+                className="p3-progress-fill"
+                style={{
+                  width: `${Math.min(100, tel.page_utilization_percent)}%`,
+                }}
+              />
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Configure Tenant Quotas, AI Spend Cap & SRE Runbook Policy</h3>
+        <ErrorNotice error={query.error || saveQuotasMutation.error} />
+        <div className="form-grid">
+          <Field label="Enterprise Service Tier">
+            <select
+              value={serviceTier}
+              onChange={(e) =>
+                setServiceTier(e.target.value as typeof serviceTier)
+              }
+            >
+              <option value="starter">Starter</option>
+              <option value="growth">Growth</option>
+              <option value="enterprise">Enterprise</option>
+              <option value="sovereign">Sovereign Dedicated</option>
+            </select>
+          </Field>
+          <Field label="Daily Page Ingestion Quota">
+            <input
+              type="number"
+              min={100}
+              value={dailyPageQuota}
+              onChange={(e) => setDailyPageQuota(e.target.value)}
+            />
+          </Field>
+          <Field label="Monthly AI Budget Cap (USD)">
+            <input
+              type="number"
+              step="0.01"
+              value={monthlyAiBudget}
+              onChange={(e) => setMonthlyAiBudget(e.target.value)}
+            />
+          </Field>
+          <Field label="Evidence Storage Quota (GB)">
+            <input
+              type="number"
+              min={1}
+              value={storageQuotaGb}
+              onChange={(e) => setStorageQuotaGb(e.target.value)}
+            />
+          </Field>
+          <Field label="Max Concurrent Tenant Workers">
+            <input
+              type="number"
+              min={1}
+              max={256}
+              value={maxConcurrentWorkers}
+              onChange={(e) => setMaxConcurrentWorkers(e.target.value)}
+            />
+          </Field>
+          <Field label="Fair-Share Scheduler Weight (10–1000)">
+            <input
+              type="number"
+              min={10}
+              max={1000}
+              value={fairShareWeight}
+              onChange={(e) => setFairShareWeight(e.target.value)}
+            />
+          </Field>
+          <Field label="Warning Alert Threshold (%)">
+            <input
+              type="number"
+              min={50}
+              max={99}
+              value={alertThresholdPercent}
+              onChange={(e) => setAlertThresholdPercent(e.target.value)}
+            />
+          </Field>
+          <Field label="SRE Runbook Owner Email">
+            <input
+              value={runbookOwner}
+              onChange={(e) => setRunbookOwner(e.target.value)}
+            />
+          </Field>
+        </div>
+        <label className="p4-check-row">
+          <input
+            type="checkbox"
+            checked={hardQuotaEnforcement}
+            onChange={(e) => setHardQuotaEnforcement(e.target.checked)}
+          />
+          Enforce Hard HTTP 429 Quota Gate (Reject Excess AI/Page Bursts)
+        </label>
+        <div className="p3-actions-row">
+          <Button
+            busy={saveQuotasMutation.isPending}
+            onClick={() => saveQuotasMutation.mutate()}
+          >
+            Save Tenant Quota & AI Budget Policy
+          </Button>
+        </div>
+      </div>
+
+      <div className="panel">
+        <h3>2. Meter Workload & Test Noisy-Neighbor Isolation</h3>
+        <p className="muted">
+          Record metered ingestion/AI consumption or simulate a noisy-neighbor
+          burst to validate fair-share throttling and hard 429 quota protection.
+        </p>
+        <ErrorNotice error={meterMutation.error} />
+        <div className="form-grid">
+          <Field label="Pages to Meter">
+            <input
+              type="number"
+              min={1}
+              value={pagesCount}
+              onChange={(e) => setPagesCount(e.target.value)}
+            />
+          </Field>
+          <Field label="AI Inference Cost (USD)">
+            <input
+              type="number"
+              step="0.01"
+              value={aiCostUsd}
+              onChange={(e) => setAiCostUsd(e.target.value)}
+            />
+          </Field>
+          <Field label="Document Storage Delta (MB)">
+            <input
+              type="number"
+              step="0.01"
+              value={storageMb}
+              onChange={(e) => setStorageMb(e.target.value)}
+            />
+          </Field>
+        </div>
+        <label className="p4-check-row">
+          <input
+            type="checkbox"
+            checked={simulateNoisyNeighbor}
+            onChange={(e) => setSimulateNoisyNeighbor(e.target.checked)}
+          />
+          Simulate Noisy-Neighbor Burst Isolation (Throttle Worker Lane)
+        </label>
+        <div className="p3-actions-row">
+          <Button
+            variant="secondary"
+            busy={meterMutation.isPending}
+            onClick={() => meterMutation.mutate()}
+          >
+            Record Metered Workload & Evaluate Quota Gate
+          </Button>
+        </div>
+        {opsNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {opsNotice}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export function P4OnlineLedgerMigrationsHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [migrationName, setMigrationName] = useState(
+    "2026_11_expand_journal_lines_reporting_dimension",
+  );
+  const [targetTable, setTargetTable] = useState<
+    | "app.journal_lines"
+    | "app.journals"
+    | "app.trade_documents"
+    | "app.bank_rows"
+  >("app.journal_lines");
+  const [pattern, setPattern] = useState<
+    | "expand_backfill_verify_contract"
+    | "online_index_concurrently"
+    | "dual_read_write_backfill"
+  >("expand_backfill_verify_contract");
+  const [batchSize, setBatchSize] = useState("1000");
+  const [lockTimeoutMs, setLockTimeoutMs] = useState("50");
+  const [migNotice, setMigNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-online-migrations"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/online-migrations", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        live_ledger_invariants: {
+          posted_journal_lines_count: number;
+          total_debits: string;
+          total_credits: string;
+          trial_balance_balanced: boolean;
+        };
+        migrations: Array<{
+          id: string;
+          migration_name: string;
+          target_table: string;
+          pattern: string;
+          phase: string;
+          batch_size: number;
+          lock_timeout_ms: number;
+          total_rows: number;
+          processed_rows: number;
+          last_cursor: string;
+          pre_backfill_debit_total: string;
+          pre_backfill_credit_total: string;
+          post_backfill_debit_total: string;
+          post_backfill_credit_total: string;
+          trial_balance_tied_out: boolean;
+          availability_percent: number;
+          checksum_sha256: string;
+          created_at: string;
+        }>;
+      },
+  });
+
+  const runMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p4/online-migrations/run", {
+          params: { path },
+          body: {
+            migration_name: migrationName,
+            target_table: targetTable,
+            pattern,
+            batch_size: Math.max(50, Number(batchSize) || 1000),
+            lock_timeout_ms: Math.max(10, Number(lockTimeoutMs) || 50),
+          },
+        }),
+      )) as unknown as {
+        id: string;
+        migration_name: string;
+        phase: string;
+        trial_balance_tied_out: boolean;
+        checksum_sha256: string;
+      },
+    onSuccess: (res) => {
+      setMigNotice(
+        `Online migration "${res.migration_name}" completed (${res.phase}). Trial Balance tied out: ${res.trial_balance_tied_out ? "VERIFIED" : "MISMATCH"}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-online-migrations"],
+      });
+    },
+  });
+
+  const transitionMutation = useMutation({
+    mutationFn: async ({
+      jobId,
+      targetPhase,
+    }: {
+      jobId: string;
+      targetPhase:
+        | "paused"
+        | "backfilling"
+        | "verified_ready"
+        | "completed_verified"
+        | "rolled_back";
+    }) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/online-migrations/{job_id}/transition",
+          {
+            params: { path: { business_id: b.id, job_id: jobId } },
+            body: { target_phase: targetPhase },
+          },
+        ),
+      )) as unknown as { migration_name: string; phase: string },
+    onSuccess: (res) => {
+      setMigNotice(
+        `Transitioned "${res.migration_name}" to phase: ${res.phase.toUpperCase()}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-online-migrations"],
+      });
+    },
+  });
+
+  const inv = query.data?.live_ledger_invariants;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P4-B · Zero-Downtime Online Large-Ledger Migrations (Expand / Backfill
+          / Verify)
+        </h2>
+        <p className="muted">
+          Execute resumable expand-contract schema migrations under tight
+          PostgreSQL lock timeouts while proving pre- and post-backfill Trial
+          Balance debit = credit tie-outs across RLS-enforced tables.
+        </p>
+        {inv && (
+          <div className="p4-kpi-grid">
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Posted Journal Lines</span>
+              <span className="p4-kpi-value">
+                {inv.posted_journal_lines_count.toLocaleString()}
+              </span>
+              <span className="p4-kpi-sub">Active RLS ledger rows</span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Trial Balance Debits</span>
+              <span className="p4-kpi-value">
+                {b.currency} {inv.total_debits}
+              </span>
+              <span className="p4-kpi-sub">Pre/Post tie-out baseline</span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Trial Balance Credits</span>
+              <span className="p4-kpi-value">
+                {b.currency} {inv.total_credits}
+              </span>
+              <span className="p4-kpi-sub">
+                <Badge tone={inv.trial_balance_balanced ? "good" : "warning"}>
+                  {inv.trial_balance_balanced
+                    ? "BALANCED (DR = CR)"
+                    : "IMBALANCED"}
+                </Badge>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Execute Resumable Expand / Backfill / Verify Migration</h3>
+        <ErrorNotice
+          error={query.error || runMutation.error || transitionMutation.error}
+        />
+        <div className="form-grid">
+          <Field label="Migration Identifier">
+            <input
+              value={migrationName}
+              onChange={(e) => setMigrationName(e.target.value)}
+            />
+          </Field>
+          <Field label="Target Ledger Table">
+            <select
+              value={targetTable}
+              onChange={(e) =>
+                setTargetTable(e.target.value as typeof targetTable)
+              }
+            >
+              <option value="app.journal_lines">app.journal_lines</option>
+              <option value="app.journals">app.journals</option>
+              <option value="app.trade_documents">app.trade_documents</option>
+              <option value="app.bank_rows">app.bank_rows</option>
+            </select>
+          </Field>
+          <Field label="Online Migration Pattern">
+            <select
+              value={pattern}
+              onChange={(e) => setPattern(e.target.value as typeof pattern)}
+            >
+              <option value="expand_backfill_verify_contract">
+                Expand / Backfill / Verify / Contract
+              </option>
+              <option value="online_index_concurrently">
+                CREATE INDEX CONCURRENTLY (Zero Lock)
+              </option>
+              <option value="dual_read_write_backfill">
+                Dual-Read / Dual-Write Shadow Backfill
+              </option>
+            </select>
+          </Field>
+          <Field label="Chunk Batch Size">
+            <input
+              type="number"
+              min={50}
+              max={50000}
+              value={batchSize}
+              onChange={(e) => setBatchSize(e.target.value)}
+            />
+          </Field>
+          <Field label="PostgreSQL Lock Timeout (ms)">
+            <input
+              type="number"
+              min={10}
+              max={5000}
+              value={lockTimeoutMs}
+              onChange={(e) => setLockTimeoutMs(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button
+          busy={runMutation.isPending}
+          onClick={() => runMutation.mutate()}
+        >
+          Run Online Ledger Migration & Verify Tie-Out
+        </Button>
+        {migNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {migNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Online Migration Runs & Trial Balance Verification Audit</h3>
+          <Table
+            caption="Online Ledger Migrations"
+            rows={query.data.migrations}
+            rowKey={(m) => m.id}
+            columns={[
+              {
+                label: "Migration",
+                render: (m) => (
+                  <div>
+                    <strong>{m.migration_name}</strong>
+                    <div className="muted" style={{ fontSize: "0.78rem" }}>
+                      {m.target_table} · {m.pattern}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Phase",
+                render: (m) => (
+                  <Badge
+                    tone={
+                      m.phase === "completed_verified"
+                        ? "good"
+                        : m.phase === "rolled_back"
+                          ? "warning"
+                          : "neutral"
+                    }
+                  >
+                    {m.phase}
+                  </Badge>
+                ),
+              },
+              {
+                label: "Progress & Cursor",
+                render: (m) => (
+                  <span>
+                    {m.processed_rows} / {m.total_rows} rows (
+                    {m.lock_timeout_ms}ms lock) · <code>{m.last_cursor}</code>
+                  </span>
+                ),
+              },
+              {
+                label: "Trial Balance Tie-Out",
+                render: (m) => (
+                  <Badge tone={m.trial_balance_tied_out ? "good" : "warning"}>
+                    {m.trial_balance_tied_out
+                      ? `TIED (${m.post_backfill_debit_total} = ${m.post_backfill_credit_total})`
+                      : "MISMATCH"}
+                  </Badge>
+                ),
+              },
+              {
+                label: "Checksum",
+                render: (m) => <code>{m.checksum_sha256.slice(0, 12)}…</code>,
+              },
+              {
+                label: "Lifecycle Controls",
+                render: (m) => (
+                  <div className="p4-inline-actions">
+                    {m.phase !== "paused" && (
+                      <Button
+                        variant="ghost"
+                        busy={transitionMutation.isPending}
+                        onClick={() =>
+                          transitionMutation.mutate({
+                            jobId: m.id,
+                            targetPhase: "paused",
+                          })
+                        }
+                      >
+                        Pause
+                      </Button>
+                    )}
+                    {m.phase !== "completed_verified" && (
+                      <Button
+                        variant="secondary"
+                        busy={transitionMutation.isPending}
+                        onClick={() =>
+                          transitionMutation.mutate({
+                            jobId: m.id,
+                            targetPhase: "completed_verified",
+                          })
+                        }
+                      >
+                        Verify & Complete
+                      </Button>
+                    )}
+                    {m.phase !== "rolled_back" && (
+                      <Button
+                        variant="danger"
+                        busy={transitionMutation.isPending}
+                        onClick={() =>
+                          transitionMutation.mutate({
+                            jobId: m.id,
+                            targetPhase: "rolled_back",
+                          })
+                        }
+                      >
+                        Rollback
+                      </Button>
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function P4BulkIngestionHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [batchReference, setBatchReference] = useState("BULK-ARCHIVE-2026-Q4");
+  const [workerLane, setWorkerLane] = useState<
+    "live_priority" | "bulk_background"
+  >("bulk_background");
+  const [sourceChannel, setSourceChannel] = useState<
+    | "archive_backfill_zip"
+    | "erp_historical_pdfs"
+    | "supplier_portal_bulk"
+    | "multi_entity_box_import"
+  >("archive_backfill_zip");
+  const [totalPages, setTotalPages] = useState("25000");
+  const [tenantConcurrencySlots, setTenantConcurrencySlots] = useState("8");
+  const [bulkNotice, setBulkNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-bulk-ingestion"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/bulk-ingestion", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        cell_telemetry: {
+          live_lane_status: string;
+          bulk_lane_status: string;
+          target_daily_capacity_pages: number;
+          max_supported_backlog_pages: number;
+          foreground_p95_slo_ms: number;
+          observed_foreground_p95_ms: number;
+          total_pages_processed_workspace: number;
+        };
+        batches: Array<{
+          id: string;
+          batch_reference: string;
+          worker_lane: string;
+          source_channel: string;
+          total_pages: number;
+          processed_pages: number;
+          failed_pages: number;
+          tenant_concurrency_slots: number;
+          throughput_pages_per_sec: number;
+          foreground_p95_latency_ms: number;
+          foreground_p99_latency_ms: number;
+          backpressure_status: string;
+          unit_cost_per_page_usd: string;
+          status: string;
+          created_at: string;
+        }>;
+      },
+  });
+
+  const submitMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p4/bulk-ingestion/submit", {
+          params: { path },
+          body: {
+            batch_reference: batchReference,
+            worker_lane: workerLane,
+            source_channel: sourceChannel,
+            total_pages: Math.max(1, Number(totalPages) || 25000),
+            tenant_concurrency_slots: Math.min(
+              64,
+              Math.max(1, Number(tenantConcurrencySlots) || 8),
+            ),
+          },
+        }),
+      )) as unknown as {
+        batch_reference: string;
+        processed_pages: number;
+        total_pages: number;
+        backpressure_status: string;
+        foreground_p95_latency_ms: number;
+        status: string;
+      },
+    onSuccess: (res) => {
+      setBulkNotice(
+        `Submitted batch "${res.batch_reference}": ${res.processed_pages.toLocaleString()} / ${res.total_pages.toLocaleString()} pages (${res.backpressure_status}, foreground P95 ${res.foreground_p95_latency_ms}ms).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-bulk-ingestion"],
+      });
+    },
+  });
+
+  const cancelMutation = useMutation({
+    mutationFn: async (batchId: string) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/bulk-ingestion/{batch_id}/cancel",
+          {
+            params: { path: { business_id: b.id, batch_id: batchId } },
+          },
+        ),
+      )) as unknown as { batch_reference: string; status: string },
+    onSuccess: (res) => {
+      setBulkNotice(
+        `Cancelled bulk ingestion batch "${res.batch_reference}" (status: ${res.status}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-bulk-ingestion"],
+      });
+    },
+  });
+
+  const cell = query.data?.cell_telemetry;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>P4-A · High-Volume Capacity & Isolated Bulk Ingestion Cells</h2>
+        <p className="muted">
+          Isolate 500k+ page historical backfills onto a dedicated bulk worker
+          lane with fair-share slot capping and automated backpressure so
+          foreground ledger traffic meets its P95 latency SLO.
+        </p>
+        {cell && (
+          <div className="p4-kpi-grid">
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Live Priority Lane</span>
+              <span className="p4-kpi-value">{cell.live_lane_status}</span>
+              <span className="p4-kpi-sub">
+                Bulk Lane: {cell.bulk_lane_status}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Foreground P95 vs SLO</span>
+              <span className="p4-kpi-value">
+                {cell.observed_foreground_p95_ms} ms
+              </span>
+              <span className="p4-kpi-sub">
+                SLO Limit: {cell.foreground_p95_slo_ms} ms
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Daily Cell Capacity</span>
+              <span className="p4-kpi-value">
+                {cell.target_daily_capacity_pages.toLocaleString()} pages/day
+              </span>
+              <span className="p4-kpi-sub">
+                Max Unthrottled Backlog:{" "}
+                {cell.max_supported_backlog_pages.toLocaleString()} pages
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Workspace Pages Admitted</span>
+              <span className="p4-kpi-value">
+                {cell.total_pages_processed_workspace.toLocaleString()}
+              </span>
+              <span className="p4-kpi-sub">Active & completed batches</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Submit Isolated Bulk Ingestion Batch</h3>
+        <ErrorNotice
+          error={query.error || submitMutation.error || cancelMutation.error}
+        />
+        <div className="form-grid">
+          <Field label="Batch Reference">
+            <input
+              value={batchReference}
+              onChange={(e) => setBatchReference(e.target.value)}
+            />
+          </Field>
+          <Field label="Worker Execution Lane">
+            <select
+              value={workerLane}
+              onChange={(e) =>
+                setWorkerLane(e.target.value as typeof workerLane)
+              }
+            >
+              <option value="bulk_background">
+                Bulk Background Lane (Isolated Cell)
+              </option>
+              <option value="live_priority">Live Priority Lane</option>
+            </select>
+          </Field>
+          <Field label="Document Source Channel">
+            <select
+              value={sourceChannel}
+              onChange={(e) =>
+                setSourceChannel(e.target.value as typeof sourceChannel)
+              }
+            >
+              <option value="archive_backfill_zip">
+                Historical Archive ZIP Backfill
+              </option>
+              <option value="erp_historical_pdfs">
+                Legacy ERP PDF Export Batch
+              </option>
+              <option value="supplier_portal_bulk">
+                Supplier Portal Bulk Fetch
+              </option>
+              <option value="multi_entity_box_import">
+                Multi-Entity Cloud Drive Import
+              </option>
+            </select>
+          </Field>
+          <Field label="Total Pages in Batch">
+            <input
+              type="number"
+              min={1}
+              max={5000000}
+              value={totalPages}
+              onChange={(e) => setTotalPages(e.target.value)}
+            />
+          </Field>
+          <Field label="Requested Concurrency Slots (1–64)">
+            <input
+              type="number"
+              min={1}
+              max={64}
+              value={tenantConcurrencySlots}
+              onChange={(e) => setTenantConcurrencySlots(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button
+          busy={submitMutation.isPending}
+          onClick={() => submitMutation.mutate()}
+        >
+          Admit Batch to Isolated Bulk Ingestion Cell
+        </Button>
+        {bulkNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {bulkNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Bulk Ingestion Batches & Backpressure Telemetry</h3>
+          <Table
+            caption="Bulk Ingestion Batches"
+            rows={query.data.batches}
+            rowKey={(batch) => batch.id}
+            columns={[
+              {
+                label: "Batch",
+                render: (batch) => (
+                  <div>
+                    <strong>{batch.batch_reference}</strong>
+                    <div className="muted" style={{ fontSize: "0.78rem" }}>
+                      {batch.source_channel}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Lane",
+                render: (batch) => <Badge>{batch.worker_lane}</Badge>,
+              },
+              {
+                label: "Pages",
+                render: (batch) =>
+                  `${batch.processed_pages.toLocaleString()} / ${batch.total_pages.toLocaleString()}`,
+              },
+              {
+                label: "Throughput & FG P95",
+                render: (batch) =>
+                  `${batch.throughput_pages_per_sec} p/s · ${batch.foreground_p95_latency_ms} ms (${batch.tenant_concurrency_slots} slots)`,
+              },
+              {
+                label: "Backpressure & Status",
+                render: (batch) => (
+                  <div className="p4-inline-actions">
+                    <Badge
+                      tone={
+                        batch.backpressure_status === "normal"
+                          ? "good"
+                          : "warning"
+                      }
+                    >
+                      {batch.backpressure_status}
+                    </Badge>
+                    <Badge>{batch.status}</Badge>
+                  </div>
+                ),
+              },
+              {
+                label: "Action",
+                render: (batch) =>
+                  batch.status !== "cancelled" ? (
+                    <Button
+                      variant="danger"
+                      busy={cancelMutation.isPending}
+                      onClick={() => cancelMutation.mutate(batch.id)}
+                    >
+                      Cancel Batch
+                    </Button>
+                  ) : (
+                    <span className="muted">Cancelled</span>
+                  ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function P4RegionalDisasterRecoveryHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [primaryCell, setPrimaryCell] = useState<
+    | "us-east-va-cell-1"
+    | "eu-central-fra-cell-1"
+    | "me-central-dxb-cell-1"
+    | "ap-south-khi-cell-1"
+  >("eu-central-fra-cell-1");
+  const [standbyCell, setStandbyCell] = useState<
+    | "us-east-va-cell-1"
+    | "eu-central-fra-cell-1"
+    | "me-central-dxb-cell-1"
+    | "ap-south-khi-cell-1"
+  >("us-east-va-cell-1");
+  const [drillMode, setDrillMode] = useState<
+    "fenced_failover" | "failback_to_primary" | "replication_consistency_check"
+  >("fenced_failover");
+  const [drNotice, setDrNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-disaster-recovery"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/disaster-recovery", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        topology: {
+          pinned_primary_cell: string;
+          active_serving_cell: string;
+          latest_fencing_token: number;
+          split_brain_fencing: string;
+          replication_mode: string;
+          target_rto_seconds: number;
+          target_rpo_seconds: number;
+        };
+        drills: Array<{
+          id: string;
+          primary_cell: string;
+          standby_cell: string;
+          active_cell: string;
+          drill_mode: string;
+          fencing_token: number;
+          split_brain_prevented: boolean;
+          achieved_rto_seconds: number;
+          achieved_rpo_seconds: number;
+          ledger_journal_count: number;
+          evidence_file_count: number;
+          consistency_digest_sha256: string;
+          status: string;
+          created_at: string;
+        }>;
+      },
+  });
+
+  const drillMutation = useMutation({
+    mutationFn: async (overrideMode?: typeof drillMode) =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/disaster-recovery/drill",
+          {
+            params: { path },
+            body: {
+              primary_cell: primaryCell,
+              standby_cell: standbyCell,
+              drill_mode: overrideMode || drillMode,
+            },
+          },
+        ),
+      )) as unknown as {
+        active_cell: string;
+        fencing_token: number;
+        achieved_rto_seconds: number;
+        achieved_rpo_seconds: number;
+        consistency_digest_sha256: string;
+        status: string;
+      },
+    onSuccess: (res) => {
+      setDrNotice(
+        `DR Drill complete (${res.status}): Active cell ${res.active_cell}, monotonic fencing token #${res.fencing_token}, RTO ${res.achieved_rto_seconds}s / RPO ${res.achieved_rpo_seconds}s.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-disaster-recovery"],
+      });
+    },
+  });
+
+  const topo = query.data?.topology;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P4-C · Regional Resilience, WAL Replication & Fenced Disaster Recovery
+        </h2>
+        <p className="muted">
+          Execute cryptographic failover and failback drills across isolated
+          regional deployment cells using monotonic fencing tokens to guarantee
+          zero split-brain writes and zero lost journals (RPO = 0s).
+        </p>
+        {topo && (
+          <div className="p4-kpi-grid">
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Active Serving Cell</span>
+              <span className="p4-kpi-value">{topo.active_serving_cell}</span>
+              <span className="p4-kpi-sub">
+                Pinned Primary: {topo.pinned_primary_cell}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Monotonic Fencing Token</span>
+              <span className="p4-kpi-value">#{topo.latest_fencing_token}</span>
+              <span className="p4-kpi-sub">{topo.split_brain_fencing}</span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">RTO / RPO Objectives</span>
+              <span className="p4-kpi-value">
+                &le; {topo.target_rto_seconds}s RTO · {topo.target_rpo_seconds}s
+                RPO
+              </span>
+              <span className="p4-kpi-sub">{topo.replication_mode}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Execute Fenced Regional Failover / Consistency Drill</h3>
+        <ErrorNotice error={query.error || drillMutation.error} />
+        <div className="form-grid">
+          <Field label="Primary Regional Cell">
+            <select
+              value={primaryCell}
+              onChange={(e) =>
+                setPrimaryCell(e.target.value as typeof primaryCell)
+              }
+            >
+              <option value="eu-central-fra-cell-1">
+                EU Central (eu-central-fra-cell-1)
+              </option>
+              <option value="us-east-va-cell-1">
+                US East (us-east-va-cell-1)
+              </option>
+              <option value="me-central-dxb-cell-1">
+                Middle East (me-central-dxb-cell-1)
+              </option>
+              <option value="ap-south-khi-cell-1">
+                South Asia (ap-south-khi-cell-1)
+              </option>
+            </select>
+          </Field>
+          <Field label="Standby DR Regional Cell (Must Differ)">
+            <select
+              value={standbyCell}
+              onChange={(e) =>
+                setStandbyCell(e.target.value as typeof standbyCell)
+              }
+            >
+              <option value="us-east-va-cell-1">
+                US East (us-east-va-cell-1)
+              </option>
+              <option value="eu-central-fra-cell-1">
+                EU Central (eu-central-fra-cell-1)
+              </option>
+              <option value="me-central-dxb-cell-1">
+                Middle East (me-central-dxb-cell-1)
+              </option>
+              <option value="ap-south-khi-cell-1">
+                South Asia (ap-south-khi-cell-1)
+              </option>
+            </select>
+          </Field>
+          <Field label="DR Drill Mode">
+            <select
+              value={drillMode}
+              onChange={(e) => setDrillMode(e.target.value as typeof drillMode)}
+            >
+              <option value="fenced_failover">
+                Fenced Failover to Standby Cell
+              </option>
+              <option value="failback_to_primary">
+                Controlled Failback to Primary Cell
+              </option>
+              <option value="replication_consistency_check">
+                Replication WAL & Evidence Checksum Verification
+              </option>
+            </select>
+          </Field>
+        </div>
+        <div className="p3-actions-row">
+          <Button
+            busy={drillMutation.isPending}
+            onClick={() => drillMutation.mutate(undefined)}
+          >
+            Execute Fenced DR Drill
+          </Button>
+          <Button
+            variant="secondary"
+            busy={drillMutation.isPending}
+            onClick={() => drillMutation.mutate("failback_to_primary")}
+          >
+            Quick Failback to Primary
+          </Button>
+        </div>
+        {drNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {drNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>2. Regional DR Drill History & Consistency Digests</h3>
+          <Table
+            caption="Regional Disaster Recovery Drills"
+            rows={query.data.drills}
+            rowKey={(d) => d.id}
+            columns={[
+              {
+                label: "Fence Token",
+                render: (d) => <strong>#{d.fencing_token}</strong>,
+              },
+              { label: "Mode", render: (d) => <Badge>{d.drill_mode}</Badge> },
+              {
+                label: "Serving Cell",
+                render: (d) => (
+                  <span>
+                    {d.active_cell} (Primary: {d.primary_cell})
+                  </span>
+                ),
+              },
+              {
+                label: "RTO / RPO",
+                render: (d) =>
+                  `${d.achieved_rto_seconds}s RTO · ${d.achieved_rpo_seconds}s RPO`,
+              },
+              {
+                label: "Replicated Records",
+                render: (d) =>
+                  `${d.ledger_journal_count} journals · ${d.evidence_file_count} evidence files`,
+              },
+              {
+                label: "SHA-256 Digest & Status",
+                render: (d) => (
+                  <div className="p4-inline-actions">
+                    <code>{d.consistency_digest_sha256.slice(0, 10)}…</code>
+                    <Badge tone="good">{d.status}</Badge>
+                  </div>
+                ),
+              },
+            ]}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function P4InventoryCostingHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [sku, setSku] = useState("SKU-WIDGET-PRO");
+  const [itemName, setItemName] = useState("Precision Sensor Module Pro");
+  const [warehouse, setWarehouse] = useState("MAIN-WH-01");
+  const [costingMethod, setCostingMethod] = useState<
+    "fifo" | "weighted_average"
+  >("fifo");
+  const [initQty, setInitQty] = useState("100");
+  const [initUnitCost, setInitUnitCost] = useState("12.50");
+  const [initLandedCost, setInitLandedCost] = useState("50.00");
+  const [reorderPoint, setReorderPoint] = useState("20");
+
+  const [selectedItemId, setSelectedItemId] = useState("");
+  const [movementKind, setMovementKind] = useState<
+    "receipt" | "landed_cost_allocation" | "issue_sale" | "customer_return"
+  >("receipt");
+  const [movRef, setMovRef] = useState("PO-INV-2026-01");
+  const [movQty, setMovQty] = useState("25");
+  const [movUnitCost, setMovUnitCost] = useState("14.00");
+  const [movLandedCost, setMovLandedCost] = useState("0.00");
+  const [invNotice, setInvNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-inventory"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/inventory", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        valuation_summary: {
+          total_skus: number;
+          total_units_on_hand: string;
+          total_subledger_valuation: string;
+          total_cogs_recognized: string;
+          subledger_to_gl_tied_out: boolean;
+        };
+        items: Array<{
+          id: string;
+          sku: string;
+          name: string;
+          warehouse_location: string;
+          costing_method: string;
+          currency: string;
+          quantity_on_hand: string;
+          unit_cost: string;
+          total_valuation: string;
+          fifo_layers: Array<{ qty: string; unit_cost: string }>;
+          reorder_point: string;
+          low_stock: boolean;
+        }>;
+        movements: Array<{
+          id: string;
+          item_id: string;
+          sku: string;
+          item_name: string;
+          movement_kind: string;
+          reference: string;
+          accounting_date: string;
+          quantity_delta: string;
+          unit_cost: string;
+          landed_cost_amount: string;
+          total_cost_impact: string;
+          cogs_amount: string;
+          resulting_qty: string;
+          resulting_valuation: string;
+          source_draft_id: string | null;
+        }>;
+      },
+  });
+
+  const activeItemId = selectedItemId || query.data?.items[0]?.id || "";
+
+  const createItemMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p4/inventory/items", {
+          params: { path },
+          body: {
+            sku,
+            name: itemName,
+            warehouse_location: warehouse,
+            costing_method: costingMethod,
+            currency: b.currency || "USD",
+            initial_quantity: initQty || "0",
+            initial_unit_cost: initUnitCost || "0",
+            initial_landed_cost: initLandedCost || "0",
+            reorder_point: reorderPoint || "5",
+          },
+        }),
+      )) as unknown as {
+        id: string;
+        sku: string;
+        quantity_on_hand: string;
+        total_valuation: string;
+      },
+    onSuccess: (res) => {
+      setSelectedItemId(res.id);
+      setInvNotice(
+        `Saved SKU ${res.sku}: ${res.quantity_on_hand} units on hand, total valuation ${b.currency} ${res.total_valuation}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-inventory"],
+      });
+    },
+  });
+
+  const movementMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST("/api/v1/businesses/{business_id}/p4/inventory/movements", {
+          params: { path },
+          body: {
+            item_id: activeItemId,
+            movement_kind: movementKind,
+            reference: movRef,
+            quantity: movQty || "0",
+            unit_cost: movUnitCost || "0",
+            landed_cost_amount: movLandedCost || "0",
+          },
+        }),
+      )) as unknown as {
+        sku: string;
+        movement_kind: string;
+        cogs_amount: string;
+        resulting_qty: string;
+        resulting_valuation: string;
+      },
+    onSuccess: (res) => {
+      setInvNotice(
+        `Recorded ${res.movement_kind} for ${res.sku}: On Hand ${res.resulting_qty}, Valuation ${b.currency} ${res.resulting_valuation}, COGS ${b.currency} ${res.cogs_amount}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-inventory"],
+      });
+    },
+  });
+
+  const sum = query.data?.valuation_summary;
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P4-E1 · Inventory Subledger (FIFO & Weighted Average), Landed Cost &
+          COGS
+        </h2>
+        <p className="muted">
+          Track perpetual inventory valuation layers across warehouses, allocate
+          freight/customs landed costs, enforce negative-stock guards (HTTP
+          409), and tie every inventory movement to reviewable accounting
+          drafts.
+        </p>
+        {sum && (
+          <div className="p4-kpi-grid">
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Active SKUs</span>
+              <span className="p4-kpi-value">{sum.total_skus}</span>
+              <span className="p4-kpi-sub">
+                {sum.total_units_on_hand} total units on hand
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Subledger Valuation</span>
+              <span className="p4-kpi-value">
+                {b.currency} {sum.total_subledger_valuation}
+              </span>
+              <span className="p4-kpi-sub">
+                <Badge tone={sum.subledger_to_gl_tied_out ? "good" : "warning"}>
+                  {sum.subledger_to_gl_tied_out
+                    ? "SUBLEDGER TIED TO GL"
+                    : "OUT OF BALANCE"}
+                </Badge>
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">COGS Recognized</span>
+              <span className="p4-kpi-value">
+                {b.currency} {sum.total_cogs_recognized}
+              </span>
+              <span className="p4-kpi-sub">
+                FIFO / Weighted Average releases
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Register Inventory SKU & Opening Cost Layer</h3>
+        <ErrorNotice error={query.error || createItemMutation.error} />
+        <div className="form-grid">
+          <Field label="SKU Code">
+            <input value={sku} onChange={(e) => setSku(e.target.value)} />
+          </Field>
+          <Field label="Item Description">
+            <input
+              value={itemName}
+              onChange={(e) => setItemName(e.target.value)}
+            />
+          </Field>
+          <Field label="Warehouse Location">
+            <input
+              value={warehouse}
+              onChange={(e) => setWarehouse(e.target.value)}
+            />
+          </Field>
+          <Field label="Costing Method">
+            <select
+              value={costingMethod}
+              onChange={(e) =>
+                setCostingMethod(e.target.value as typeof costingMethod)
+              }
+            >
+              <option value="fifo">FIFO (First-In, First-Out Layers)</option>
+              <option value="weighted_average">Moving Weighted Average</option>
+            </select>
+          </Field>
+          <Field label="Opening Quantity">
+            <input
+              type="number"
+              step="0.01"
+              value={initQty}
+              onChange={(e) => setInitQty(e.target.value)}
+            />
+          </Field>
+          <Field label="Opening Unit Cost">
+            <input
+              type="number"
+              step="0.01"
+              value={initUnitCost}
+              onChange={(e) => setInitUnitCost(e.target.value)}
+            />
+          </Field>
+          <Field label="Opening Landed Cost (Freight/Duty)">
+            <input
+              type="number"
+              step="0.01"
+              value={initLandedCost}
+              onChange={(e) => setInitLandedCost(e.target.value)}
+            />
+          </Field>
+          <Field label="Low-Stock Reorder Point">
+            <input
+              type="number"
+              step="0.01"
+              value={reorderPoint}
+              onChange={(e) => setReorderPoint(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button
+          busy={createItemMutation.isPending}
+          onClick={() => createItemMutation.mutate()}
+        >
+          Register / Update Inventory SKU
+        </Button>
+      </div>
+
+      <div className="panel">
+        <h3>2. Post Inventory Movement (Receipt / Landed Cost / Sale COGS)</h3>
+        <ErrorNotice error={movementMutation.error} />
+        <div className="form-grid">
+          <Field label="Target Inventory SKU">
+            <select
+              value={activeItemId}
+              onChange={(e) => setSelectedItemId(e.target.value)}
+            >
+              {!query.data?.items.length && (
+                <option value="">Register a SKU above first</option>
+              )}
+              {(query.data?.items || []).map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.sku} — {item.name} ({item.quantity_on_hand} on hand @{" "}
+                  {item.unit_cost})
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Movement Kind">
+            <select
+              value={movementKind}
+              onChange={(e) =>
+                setMovementKind(e.target.value as typeof movementKind)
+              }
+            >
+              <option value="receipt">
+                Purchase Receipt (+ Stock & Layer)
+              </option>
+              <option value="landed_cost_allocation">
+                Landed Cost Allocation (+ Capitalized Duty/Freight)
+              </option>
+              <option value="issue_sale">
+                Issue for Sale (- Stock & Recognize COGS)
+              </option>
+              <option value="customer_return">
+                Customer Return (+ Restock Layer)
+              </option>
+            </select>
+          </Field>
+          <Field label="Document / Movement Reference">
+            <input value={movRef} onChange={(e) => setMovRef(e.target.value)} />
+          </Field>
+          <Field label="Quantity">
+            <input
+              type="number"
+              step="0.01"
+              value={movQty}
+              onChange={(e) => setMovQty(e.target.value)}
+            />
+          </Field>
+          <Field label="Unit Cost (Receipt / Return)">
+            <input
+              type="number"
+              step="0.01"
+              value={movUnitCost}
+              onChange={(e) => setMovUnitCost(e.target.value)}
+            />
+          </Field>
+          <Field label="Landed Cost Amount (Freight / Duty)">
+            <input
+              type="number"
+              step="0.01"
+              value={movLandedCost}
+              onChange={(e) => setMovLandedCost(e.target.value)}
+            />
+          </Field>
+        </div>
+        <Button
+          variant="secondary"
+          disabled={!activeItemId}
+          busy={movementMutation.isPending}
+          onClick={() => movementMutation.mutate()}
+        >
+          Post Inventory Movement & Generate Draft
+        </Button>
+        {invNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {invNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>3. Inventory Valuation & Active FIFO Cost Layers</h3>
+          <Table
+            caption="Inventory Valuation Subledger"
+            rows={query.data.items}
+            rowKey={(i) => i.id}
+            columns={[
+              {
+                label: "SKU & Warehouse",
+                render: (i) => (
+                  <div>
+                    <strong>{i.sku}</strong> · {i.name}
+                    <div className="muted" style={{ fontSize: "0.78rem" }}>
+                      {i.warehouse_location}
+                    </div>
+                  </div>
+                ),
+              },
+              {
+                label: "Method",
+                render: (i) => <Badge>{i.costing_method}</Badge>,
+              },
+              {
+                label: "On Hand",
+                render: (i) => (
+                  <div className="p4-inline-actions">
+                    <strong>{i.quantity_on_hand}</strong>
+                    {i.low_stock && <Badge tone="warning">Low Stock</Badge>}
+                  </div>
+                ),
+              },
+              {
+                label: "Eff. Unit Cost",
+                render: (i) => `${i.currency} ${i.unit_cost}`,
+              },
+              {
+                label: "Total Valuation",
+                render: (i) => (
+                  <strong>
+                    {i.currency} {i.total_valuation}
+                  </strong>
+                ),
+              },
+              {
+                label: "FIFO Layers",
+                render: (i) => (
+                  <div className="p4-layer-list">
+                    {i.fifo_layers.length === 0 ? (
+                      <span className="muted">Empty</span>
+                    ) : (
+                      i.fifo_layers.map((layer, idx) => (
+                        <Badge key={idx}>
+                          {Number(layer.qty).toFixed(2)} @{" "}
+                          {Number(layer.unit_cost).toFixed(4)}
+                        </Badge>
+                      ))
+                    )}
+                  </div>
+                ),
+              },
+            ]}
+          />
+          {query.data.movements.length > 0 && (
+            <div style={{ marginTop: "20px" }}>
+              <h4>Recent Inventory Movements & Draft References</h4>
+              <Table
+                caption="Inventory Movements Ledger"
+                rows={query.data.movements}
+                rowKey={(m) => m.id}
+                columns={[
+                  { label: "Date", render: (m) => m.accounting_date },
+                  { label: "SKU", render: (m) => <strong>{m.sku}</strong> },
+                  {
+                    label: "Kind",
+                    render: (m) => <Badge>{m.movement_kind}</Badge>,
+                  },
+                  { label: "Reference", render: (m) => m.reference },
+                  { label: "Qty Delta", render: (m) => m.quantity_delta },
+                  { label: "COGS", render: (m) => m.cogs_amount },
+                  {
+                    label: "Resulting Valuation",
+                    render: (m) =>
+                      `${m.resulting_qty} units ($${m.resulting_valuation})`,
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function P4GroupConsolidationHub() {
+  const b = useBusiness();
+  const path = { business_id: b.id };
+  const [entityCode, setEntityCode] = useState("SUB-EU-01");
+  const [entityName, setEntityName] = useState("Balanc Europe GmbH");
+  const [jurisdiction, setJurisdiction] = useState("DE-BE");
+  const [funcCurrency, setFuncCurrency] = useState("EUR");
+  const [ownershipPct, setOwnershipPct] = useState("80.00");
+  const [closingFx, setClosingFx] = useState("1.0800");
+  const [averageFx, setAverageFx] = useState("1.0500");
+  const [saAssets, setSaAssets] = useState("250000.00");
+  const [saLiabilities, setSaLiabilities] = useState("90000.00");
+  const [saRevenue, setSaRevenue] = useState("180000.00");
+  const [saExpenses, setSaExpenses] = useState("120000.00");
+  const [icReceivable, setIcReceivable] = useState("0.00");
+  const [icPayable, setIcPayable] = useState("15000.00");
+  const [icRevenue, setIcRevenue] = useState("0.00");
+  const [icExpense, setIcExpense] = useState("25000.00");
+
+  const [periodLabel, setPeriodLabel] = useState("2026-Q4 Consolidated Close");
+  const [reportingCurrency, setReportingCurrency] = useState(
+    b.currency || "USD",
+  );
+  const [consNotice, setConsNotice] = useState("");
+
+  const query = useQuery({
+    queryKey: [...keys.business(b.id), "p4-group-consolidation"],
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/p4/group-consolidation", {
+          signal,
+          params: { path },
+        }),
+      )) as unknown as {
+        entities: Array<{
+          id: string;
+          entity_code: string;
+          entity_name: string;
+          jurisdiction: string;
+          functional_currency: string;
+          ownership_percent: number;
+          consolidation_method: string;
+          effective_from: string;
+          closing_fx_rate: string;
+          average_fx_rate: string;
+          standalone_assets: string;
+          standalone_liabilities: string;
+          standalone_revenue: string;
+          standalone_expenses: string;
+          intercompany_receivable: string;
+          intercompany_payable: string;
+          intercompany_revenue: string;
+          intercompany_expense: string;
+        }>;
+        runs: Array<{
+          id: string;
+          period_label: string;
+          reporting_currency: string;
+          entities_count: number;
+          intercompany_ar_eliminated: string;
+          intercompany_rev_eliminated: string;
+          intercompany_mismatch_amount: string;
+          fx_cta_adjustment: string;
+          minority_interest_nci_share: string;
+          consolidated_assets: string;
+          consolidated_liabilities: string;
+          consolidated_equity: string;
+          consolidated_revenue: string;
+          consolidated_expenses: string;
+          consolidated_net_income: string;
+          parent_attributable_net_income: string;
+          elimination_lines: Array<{
+            label: string;
+            debit: string;
+            credit: string;
+          }>;
+          status: string;
+          created_at: string;
+        }>;
+      },
+  });
+
+  const upsertEntityMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/group-consolidation/entities",
+          {
+            params: { path },
+            body: {
+              entity_code: entityCode,
+              entity_name: entityName,
+              jurisdiction,
+              functional_currency: funcCurrency,
+              ownership_percent: ownershipPct || "100.00",
+              closing_fx_rate: closingFx || "1.000000",
+              average_fx_rate: averageFx || "1.000000",
+              standalone_assets: saAssets || "0.00",
+              standalone_liabilities: saLiabilities || "0.00",
+              standalone_revenue: saRevenue || "0.00",
+              standalone_expenses: saExpenses || "0.00",
+              intercompany_receivable: icReceivable || "0.00",
+              intercompany_payable: icPayable || "0.00",
+              intercompany_revenue: icRevenue || "0.00",
+              intercompany_expense: icExpense || "0.00",
+            },
+          },
+        ),
+      )) as unknown as {
+        entity_code: string;
+        entity_name: string;
+        ownership_percent: number;
+        consolidation_method: string;
+      },
+    onSuccess: (res) => {
+      setConsNotice(
+        `Saved entity ${res.entity_code} (${res.entity_name}, ${res.ownership_percent}% owned — ${res.consolidation_method}).`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-group-consolidation"],
+      });
+    },
+  });
+
+  const runConsolidationMutation = useMutation({
+    mutationFn: async () =>
+      (await result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/p4/group-consolidation/run",
+          {
+            params: { path },
+            body: {
+              period_label: periodLabel,
+              reporting_currency: reportingCurrency || "USD",
+            },
+          },
+        ),
+      )) as unknown as {
+        period_label: string;
+        reporting_currency: string;
+        entities_count: number;
+        consolidated_net_income: string;
+        minority_interest_nci_share: string;
+        intercompany_mismatch_amount: string;
+        status: string;
+      },
+    onSuccess: (res) => {
+      setConsNotice(
+        `Consolidated "${res.period_label}" (${res.entities_count} entities): Net Income ${res.reporting_currency} ${res.consolidated_net_income}, NCI ${res.reporting_currency} ${res.minority_interest_nci_share}, Status: ${res.status}.`,
+      );
+      void queryClient.invalidateQueries({
+        queryKey: [...keys.business(b.id), "p4-group-consolidation"],
+      });
+    },
+  });
+
+  const latestRun = query.data?.runs[0];
+
+  return (
+    <div className="stack">
+      <div className="panel">
+        <h2>
+          P4-E2 · Multi-Entity Group Consolidation, IAS 21 FX & Intercompany
+          Eliminations
+        </h2>
+        <p className="muted">
+          Automate group-wide FX translation (closing balance-sheet vs average
+          P&amp;L rates with CTA tracking), eliminate reciprocal intercompany
+          AR/AP &amp; revenue/expense, flag IC mismatches, and compute
+          Non-Controlling Interest (NCI).
+        </p>
+        {latestRun && (
+          <div className="p4-kpi-grid">
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Consolidated Net Income</span>
+              <span className="p4-kpi-value">
+                {latestRun.reporting_currency}{" "}
+                {latestRun.consolidated_net_income}
+              </span>
+              <span className="p4-kpi-sub">
+                Parent Share: {latestRun.reporting_currency}{" "}
+                {latestRun.parent_attributable_net_income}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Minority Interest (NCI)</span>
+              <span className="p4-kpi-value">
+                {latestRun.reporting_currency}{" "}
+                {latestRun.minority_interest_nci_share}
+              </span>
+              <span className="p4-kpi-sub">
+                FX CTA Adjustment: {latestRun.fx_cta_adjustment}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Consolidated Equity</span>
+              <span className="p4-kpi-value">
+                {latestRun.reporting_currency} {latestRun.consolidated_equity}
+              </span>
+              <span className="p4-kpi-sub">
+                Assets {latestRun.consolidated_assets} − Liab{" "}
+                {latestRun.consolidated_liabilities}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">IC Eliminations & Status</span>
+              <span className="p4-kpi-value">
+                {latestRun.intercompany_ar_eliminated} AR/AP ·{" "}
+                {latestRun.intercompany_rev_eliminated} Rev/Exp
+              </span>
+              <span className="p4-kpi-sub">
+                <Badge
+                  tone={
+                    latestRun.status === "consolidated_balanced"
+                      ? "good"
+                      : "warning"
+                  }
+                >
+                  {latestRun.status} (Mismatch:{" "}
+                  {latestRun.intercompany_mismatch_amount})
+                </Badge>
+              </span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3>1. Register / Update Group Legal Entity & Intercompany Balances</h3>
+        <ErrorNotice error={query.error || upsertEntityMutation.error} />
+        <div className="form-grid">
+          <Field label="Entity Code">
+            <input
+              value={entityCode}
+              onChange={(e) => setEntityCode(e.target.value)}
+            />
+          </Field>
+          <Field label="Legal Entity Name">
+            <input
+              value={entityName}
+              onChange={(e) => setEntityName(e.target.value)}
+            />
+          </Field>
+          <Field label="Jurisdiction">
+            <input
+              value={jurisdiction}
+              onChange={(e) => setJurisdiction(e.target.value)}
+            />
+          </Field>
+          <Field label="Functional Currency (ISO-3)">
+            <input
+              maxLength={3}
+              value={funcCurrency}
+              onChange={(e) => setFuncCurrency(e.target.value.toUpperCase())}
+            />
+          </Field>
+          <Field label="Ownership % (>=50% Full / <50% Equity)">
+            <input
+              type="number"
+              step="0.01"
+              min={0.01}
+              max={100}
+              value={ownershipPct}
+              onChange={(e) => setOwnershipPct(e.target.value)}
+            />
+          </Field>
+          <Field label="Closing FX Rate (BS)">
+            <input
+              type="number"
+              step="0.0001"
+              value={closingFx}
+              onChange={(e) => setClosingFx(e.target.value)}
+            />
+          </Field>
+          <Field label="Average FX Rate (P&L)">
+            <input
+              type="number"
+              step="0.0001"
+              value={averageFx}
+              onChange={(e) => setAverageFx(e.target.value)}
+            />
+          </Field>
+          <Field label="Standalone Total Assets">
+            <input
+              type="number"
+              step="0.01"
+              value={saAssets}
+              onChange={(e) => setSaAssets(e.target.value)}
+            />
+          </Field>
+          <Field label="Standalone Total Liabilities">
+            <input
+              type="number"
+              step="0.01"
+              value={saLiabilities}
+              onChange={(e) => setSaLiabilities(e.target.value)}
+            />
+          </Field>
+          <Field label="Standalone Revenue">
+            <input
+              type="number"
+              step="0.01"
+              value={saRevenue}
+              onChange={(e) => setSaRevenue(e.target.value)}
+            />
+          </Field>
+          <Field label="Standalone Expenses">
+            <input
+              type="number"
+              step="0.01"
+              value={saExpenses}
+              onChange={(e) => setSaExpenses(e.target.value)}
+            />
+          </Field>
+        </div>
+        <details className="p3-advanced-details">
+          <summary>
+            Intercompany Reciprocal Balances (AR / AP &amp; Revenue / Expense)
+          </summary>
+          <div className="form-grid">
+            <Field label="Intercompany Receivable">
+              <input
+                type="number"
+                step="0.01"
+                value={icReceivable}
+                onChange={(e) => setIcReceivable(e.target.value)}
+              />
+            </Field>
+            <Field label="Intercompany Payable">
+              <input
+                type="number"
+                step="0.01"
+                value={icPayable}
+                onChange={(e) => setIcPayable(e.target.value)}
+              />
+            </Field>
+            <Field label="Intercompany Revenue">
+              <input
+                type="number"
+                step="0.01"
+                value={icRevenue}
+                onChange={(e) => setIcRevenue(e.target.value)}
+              />
+            </Field>
+            <Field label="Intercompany Expense">
+              <input
+                type="number"
+                step="0.01"
+                value={icExpense}
+                onChange={(e) => setIcExpense(e.target.value)}
+              />
+            </Field>
+          </div>
+        </details>
+        <Button
+          busy={upsertEntityMutation.isPending}
+          onClick={() => upsertEntityMutation.mutate()}
+        >
+          Save Group Legal Entity
+        </Button>
+      </div>
+
+      <div className="panel">
+        <h3>2. Execute Group Consolidation & Intercompany Elimination Run</h3>
+        <ErrorNotice error={runConsolidationMutation.error} />
+        <div className="form-grid">
+          <Field label="Consolidation Period Label">
+            <input
+              value={periodLabel}
+              onChange={(e) => setPeriodLabel(e.target.value)}
+            />
+          </Field>
+          <Field label="Group Reporting Currency">
+            <input
+              maxLength={3}
+              value={reportingCurrency}
+              onChange={(e) =>
+                setReportingCurrency(e.target.value.toUpperCase())
+              }
+            />
+          </Field>
+        </div>
+        <Button
+          variant="secondary"
+          busy={runConsolidationMutation.isPending}
+          onClick={() => runConsolidationMutation.mutate()}
+        >
+          Run Multi-Entity Consolidation & IC Eliminations
+        </Button>
+        {consNotice && (
+          <p
+            role="status"
+            className="success-text"
+            style={{ marginTop: "12px" }}
+          >
+            {consNotice}
+          </p>
+        )}
+      </div>
+
+      {query.data && (
+        <div className="panel">
+          <h3>3. Registered Group Entities & Consolidation History</h3>
+          {query.data.entities.length > 0 && (
+            <Table
+              caption="Registered Group Entities"
+              rows={query.data.entities}
+              rowKey={(e) => e.id}
+              columns={[
+                {
+                  label: "Entity",
+                  render: (e) => (
+                    <div>
+                      <strong>{e.entity_code}</strong> · {e.entity_name}
+                      <div className="muted" style={{ fontSize: "0.78rem" }}>
+                        {e.jurisdiction} · {e.functional_currency}
+                      </div>
+                    </div>
+                  ),
+                },
+                {
+                  label: "Ownership & Method",
+                  render: (e) => (
+                    <Badge>
+                      {e.ownership_percent}% · {e.consolidation_method}
+                    </Badge>
+                  ),
+                },
+                {
+                  label: "FX (Close / Avg)",
+                  render: (e) => `${e.closing_fx_rate} / ${e.average_fx_rate}`,
+                },
+                {
+                  label: "Assets / Liab",
+                  render: (e) =>
+                    `${e.standalone_assets} / ${e.standalone_liabilities}`,
+                },
+                {
+                  label: "Rev / Exp",
+                  render: (e) =>
+                    `${e.standalone_revenue} / ${e.standalone_expenses}`,
+                },
+                {
+                  label: "IC AR / AP",
+                  render: (e) =>
+                    `${e.intercompany_receivable} / ${e.intercompany_payable}`,
+                },
+              ]}
+            />
+          )}
+          {query.data.runs.length > 0 && (
+            <div style={{ marginTop: "20px" }}>
+              <h4>Consolidation Close Runs & Elimination Entries</h4>
+              <Table
+                caption="Group Consolidation Runs"
+                rows={query.data.runs}
+                rowKey={(r) => r.id}
+                columns={[
+                  {
+                    label: "Period",
+                    render: (r) => (
+                      <strong>
+                        {r.period_label} ({r.entities_count} entities)
+                      </strong>
+                    ),
+                  },
+                  {
+                    label: "Consol. Assets / Equity",
+                    render: (r) =>
+                      `${r.reporting_currency} ${r.consolidated_assets} / ${r.consolidated_equity}`,
+                  },
+                  {
+                    label: "Consol. Net Income (NCI)",
+                    render: (r) =>
+                      `${r.reporting_currency} ${r.consolidated_net_income} (NCI ${r.minority_interest_nci_share})`,
+                  },
+                  {
+                    label: "Elimination Journal Lines",
+                    render: (r) => (
+                      <span style={{ fontSize: "0.78rem" }}>
+                        {r.elimination_lines
+                          .map((line) =>
+                            Number(line.debit) > 0
+                              ? `DR ${line.label}: ${line.debit}`
+                              : `CR ${line.label}: ${line.credit}`,
+                          )
+                          .join(" · ") || "No eliminations needed"}
+                      </span>
+                    ),
+                  },
+                  {
+                    label: "Status",
+                    render: (r) => (
+                      <Badge
+                        tone={
+                          r.status === "consolidated_balanced"
+                            ? "good"
+                            : "warning"
+                        }
+                      >
+                        {r.status}
+                      </Badge>
+                    ),
+                  },
+                ]}
+              />
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function P3AutomationHub({
   initialTab = "reminders",
 }: {
@@ -3898,7 +6166,13 @@ export function P3AutomationHub({
     | "encryption"
     | "ai-benchmarks"
     | "accounting-expansion"
-    | "enterprise-sso";
+    | "enterprise-sso"
+    | "p4-operations"
+    | "p4-migrations"
+    | "p4-bulk-ingestion"
+    | "p4-disaster-recovery"
+    | "p4-inventory"
+    | "p4-group-consolidation";
 }) {
   const [tab, setTab] = useState<string>(initialTab);
   useEffect(() => {
@@ -3918,6 +6192,12 @@ export function P3AutomationHub({
         "ai-benchmarks": "/ai-benchmarks",
         "accounting-expansion": "/accounting-expansion",
         "enterprise-sso": "/enterprise-sso",
+        "p4-operations": "/p4-operations",
+        "p4-migrations": "/p4-migrations",
+        "p4-bulk-ingestion": "/p4-bulk-ingestion",
+        "p4-disaster-recovery": "/p4-disaster-recovery",
+        "p4-inventory": "/p4-inventory",
+        "p4-group-consolidation": "/p4-group-consolidation",
       };
       const targetPath = tabRoutes[nextTab];
       if (
@@ -3931,9 +6211,9 @@ export function P3AutomationHub({
   return (
     <>
       <PageHeading
-        eyebrow="P3 AUTOMATION & CONTROLLED EXECUTION"
-        title="Reminders, Portals, Payments, SLA, Payouts, Voice & Encryption"
-        description="Multichannel WhatsApp & Slack reminders, 2FA TOTP supplier portals, human-approved supplier payments, 1-day reconciliation SLA, gross-to-net payout splits, voice-note instructions, and per-tenant envelope encryption."
+        eyebrow="P3 & P4 ENTERPRISE AUTOMATION"
+        title="Reminders, Portals, Payments, Scale, DR, Inventory & Consolidation"
+        description="Multichannel reminders, 2FA TOTP supplier portals, human-approved supplier payments, 1-day SLA, enterprise quotas & AI budgets, online ledger migrations, bulk ingestion cells, fenced regional DR, FIFO inventory costing, and multi-entity consolidation."
       />
       <SectionTabs
         id="p3-automation"
@@ -3951,6 +6231,12 @@ export function P3AutomationHub({
           ["ai-benchmarks", "P3-F · Multilingual OCR & AI Cost"],
           ["accounting-expansion", "P3-I · Revenue, Payroll & Short-Pay"],
           ["enterprise-sso", "P3-K · Enterprise SSO & Cell"],
+          ["p4-operations", "P4-D · Enterprise Quotas & AI Cost"],
+          ["p4-migrations", "P4-B · Online Ledger Migrations"],
+          ["p4-bulk-ingestion", "P4-A · Bulk Ingestion Cells"],
+          ["p4-disaster-recovery", "P4-C · Regional DR & Failover"],
+          ["p4-inventory", "P4-E1 · Inventory & Landed Cost"],
+          ["p4-group-consolidation", "P4-E2 · Group Consolidation & IC"],
         ]}
       />
       {tab === "reminders" && <MultichannelReminders />}
@@ -3963,6 +6249,12 @@ export function P3AutomationHub({
       {tab === "ai-benchmarks" && <AiOcrCostBenchmarkHub />}
       {tab === "accounting-expansion" && <AccountingExpansionHub />}
       {tab === "enterprise-sso" && <EnterpriseSsoCellHub />}
+      {tab === "p4-operations" && <P4EnterpriseOperationsHub />}
+      {tab === "p4-migrations" && <P4OnlineLedgerMigrationsHub />}
+      {tab === "p4-bulk-ingestion" && <P4BulkIngestionHub />}
+      {tab === "p4-disaster-recovery" && <P4RegionalDisasterRecoveryHub />}
+      {tab === "p4-inventory" && <P4InventoryCostingHub />}
+      {tab === "p4-group-consolidation" && <P4GroupConsolidationHub />}
     </>
   );
 }

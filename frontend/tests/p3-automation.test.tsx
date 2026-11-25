@@ -194,6 +194,123 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
         },
       } as never;
     }
+    if (url.endsWith("/p4/operations")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          quotas: {
+            service_tier: "enterprise",
+            daily_page_quota: 50000,
+            monthly_ai_budget_usd: "500.00",
+            storage_quota_gb: 250,
+            max_concurrent_workers: 16,
+            fair_share_weight: 100,
+            hard_quota_enforcement: true,
+            alert_threshold_percent: 80,
+            runbook_owner: "sre-oncall@balanc.enterprise",
+            incident_state: "healthy",
+          },
+          telemetry: {
+            pages_ingested_today: 1200,
+            page_utilization_percent: 2.4,
+            ai_spend_mtd_usd: "14.4000",
+            ai_budget_remaining_usd: "485.60",
+            ai_budget_utilization_percent: 2.88,
+            storage_used_mb: "240.00",
+            alert_triggered: false,
+            noisy_neighbor_isolation: "ACTIVE_FAIR_SHARE_SCHEDULER",
+          },
+        },
+      } as never;
+    }
+    if (url.endsWith("/p4/online-migrations")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          live_ledger_invariants: {
+            posted_journal_lines_count: 14,
+            total_debits: "2500.00",
+            total_credits: "2500.00",
+            trial_balance_balanced: true,
+          },
+          migrations: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p4/bulk-ingestion")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          cell_telemetry: {
+            live_lane_status: "ISOLATED_HEALTHY",
+            bulk_lane_status: "ACTIVE_FAIR_SHARE_DRAINING",
+            target_daily_capacity_pages: 2000000,
+            max_supported_backlog_pages: 500000,
+            foreground_p95_slo_ms: 120,
+            observed_foreground_p95_ms: 42.5,
+            total_pages_processed_workspace: 25000,
+          },
+          batches: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p4/disaster-recovery")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          topology: {
+            pinned_primary_cell: "eu-central-fra-cell-1",
+            active_serving_cell: "eu-central-fra-cell-1",
+            latest_fencing_token: 1,
+            split_brain_fencing: "MONOTONIC_TOKEN_ENFORCED",
+            replication_mode: "SYNCHRONOUS_ENCRYPTED_WAL_AND_EVIDENCE",
+            target_rto_seconds: 60,
+            target_rpo_seconds: 0,
+          },
+          drills: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p4/inventory")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          valuation_summary: {
+            total_skus: 1,
+            total_units_on_hand: "100.00",
+            total_subledger_valuation: "1300.00",
+            total_cogs_recognized: "0.00",
+            subledger_to_gl_tied_out: true,
+          },
+          items: [
+            {
+              id: "item-1",
+              sku: "SKU-WIDGET-PRO",
+              name: "Precision Sensor Module Pro",
+              warehouse_location: "MAIN-WH-01",
+              costing_method: "fifo",
+              currency: "USD",
+              quantity_on_hand: "100.00",
+              unit_cost: "13.0000",
+              total_valuation: "1300.00",
+              fifo_layers: [{ qty: "100.0000", unit_cost: "13.000000" }],
+              reorder_point: "20.00",
+              low_stock: false,
+            },
+          ],
+          movements: [],
+        },
+      } as never;
+    }
+    if (url.endsWith("/p4/group-consolidation")) {
+      return {
+        response: new Response(null, { status: 200 }),
+        data: {
+          entities: [],
+          runs: [],
+        },
+      } as never;
+    }
     return {
       response: new Response(null, { status: 200 }),
       data: { connections: [], ingestions: [] },
@@ -291,6 +408,50 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
     );
     expect(
       await screen.findByText(/Regional Data-Residency Cell Isolation/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-D · Enterprise Quotas & AI Cost/ }),
+    );
+    expect(
+      await screen.findByText(/Enterprise Operations, Tenant Quotas/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-B · Online Ledger Migrations/ }),
+    );
+    expect(
+      await screen.findByText(/Zero-Downtime Online Large-Ledger Migrations/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-A · Bulk Ingestion Cells/ }),
+    );
+    expect(
+      await screen.findByText(/High-Volume Capacity & Isolated Bulk Ingestion/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-C · Regional DR & Failover/ }),
+    );
+    expect(
+      await screen.findByText(/Regional Resilience, WAL Replication/),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-E1 · Inventory & Landed Cost/ }),
+    );
+    expect(
+      await screen.findByText(
+        /Inventory Subledger \(FIFO & Weighted Average\)/,
+      ),
+    ).toBeInTheDocument();
+
+    fireEvent.click(
+      screen.getByRole("tab", { name: /P4-E2 · Group Consolidation & IC/ }),
+    );
+    expect(
+      await screen.findByText(/Multi-Entity Group Consolidation, IAS 21 FX/),
     ).toBeInTheDocument();
   } finally {
     client.clear();
