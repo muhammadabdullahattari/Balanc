@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
 import {
@@ -41,6 +41,32 @@ interface AIOverviewData {
     prompt_injection_shield_active: boolean;
     human_approval_required: boolean;
   };
+  controls?: {
+    ai_enabled: boolean;
+    operator_paused: boolean;
+    pause_reason: string;
+    monthly_budget_usd: string;
+    monthly_token_budget: number;
+    max_concurrent_runs: number;
+    used_tokens: number;
+    used_cost_usd: string;
+    manual_workflows_unaffected: boolean;
+  };
+  evaluation_datasets?: Array<{
+    id: string;
+    dataset_key: string;
+    dataset_cohort: string;
+    execution_provenance: string;
+    feature_id: string;
+    sample_count: number;
+    precision_score: string;
+    recall_score: string;
+    f1_score: string;
+    citation_validity_rate: string;
+    promotion_gate_passed: boolean;
+    notes: string;
+    created_at: string;
+  }>;
   runs: Array<{
     id: string;
     feature_id: string;
@@ -261,6 +287,47 @@ export function AICopilotHub({
     "K-Electric utility bill record karein for K-Electric Limited 850.00 USD due today",
   );
   const [voiceRequestLiveKit, setVoiceRequestLiveKit] = useState(false);
+  const [voiceAudioBase64, setVoiceAudioBase64] = useState("");
+  const [voiceAudioFormat, setVoiceAudioFormat] = useState("audio/webm");
+  const [voiceAudioPreviewUrl, setVoiceAudioPreviewUrl] = useState("");
+  const [isRecordingMic, setIsRecordingMic] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<BlobPart[]>([]);
+
+  // W0 Controls, Dataset Registry & Export state
+  const [ctrlPaused, setCtrlPaused] = useState(false);
+  const [ctrlPauseReason, setCtrlPauseReason] = useState("");
+  const [ctrlBudgetUsd, setCtrlBudgetUsd] = useState("25.000000");
+  const [ctrlTokenBudget, setCtrlTokenBudget] = useState("500000");
+  const [ctrlMaxConcurrent, setCtrlMaxConcurrent] = useState("4");
+  const [exportedEvidence, setExportedEvidence] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [datasetKey, setDatasetKey] = useState("recon-deid-cohort-v1");
+  const [datasetCohort, setDatasetCohort] = useState<
+    "synthetic_development" | "representative_deidentified"
+  >("representative_deidentified");
+  const [datasetProvenance, setDatasetProvenance] = useState<
+    | "actual_groq_model_execution"
+    | "deterministic_engine_execution"
+    | "supplied_prediction"
+  >("actual_groq_model_execution");
+  const [datasetFeatureId, setDatasetFeatureId] = useState<
+    | "AI-01"
+    | "AI-02"
+    | "AI-03"
+    | "AI-04"
+    | "AI-05"
+    | "AI-06"
+    | "AI-07"
+    | "AI-08"
+    | "AI-09"
+    | "AI-10"
+  >("AI-01");
+  const [datasetPrecision, setDatasetPrecision] = useState("0.9600");
+  const [datasetRecall, setDatasetRecall] = useState("0.9400");
+  const [datasetCitationRate, setDatasetCitationRate] = useState("0.9950");
 
   // AI-07 & AI-08 state
   const [contractRef, setContractRef] = useState("MSA-2026-AWS-09");
@@ -517,8 +584,8 @@ export function AICopilotHub({
           params: { path },
           body: {
             language_locale: voiceLocale,
-            audio_base64: "",
-            audio_format: "audio/webm",
+            audio_base64: voiceAudioBase64,
+            audio_format: voiceAudioFormat,
             transcript_input: voiceTranscriptInput,
             request_livekit_room: voiceRequestLiveKit,
           },
@@ -527,6 +594,70 @@ export function AICopilotHub({
     onSuccess: () => {
       setStatusNotice(
         "AI-06 Voice instruction transcribed and entities extracted. Confirm critical fields below to create a draft.",
+      );
+      refreshOverview();
+    },
+  });
+
+  const updateControlsMutation = useMutation({
+    mutationFn: async () =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/ai/controls", {
+          params: { path },
+          body: {
+            ai_enabled: true,
+            operator_paused: ctrlPaused,
+            pause_reason: ctrlPauseReason,
+            monthly_budget_usd: ctrlBudgetUsd,
+            monthly_token_budget: Number(ctrlTokenBudget) || 500000,
+            max_concurrent_runs: Number(ctrlMaxConcurrent) || 4,
+          },
+        }),
+      ),
+    onSuccess: () => {
+      setStatusNotice(
+        "W0 Per-Business AI Controls & Budget Caps updated (manual workflows remain unaffected).",
+      );
+      refreshOverview();
+    },
+  });
+
+  const exportRunMutation = useMutation({
+    mutationFn: async (runId: string) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/ai/runs/{run_id}/export", {
+          params: { path: { business_id: b.id, run_id: runId } },
+        }),
+      )) as unknown as Record<string, unknown>,
+    onSuccess: (pkg) => {
+      setExportedEvidence(pkg);
+      setStatusNotice(
+        "AI-10 Scoped Verifiable Evidence Package exported with redaction and source-freshness checks.",
+      );
+    },
+  });
+
+  const evaluateDatasetMutation = useMutation({
+    mutationFn: async () =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/ai/datasets/evaluate", {
+          params: { path },
+          body: {
+            dataset_key: datasetKey,
+            dataset_cohort: datasetCohort,
+            execution_provenance: datasetProvenance,
+            feature_id: datasetFeatureId,
+            sample_count: 25,
+            precision_score: datasetPrecision,
+            recall_score: datasetRecall,
+            citation_validity_rate: datasetCitationRate,
+            notes: "W0 Dataset & Evaluation Registry benchmark check",
+          },
+        }),
+      ),
+    onSuccess: () => {
+      setStatusNotice(
+        "W0 Dataset & Evaluation Registry entry recorded with cohort and execution provenance separation.",
       );
       refreshOverview();
     },
@@ -651,6 +782,82 @@ export function AICopilotHub({
       window.speechSynthesis.speak(utterance);
     }
     setStatusNotice(`TTS Readback: "${textToSpeak}"`);
+  };
+
+  const blobToBase64 = (blob: Blob): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const res = typeof reader.result === "string" ? reader.result : "";
+        const base64Part = res.includes(",") ? res.split(",")[1] || "" : res;
+        resolve(base64Part);
+      };
+      reader.onerror = () => reject(new Error("Audio file read failed"));
+      reader.readAsDataURL(blob);
+    });
+
+  const handleToggleMicRecording = async () => {
+    if (isRecordingMic && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingMic(false);
+      return;
+    }
+    if (
+      typeof navigator === "undefined" ||
+      !navigator.mediaDevices ||
+      typeof MediaRecorder === "undefined"
+    ) {
+      setStatusNotice(
+        "Browser microphone recording is unavailable in this environment; upload an audio file or enter transcript text.",
+      );
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      recordedChunksRef.current = [];
+      const recorder = new MediaRecorder(stream);
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) {
+          recordedChunksRef.current.push(ev.data);
+        }
+      };
+      recorder.onstop = async () => {
+        const mime = recorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(recordedChunksRef.current, { type: mime });
+        stream.getTracks().forEach((t) => t.stop());
+        if (typeof URL !== "undefined" && URL.createObjectURL) {
+          setVoiceAudioPreviewUrl(URL.createObjectURL(audioBlob));
+        }
+        const b64 = await blobToBase64(audioBlob);
+        setVoiceAudioFormat(mime);
+        setVoiceAudioBase64(b64.slice(0, 180000));
+        setStatusNotice(
+          `Recorded microphone audio (${audioBlob.size} bytes) ready for Groq Whisper STT.`,
+        );
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setIsRecordingMic(true);
+      setStatusNotice("Recording microphone audio… Click Stop Mic when done.");
+    } catch {
+      setStatusNotice(
+        "Microphone permission denied or unavailable; upload an audio file or enter transcript text.",
+      );
+    }
+  };
+
+  const handleAudioFileUpload = async (file: File | null) => {
+    if (!file) return;
+    const mime = file.type || "audio/wav";
+    if (typeof URL !== "undefined" && URL.createObjectURL) {
+      setVoiceAudioPreviewUrl(URL.createObjectURL(file));
+    }
+    const b64 = await blobToBase64(file);
+    setVoiceAudioFormat(mime);
+    setVoiceAudioBase64(b64.slice(0, 180000));
+    setStatusNotice(
+      `Loaded audio file "${file.name}" (${file.size} bytes) for Groq Whisper STT.`,
+    );
   };
 
   if (overviewQuery.isPending) return <Loading />;
@@ -832,11 +1039,51 @@ export function AICopilotHub({
                     >
                       Cancel
                     </Button>
+                    <Button
+                      variant="ghost"
+                      disabled={exportRunMutation.isPending}
+                      onClick={() => exportRunMutation.mutate(r.id)}
+                    >
+                      Export Evidence
+                    </Button>
                   </div>
                 ),
               },
             ]}
           />
+
+          {exportedEvidence && (
+            <div
+              className="p4-kpi-grid"
+              role="region"
+              aria-label="Exported AI-10 Evidence Package"
+            >
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">Export Schema &amp; Run</span>
+                <strong className="p4-kpi-value">
+                  {String(exportedEvidence.export_schema_version)} ·{" "}
+                  {String(exportedEvidence.feature_id)}
+                </strong>
+                <span className="p4-kpi-sub">
+                  Snapshot: {String(exportedEvidence.snapshot_hash)}
+                </span>
+              </div>
+              <div className="p4-kpi-card">
+                <span className="p4-kpi-label">
+                  Source-Freshness &amp; Redaction
+                </span>
+                <strong className="p4-kpi-value">
+                  {exportedEvidence.is_stale_against_current_ledger
+                    ? "STALE SNAPSHOT"
+                    : "CURRENT LEDGER"}
+                </strong>
+                <span className="p4-kpi-sub">
+                  Redaction Applied:{" "}
+                  {String(exportedEvidence.redaction_applied)}
+                </span>
+              </div>
+            </div>
+          )}
 
           <h3>W0 · Read-Only Tool Invocation Audit Log</h3>
           <Table
@@ -854,6 +1101,218 @@ export function AICopilotHub({
                   t.untrusted_content_sanitized ? "REDACTED" : "CLEAN",
               },
               { label: "Latency", render: (t) => `${t.duration_ms} ms` },
+            ]}
+          />
+
+          <h3>W0 · Per-Business AI Operator Controls &amp; Budget Caps</h3>
+          <p className="muted">
+            Pause AI recommendations or enforce monthly token and cost budgets
+            per workspace while keeping all manual accounting workflows active.
+            Current Usage: {data?.controls?.used_tokens ?? 0} tokens ($
+            {data?.controls?.used_cost_usd ?? "0.000000"}).
+          </p>
+          <form
+            className="form-grid"
+            onSubmit={(e) => {
+              e.preventDefault();
+              updateControlsMutation.mutate();
+            }}
+          >
+            <Field label="Monthly Cost Budget (USD)">
+              <input
+                value={ctrlBudgetUsd}
+                onChange={(e) => setCtrlBudgetUsd(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Monthly Token Budget">
+              <input
+                type="number"
+                value={ctrlTokenBudget}
+                onChange={(e) => setCtrlTokenBudget(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Max Concurrent Runs">
+              <input
+                type="number"
+                value={ctrlMaxConcurrent}
+                onChange={(e) => setCtrlMaxConcurrent(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Operator Pause Reason">
+              <input
+                value={ctrlPauseReason}
+                onChange={(e) => setCtrlPauseReason(e.target.value)}
+                placeholder="Optional audit freeze or maintenance note"
+              />
+            </Field>
+            <label className="p4-check-row">
+              <input
+                type="checkbox"
+                checked={ctrlPaused}
+                onChange={(e) => setCtrlPaused(e.target.checked)}
+              />
+              <span>
+                Pause AI recommendations for this business (manual workflows
+                remain active)
+              </span>
+            </label>
+            <div className="p4-inline-actions">
+              <Button type="submit" busy={updateControlsMutation.isPending}>
+                Save AI Controls &amp; Budgets
+              </Button>
+            </div>
+          </form>
+
+          <h3>
+            W0 · Dataset &amp; Evaluation Registry (Provenance Separation)
+          </h3>
+          <p className="muted">
+            Separates synthetic development fixtures from representative
+            de-identified evaluation cohorts, and separates supplied-prediction
+            checks from actual Groq model and deterministic engine execution.
+          </p>
+          <form
+            className="form-grid"
+            onSubmit={(e) => {
+              e.preventDefault();
+              evaluateDatasetMutation.mutate();
+            }}
+          >
+            <Field label="Dataset Key">
+              <input
+                value={datasetKey}
+                onChange={(e) => setDatasetKey(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Dataset Cohort">
+              <select
+                value={datasetCohort}
+                onChange={(e) =>
+                  setDatasetCohort(
+                    e.target.value as
+                      "synthetic_development" | "representative_deidentified",
+                  )
+                }
+              >
+                <option value="representative_deidentified">
+                  Representative De-Identified Cohort
+                </option>
+                <option value="synthetic_development">
+                  Synthetic Development Fixture
+                </option>
+              </select>
+            </Field>
+            <Field label="Execution Provenance">
+              <select
+                value={datasetProvenance}
+                onChange={(e) =>
+                  setDatasetProvenance(
+                    e.target.value as
+                      | "actual_groq_model_execution"
+                      | "deterministic_engine_execution"
+                      | "supplied_prediction",
+                  )
+                }
+              >
+                <option value="actual_groq_model_execution">
+                  Actual Groq Model Execution
+                </option>
+                <option value="deterministic_engine_execution">
+                  Deterministic Engine Execution
+                </option>
+                <option value="supplied_prediction">
+                  Supplied Prediction (Cannot Pass Promotion Gate Alone)
+                </option>
+              </select>
+            </Field>
+            <Field label="Feature Target">
+              <select
+                value={datasetFeatureId}
+                onChange={(e) =>
+                  setDatasetFeatureId(
+                    e.target.value as
+                      | "AI-01"
+                      | "AI-02"
+                      | "AI-03"
+                      | "AI-04"
+                      | "AI-05"
+                      | "AI-06"
+                      | "AI-07"
+                      | "AI-08"
+                      | "AI-09"
+                      | "AI-10",
+                  )
+                }
+              >
+                <option value="AI-01">AI-01 Reconciliation</option>
+                <option value="AI-02">AI-02 Impact Preview</option>
+                <option value="AI-04">AI-04 Accounting Memory</option>
+                <option value="AI-06">AI-06 Voice Accounting</option>
+                <option value="AI-07">AI-07 Contract Verification</option>
+              </select>
+            </Field>
+            <Field label="Precision Score">
+              <input
+                value={datasetPrecision}
+                onChange={(e) => setDatasetPrecision(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Recall Score">
+              <input
+                value={datasetRecall}
+                onChange={(e) => setDatasetRecall(e.target.value)}
+                required
+              />
+            </Field>
+            <Field label="Citation Validity Rate">
+              <input
+                value={datasetCitationRate}
+                onChange={(e) => setDatasetCitationRate(e.target.value)}
+                required
+              />
+            </Field>
+            <div className="p4-inline-actions">
+              <Button type="submit" busy={evaluateDatasetMutation.isPending}>
+                Record Dataset Evaluation
+              </Button>
+            </div>
+          </form>
+
+          <Table
+            caption="W0 Dataset & Evaluation Registry Runs"
+            rows={data?.evaluation_datasets || []}
+            rowKey={(d) => d.id}
+            columns={[
+              {
+                label: "Dataset / Feature",
+                render: (d) => `${d.dataset_key} (${d.feature_id})`,
+              },
+              {
+                label: "Cohort",
+                render: (d) => <Badge>{d.dataset_cohort}</Badge>,
+              },
+              {
+                label: "Execution Provenance",
+                render: (d) => <Badge>{d.execution_provenance}</Badge>,
+              },
+              {
+                label: "P / R / F1 / Citation",
+                render: (d) =>
+                  `P:${d.precision_score} R:${d.recall_score} F1:${d.f1_score} Cite:${d.citation_validity_rate}`,
+              },
+              {
+                label: "Promotion Gate",
+                render: (d) => (
+                  <Badge>
+                    {d.promotion_gate_passed ? "GATE PASSED" : "DEV ONLY"}
+                  </Badge>
+                ),
+              },
             ]}
           />
         </section>
@@ -1514,6 +1973,16 @@ export function AICopilotHub({
                 required
               />
             </Field>
+            <Field label="Upload Audio Recording (WAV / WebM / MP3)">
+              <input
+                type="file"
+                accept="audio/*"
+                aria-label="Upload Audio Recording"
+                onChange={(e) =>
+                  void handleAudioFileUpload(e.target.files?.[0] || null)
+                }
+              />
+            </Field>
             <label className="p4-check-row">
               <input
                 type="checkbox"
@@ -1526,11 +1995,34 @@ export function AICopilotHub({
               </span>
             </label>
             <div className="p4-inline-actions">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleToggleMicRecording()}
+              >
+                {isRecordingMic
+                  ? "Stop Mic Recording"
+                  : "Record Microphone Audio"}
+              </Button>
               <Button type="submit" busy={voiceSessionMutation.isPending}>
                 Transcribe &amp; Extract Entities
               </Button>
             </div>
           </form>
+
+          {voiceAudioPreviewUrl && (
+            <div
+              className="p4-inline-actions"
+              role="region"
+              aria-label="Recorded Audio Playback"
+            >
+              <audio
+                controls
+                src={voiceAudioPreviewUrl}
+                aria-label="Voice Accounting Audio Playback"
+              />
+            </div>
+          )}
 
           <Table
             caption="Multilingual Voice Sessions & Entity Confirmation"

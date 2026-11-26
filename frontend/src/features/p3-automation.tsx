@@ -3255,17 +3255,28 @@ export function AiOcrCostBenchmarkHub() {
         </p>
         {s && (
           <div className="p3-badge-row">
+            <Badge>SIMULATED SYNTHETIC FIXTURE</Badge>
             <Badge>
-              P2 Baseline Cost: ${s.baseline_p2_cost_per_doc_usd}/doc
+              Simulated P2 Baseline: ${s.baseline_p2_cost_per_doc_usd}/doc
             </Badge>
-            <Badge>P3 Routed Cost: ${s.current_p3_cost_per_doc_usd}/doc</Badge>
             <Badge>
-              AI Cost Reduction: {s.cost_reduction_percent}% (Target &ge;
+              Simulated P3 Routed: ${s.current_p3_cost_per_doc_usd}/doc
+            </Badge>
+            <Badge>
+              Simulated Cost Delta: {s.cost_reduction_percent}% (Target &ge;
               {s.target_reduction_percent}%:{" "}
-              {s.target_met ? "MET" : "IN PROGRESS"})
+              {s.target_met ? "SIMULATED PASS" : "IN PROGRESS"})
             </Badge>
           </div>
         )}
+        <p className="muted" role="note">
+          <strong>W0 Provenance Notice:</strong> Predefined P3 benchmark figures
+          shown on this screen are simulated synthetic regression fixtures, not
+          measured live production model accuracy, confidence, or cost savings.
+          Use the W0 Dataset &amp; Evaluation Registry in AI Accounting Copilot
+          (/ai-copilot) to separate supplied synthetic predictions from actual
+          Groq model executions.
+        </p>
       </div>
 
       <div className="panel">

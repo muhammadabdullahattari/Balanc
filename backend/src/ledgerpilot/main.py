@@ -179,6 +179,88 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                                 db_url = configured.database_url.get_secret_value()
                                 cfg.set_main_option("sqlalchemy.url", db_url)
                                 command.upgrade(cfg, "head")
+                                lock_conn.execute(
+                                    text(
+                                        """
+                                        CREATE TABLE IF NOT EXISTS app.ai_tenant_controls (
+                                          business_id uuid PRIMARY KEY
+                                            REFERENCES app.businesses(id),
+                                          ai_enabled boolean NOT NULL DEFAULT true,
+                                          operator_paused boolean NOT NULL DEFAULT false,
+                                          pause_reason text NOT NULL DEFAULT '',
+                                          monthly_budget_usd numeric(18,6) NOT NULL
+                                            DEFAULT 25.000000
+                                            CHECK (monthly_budget_usd >= 0),
+                                          monthly_token_budget integer NOT NULL
+                                            DEFAULT 500000
+                                            CHECK (monthly_token_budget >= 0),
+                                          max_concurrent_runs integer NOT NULL
+                                            DEFAULT 4
+                                            CHECK (max_concurrent_runs BETWEEN 1 AND 32),
+                                          updated_by uuid REFERENCES app.users(id),
+                                          updated_at timestamptz NOT NULL
+                                            DEFAULT clock_timestamp()
+                                        );
+                                        CREATE TABLE IF NOT EXISTS app.ai_evaluation_datasets (
+                                          id uuid PRIMARY KEY,
+                                          business_id uuid NOT NULL
+                                            REFERENCES app.businesses(id),
+                                          run_id uuid REFERENCES app.ai_runs(id),
+                                          dataset_key text NOT NULL,
+                                          dataset_cohort text NOT NULL
+                                            CHECK (dataset_cohort IN (
+                                              'synthetic_development',
+                                              'representative_deidentified'
+                                            )),
+                                          execution_provenance text NOT NULL
+                                            CHECK (execution_provenance IN (
+                                              'supplied_prediction',
+                                              'actual_groq_model_execution',
+                                              'deterministic_engine_execution'
+                                            )),
+                                          feature_id text NOT NULL
+                                            CHECK (feature_id IN (
+                                              'AI-01','AI-02','AI-03','AI-04','AI-05',
+                                              'AI-06','AI-07','AI-08','AI-09','AI-10'
+                                            )),
+                                          sample_count integer NOT NULL DEFAULT 1
+                                            CHECK (sample_count >= 1),
+                                          precision_score numeric(6,4) NOT NULL
+                                            DEFAULT 1.0000
+                                            CHECK (
+                                              precision_score >= 0
+                                              AND precision_score <= 1
+                                            ),
+                                          recall_score numeric(6,4) NOT NULL
+                                            DEFAULT 1.0000
+                                            CHECK (
+                                              recall_score >= 0
+                                              AND recall_score <= 1
+                                            ),
+                                          f1_score numeric(6,4) NOT NULL
+                                            DEFAULT 1.0000
+                                            CHECK (
+                                              f1_score >= 0
+                                              AND f1_score <= 1
+                                            ),
+                                          citation_validity_rate numeric(6,4) NOT NULL
+                                            DEFAULT 1.0000
+                                            CHECK (
+                                              citation_validity_rate >= 0
+                                              AND citation_validity_rate <= 1
+                                            ),
+                                          promotion_gate_passed boolean NOT NULL
+                                            DEFAULT true,
+                                          notes text NOT NULL DEFAULT '',
+                                          created_by uuid NOT NULL
+                                            REFERENCES app.users(id),
+                                          created_at timestamptz NOT NULL
+                                            DEFAULT clock_timestamp()
+                                        );
+                                        """
+                                    )
+                                )
+                                lock_conn.commit()
                                 logger.info("Automatic database migrations completed successfully.")
                                 break
                             finally:

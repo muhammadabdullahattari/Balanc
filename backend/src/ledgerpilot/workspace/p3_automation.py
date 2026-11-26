@@ -5250,6 +5250,12 @@ def list_ai_ocr_and_cost_benchmarks(
     )
     return {
         "summary": {
+            "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
+            "is_simulated_baseline": True,
+            "provenance_disclaimer": (
+                "Predefined P3 benchmark figures are simulated synthetic regression fixtures, "
+                "not measured live production model accuracy, confidence, or savings."
+            ),
             "baseline_p2_cost_per_doc_usd": "0.0420",
             "current_p3_cost_per_doc_usd": "0.0145",
             "cost_reduction_percent": 65.48,
@@ -5365,6 +5371,8 @@ def evaluate_ai_ocr_and_cost_benchmark(
 
     return {
         "id": str(bid_run),
+        "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
+        "is_simulated_baseline": True,
         "language_locale": payload.language_locale,
         "scan_orientation": payload.scan_orientation,
         "ocr_char_accuracy": float(char_acc),

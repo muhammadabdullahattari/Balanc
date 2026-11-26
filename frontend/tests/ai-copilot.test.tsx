@@ -111,6 +111,34 @@ describe("W0 and AI-01..AI-10 AI Accounting Copilot UI", () => {
             voice_sessions: [],
             contract_verifications: [],
             cash_scenarios: [],
+            controls: {
+              ai_enabled: true,
+              operator_paused: false,
+              pause_reason: "",
+              monthly_budget_usd: "25.000000",
+              monthly_token_budget: 500000,
+              max_concurrent_runs: 4,
+              used_tokens: 145,
+              used_cost_usd: "0.000093",
+              manual_workflows_unaffected: true,
+            },
+            evaluation_datasets: [
+              {
+                id: "33333333-4444-5555-6666-777777777777",
+                dataset_key: "recon-deid-benchmark-v1",
+                dataset_cohort: "representative_deidentified",
+                execution_provenance: "actual_groq_model_execution",
+                feature_id: "AI-01",
+                sample_count: 40,
+                precision_score: "0.9600",
+                recall_score: "0.9400",
+                f1_score: "0.9499",
+                citation_validity_rate: "0.9950",
+                promotion_gate_passed: true,
+                notes: "De-identified benchmark",
+                created_at: "2026-11-26T12:00:00Z",
+              },
+            ],
           },
         };
       }
@@ -210,6 +238,12 @@ describe("W0 and AI-01..AI-10 AI Accounting Copilot UI", () => {
       await screen.findByRole("heading", {
         name: /AI-06 · Multilingual Voice Accounting/i,
       }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Record Microphone Audio/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByLabelText(/Upload Audio Recording/i),
     ).toBeInTheDocument();
 
     await user.click(

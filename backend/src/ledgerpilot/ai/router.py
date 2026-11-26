@@ -61,6 +61,78 @@ def _content_hash(payload: dict[str, Any]) -> str:
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32]
 
 
+def _get_or_default_ai_controls(db: DB, business_id: UUID) -> dict[str, Any]:
+    row = (
+        db.execute(
+            text(
+                """
+                SELECT ai_enabled, operator_paused, pause_reason,
+                       monthly_budget_usd, monthly_token_budget, max_concurrent_runs
+                FROM app.ai_tenant_controls
+                WHERE business_id = :bid
+                """
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .first()
+    )
+    usage = (
+        db.execute(
+            text(
+                """
+                SELECT COALESCE(SUM(total_tokens), 0) AS used_tokens,
+                       COALESCE(SUM(estimated_cost_usd), 0) AS used_cost_usd
+                FROM app.ai_runs
+                WHERE business_id = :bid
+                """
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .one()
+    )
+    ai_enabled = bool(row["ai_enabled"]) if row else True
+    operator_paused = bool(row["operator_paused"]) if row else False
+    pause_reason = str(row["pause_reason"] or "") if row else ""
+    monthly_budget_usd = Decimal(str(row["monthly_budget_usd"])) if row else Decimal("25.000000")
+    monthly_token_budget = int(row["monthly_token_budget"]) if row else 500000
+    max_concurrent_runs = int(row["max_concurrent_runs"]) if row else 4
+    used_tokens = int(usage["used_tokens"] or 0)
+    used_cost_usd = Decimal(str(usage["used_cost_usd"] or "0"))
+    return {
+        "ai_enabled": ai_enabled,
+        "operator_paused": operator_paused,
+        "pause_reason": pause_reason,
+        "monthly_budget_usd": f"{monthly_budget_usd:.6f}",
+        "monthly_token_budget": monthly_token_budget,
+        "max_concurrent_runs": max_concurrent_runs,
+        "used_tokens": used_tokens,
+        "used_cost_usd": f"{used_cost_usd:.6f}",
+        "manual_workflows_unaffected": True,
+    }
+
+
+def _enforce_ai_tenant_controls(db: DB, business_id: UUID) -> None:
+    ctrl = _get_or_default_ai_controls(db, business_id)
+    if not ctrl["ai_enabled"] or ctrl["operator_paused"]:
+        reason = ctrl["pause_reason"] or "Paused by workspace operator"
+        raise DomainError(
+            "ERR_AI_PAUSED",
+            f"AI recommendations are paused for this workspace ({reason}); "
+            "manual workflows remain active.",
+            409,
+        )
+    if int(ctrl["used_tokens"]) >= int(ctrl["monthly_token_budget"]) or Decimal(
+        str(ctrl["used_cost_usd"])
+    ) >= Decimal(str(ctrl["monthly_budget_usd"])):
+        raise DomainError(
+            "ERR_AI_BUDGET_EXCEEDED",
+            "Workspace monthly AI token or cost budget reached; manual workflows remain active.",
+            429,
+        )
+
+
 def _persist_ai_run(
     db: DB,
     *,
@@ -80,6 +152,7 @@ def _persist_ai_run(
     status: str = "completed",
     approval_state: str = "pending_review",
 ) -> dict[str, Any]:
+    _enforce_ai_tenant_controls(db, business_id)
     run_id = uuid4()
     snap_hash = _snapshot_hash(business_id, business_version, policy_version, feature_id)
     app_hash = _content_hash(
@@ -305,6 +378,50 @@ class AIRunDecisionInput(Schema):
     reason: str = Field(default="", max_length=240)
 
 
+class AITenantControlsUpdateInput(Schema):
+    ai_enabled: bool = True
+    operator_paused: bool = False
+    pause_reason: str = Field(default="", max_length=240)
+    monthly_budget_usd: Decimal = Field(
+        default=Decimal("25.000000"), ge=Decimal("0.00"), le=Decimal("100000.00")
+    )
+    monthly_token_budget: int = Field(default=500000, ge=0, le=100000000)
+    max_concurrent_runs: int = Field(default=4, ge=1, le=32)
+
+
+class AIDatasetEvaluationInput(Schema):
+    dataset_key: str = Field(min_length=2, max_length=80)
+    dataset_cohort: Literal["synthetic_development", "representative_deidentified"] = (
+        "synthetic_development"
+    )
+    execution_provenance: Literal[
+        "supplied_prediction", "actual_groq_model_execution", "deterministic_engine_execution"
+    ] = "actual_groq_model_execution"
+    feature_id: Literal[
+        "AI-01",
+        "AI-02",
+        "AI-03",
+        "AI-04",
+        "AI-05",
+        "AI-06",
+        "AI-07",
+        "AI-08",
+        "AI-09",
+        "AI-10",
+    ] = "AI-01"
+    sample_count: int = Field(default=10, ge=1, le=10000)
+    precision_score: Decimal = Field(
+        default=Decimal("0.9600"), ge=Decimal("0.0000"), le=Decimal("1.0000")
+    )
+    recall_score: Decimal = Field(
+        default=Decimal("0.9400"), ge=Decimal("0.0000"), le=Decimal("1.0000")
+    )
+    citation_validity_rate: Decimal = Field(
+        default=Decimal("1.0000"), ge=Decimal("0.0000"), le=Decimal("1.0000")
+    )
+    notes: str = Field(default="", max_length=300)
+
+
 # ---------------------------------------------------------------------------
 # W0 & AI-10: Overview, Runs, Provenance & Tool Audit Logs
 # ---------------------------------------------------------------------------
@@ -490,6 +607,26 @@ def get_ai_copilot_overview(
         .all()
     ]
 
+    evaluation_datasets = [
+        dict(r)
+        for r in db.execute(
+            text(
+                """
+                SELECT id, dataset_key, dataset_cohort, execution_provenance, feature_id,
+                       sample_count, precision_score, recall_score, f1_score,
+                       citation_validity_rate, promotion_gate_passed, notes, created_at
+                FROM app.ai_evaluation_datasets
+                WHERE business_id = :bid
+                ORDER BY created_at DESC
+                LIMIT 25
+                """
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .all()
+    ]
+
     def _stringify(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         out: list[dict[str, Any]] = []
         for item in rows:
@@ -498,7 +635,18 @@ def get_ai_copilot_overview(
                 if isinstance(v, UUID | date):
                     conv[k] = str(v)
                 elif isinstance(v, Decimal):
-                    conv[k] = f"{v:.2f}" if k != "estimated_cost_usd" else f"{v:.6f}"
+                    if k == "estimated_cost_usd":
+                        conv[k] = f"{v:.6f}"
+                    elif k in (
+                        "confidence_score",
+                        "precision_score",
+                        "recall_score",
+                        "f1_score",
+                        "citation_validity_rate",
+                    ):
+                        conv[k] = f"{v:.4f}"
+                    else:
+                        conv[k] = f"{v:.2f}"
                 else:
                     conv[k] = v
             out.append(conv)
@@ -522,6 +670,8 @@ def get_ai_copilot_overview(
             "prompt_injection_shield_active": True,
             "human_approval_required": True,
         },
+        "controls": _get_or_default_ai_controls(db, business_id),
+        "evaluation_datasets": _stringify(evaluation_datasets),
         "runs": _stringify(runs),
         "tool_audit_logs": _stringify(tool_logs),
         "memories": _stringify(memories),
@@ -2416,4 +2566,240 @@ def decide_ai_run_evidence_record(
         "status": str(row["status"]),
         "approval_state": new_state,
         "approved_by": str(user.user.id),
+    }
+
+
+@router.post("/businesses/{business_id}/ai/controls")
+def update_ai_tenant_controls(
+    business_id: UUID,
+    payload: AITenantControlsUpdateInput,
+    user: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """W0 Item 7: Configure per-business AI feature enablement, pause toggle, and budget caps."""
+    authorize(db, user, business_id, {"owner", "accountant"})
+    clean_reason, _ = sanitize_untrusted_text(payload.pause_reason, max_length=240)
+    db.execute(
+        text(
+            """
+            INSERT INTO app.ai_tenant_controls (
+              business_id, ai_enabled, operator_paused, pause_reason,
+              monthly_budget_usd, monthly_token_budget, max_concurrent_runs,
+              updated_by, updated_at
+            ) VALUES (
+              :bid, :enabled, :paused, :reason,
+              :budget_usd, :token_budget, :max_conc,
+              :actor, clock_timestamp()
+            )
+            ON CONFLICT (business_id) DO UPDATE SET
+              ai_enabled = EXCLUDED.ai_enabled,
+              operator_paused = EXCLUDED.operator_paused,
+              pause_reason = EXCLUDED.pause_reason,
+              monthly_budget_usd = EXCLUDED.monthly_budget_usd,
+              monthly_token_budget = EXCLUDED.monthly_token_budget,
+              max_concurrent_runs = EXCLUDED.max_concurrent_runs,
+              updated_by = EXCLUDED.updated_by,
+              updated_at = clock_timestamp()
+            """
+        ),
+        {
+            "bid": business_id,
+            "enabled": payload.ai_enabled,
+            "paused": payload.operator_paused,
+            "reason": clean_reason,
+            "budget_usd": payload.monthly_budget_usd.quantize(Decimal("0.000001")),
+            "token_budget": payload.monthly_token_budget,
+            "max_conc": payload.max_concurrent_runs,
+            "actor": user.user.id,
+        },
+    )
+    record_audit(db, user.user.id, "ai.controls.updated", business_id, business_id)
+    return _get_or_default_ai_controls(db, business_id)
+
+
+@router.get("/businesses/{business_id}/ai/runs/{run_id}/export")
+def export_ai_run_evidence_record(
+    business_id: UUID,
+    run_id: UUID,
+    user: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """AI-10: Export a scoped, redacted verifiable evidence package with source-freshness state."""
+    authorize(db, user, business_id)
+    biz = get_business(db, business_id)
+    row = (
+        db.execute(
+            text(
+                """
+                SELECT id, feature_id, wave, provider, model_name, prompt_version,
+                       tool_versions, status, input_summary, structured_output,
+                       citations, tool_invocations, confidence_score, uncertainty_flags,
+                       snapshot_hash, business_version, policy_version,
+                       prompt_tokens, completion_tokens, total_tokens,
+                       latency_ms, estimated_cost_usd, approval_state,
+                       approval_content_hash, approved_by, approved_at,
+                       rejection_reason, created_at
+                FROM app.ai_runs
+                WHERE business_id = :bid AND id = :rid
+                """
+            ),
+            {"bid": business_id, "rid": run_id},
+        )
+        .mappings()
+        .first()
+    )
+    if not row:
+        raise DomainError("ERR_NOT_FOUND", "AI evidence record not found.", 404)
+
+    tool_logs = [
+        dict(r)
+        for r in db.execute(
+            text(
+                """
+                SELECT id, tool_name, parameters_hash, row_count, result_bytes,
+                       untrusted_content_sanitized, duration_ms, executed_at
+                FROM app.ai_tool_audit_logs
+                WHERE business_id = :bid AND run_id = :rid
+                ORDER BY executed_at ASC
+                """
+            ),
+            {"bid": business_id, "rid": run_id},
+        )
+        .mappings()
+        .all()
+    ]
+    is_stale = int(row["business_version"]) != biz.version
+    raw_citations = row["citations"] if isinstance(row["citations"], list) else []
+    enriched_citations = [
+        {
+            **dict(cite),
+            "availability": "stale_snapshot_version" if is_stale else "available",
+        }
+        for cite in raw_citations
+    ]
+    redacted_output: dict[str, Any] = {}
+    if isinstance(row["structured_output"], dict):
+        for k, v in row["structured_output"].items():
+            if any(sec in k.lower() for sec in ("secret", "token", "api_key", "password")):
+                redacted_output[k] = "[REDACTED]"
+            else:
+                redacted_output[k] = v
+
+    record_audit(db, user.user.id, "ai.run.exported", business_id, run_id)
+    return {
+        "export_schema_version": "AI-10.v1",
+        "business_id": str(business_id),
+        "run_id": str(row["id"]),
+        "feature_id": str(row["feature_id"]),
+        "wave": str(row["wave"]),
+        "provider": str(row["provider"]),
+        "model_name": str(row["model_name"]),
+        "prompt_version": str(row["prompt_version"]),
+        "tool_versions": row["tool_versions"],
+        "status": str(row["status"]),
+        "approval_state": str(row["approval_state"]),
+        "approval_content_hash": str(row["approval_content_hash"]),
+        "snapshot_hash": str(row["snapshot_hash"]),
+        "run_business_version": int(row["business_version"]),
+        "current_business_version": biz.version,
+        "is_stale_against_current_ledger": is_stale,
+        "redaction_applied": True,
+        "confidence_score": f"{Decimal(str(row['confidence_score'])):.4f}",
+        "uncertainty_flags": list(row["uncertainty_flags"] or []),
+        "input_summary": str(row["input_summary"]),
+        "structured_output": redacted_output,
+        "citations": enriched_citations,
+        "tool_audit_logs": [
+            {
+                "id": str(t["id"]),
+                "tool_name": str(t["tool_name"]),
+                "parameters_hash": str(t["parameters_hash"]),
+                "row_count": int(t["row_count"]),
+                "result_bytes": int(t["result_bytes"]),
+                "untrusted_content_sanitized": bool(t["untrusted_content_sanitized"]),
+                "duration_ms": int(t["duration_ms"]),
+            }
+            for t in tool_logs
+        ],
+        "usage": {
+            "prompt_tokens": int(row["prompt_tokens"]),
+            "completion_tokens": int(row["completion_tokens"]),
+            "total_tokens": int(row["total_tokens"]),
+            "latency_ms": int(row["latency_ms"]),
+            "estimated_cost_usd": f"{Decimal(str(row['estimated_cost_usd'])):.6f}",
+        },
+    }
+
+
+@router.post("/businesses/{business_id}/ai/datasets/evaluate", status_code=201)
+def evaluate_ai_dataset_registry(
+    business_id: UUID,
+    payload: AIDatasetEvaluationInput,
+    user: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """W0 Item 5 & 8: Record dataset evaluation separating synthetic vs de-identified cohorts."""
+    authorize(db, user, business_id, {"owner", "accountant"})
+    clean_key = payload.dataset_key.strip().lower()
+    clean_notes, _ = sanitize_untrusted_text(payload.notes, max_length=300)
+    p = payload.precision_score.quantize(Decimal("0.0001"))
+    r = payload.recall_score.quantize(Decimal("0.0001"))
+    c = payload.citation_validity_rate.quantize(Decimal("0.0001"))
+    f1 = (
+        ((Decimal("2") * p * r) / (p + r)).quantize(Decimal("0.0001"))
+        if (p + r) > Decimal("0")
+        else Decimal("0.0000")
+    )
+    gate_passed = (
+        p >= Decimal("0.9000")
+        and r >= Decimal("0.8800")
+        and c >= Decimal("0.9800")
+        and payload.execution_provenance != "supplied_prediction"
+    )
+    eval_id = uuid4()
+    db.execute(
+        text(
+            """
+            INSERT INTO app.ai_evaluation_datasets (
+              id, business_id, dataset_key, dataset_cohort, execution_provenance,
+              feature_id, sample_count, precision_score, recall_score, f1_score,
+              citation_validity_rate, promotion_gate_passed, notes, created_by
+            ) VALUES (
+              :id, :bid, :dkey, :cohort, :prov,
+              :fid, :scount, :p, :r, :f1,
+              :c, :gate, :notes, :actor
+            )
+            """
+        ),
+        {
+            "id": eval_id,
+            "bid": business_id,
+            "dkey": clean_key,
+            "cohort": payload.dataset_cohort,
+            "prov": payload.execution_provenance,
+            "fid": payload.feature_id,
+            "scount": payload.sample_count,
+            "p": p,
+            "r": r,
+            "f1": f1,
+            "c": c,
+            "gate": gate_passed,
+            "notes": clean_notes,
+            "actor": user.user.id,
+        },
+    )
+    record_audit(db, user.user.id, "ai.dataset.evaluated", business_id, eval_id)
+    return {
+        "id": str(eval_id),
+        "dataset_key": clean_key,
+        "dataset_cohort": payload.dataset_cohort,
+        "execution_provenance": payload.execution_provenance,
+        "feature_id": payload.feature_id,
+        "sample_count": payload.sample_count,
+        "precision_score": f"{p:.4f}",
+        "recall_score": f"{r:.4f}",
+        "f1_score": f"{f1:.4f}",
+        "citation_validity_rate": f"{c:.4f}",
+        "promotion_gate_passed": gate_passed,
+        "notes": clean_notes,
     }

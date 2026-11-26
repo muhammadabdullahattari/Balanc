@@ -508,6 +508,96 @@ async def test_w0_and_ai01_through_ai10_end_to_end_and_cross_tenant_rls_isolatio
         assert good_approve.status_code == 200, good_approve.text
         assert good_approve.json()["approval_state"] == "approved"
 
+        # 11b. AI-10 Scoped Evidence Export with redaction and source-freshness reporting
+        exported = await api_a.get(f"{base_a}/runs/{run_id_ai02}/export")
+        assert exported.status_code == 200, exported.text
+        exp_data = exported.json()
+        assert exp_data["export_schema_version"] == "AI-10.v1"
+        assert exp_data["redaction_applied"] is True
+        assert exp_data["is_stale_against_current_ledger"] is False
+        assert exp_data["citations"][0]["availability"] == "available"
+        assert len(exp_data["tool_audit_logs"]) >= 1
+
+        # 11c. W0 Dataset & Evaluation Registry (synthetic vs deidentified, supplied vs actual)
+        ds_supplied = await api_a.post(
+            f"{base_a}/datasets/evaluate",
+            json={
+                "dataset_key": "recon-dev-fixture-v1",
+                "dataset_cohort": "synthetic_development",
+                "execution_provenance": "supplied_prediction",
+                "feature_id": "AI-01",
+                "sample_count": 25,
+                "precision_score": "0.9700",
+                "recall_score": "0.9500",
+                "citation_validity_rate": "1.0000",
+                "notes": "Supplied prediction cohort cannot pass promotion gate alone",
+            },
+        )
+        assert ds_supplied.status_code == 201, ds_supplied.text
+        assert ds_supplied.json()["promotion_gate_passed"] is False
+
+        ds_actual = await api_a.post(
+            f"{base_a}/datasets/evaluate",
+            json={
+                "dataset_key": "recon-deid-benchmark-v1",
+                "dataset_cohort": "representative_deidentified",
+                "execution_provenance": "actual_groq_model_execution",
+                "feature_id": "AI-01",
+                "sample_count": 40,
+                "precision_score": "0.9600",
+                "recall_score": "0.9400",
+                "citation_validity_rate": "0.9950",
+                "notes": "Actual model execution on de-identified cohort",
+            },
+        )
+        assert ds_actual.status_code == 201, ds_actual.text
+        assert ds_actual.json()["promotion_gate_passed"] is True
+
+        # 11d. W0 Operator Controls: pause AI recommendations while manual workflows stay active
+        paused_ctrl = await api_a.post(
+            f"{base_a}/controls",
+            json={
+                "ai_enabled": True,
+                "operator_paused": True,
+                "pause_reason": "Monthly audit freeze window",
+                "monthly_budget_usd": "25.000000",
+                "monthly_token_budget": 500000,
+                "max_concurrent_runs": 4,
+            },
+        )
+        assert paused_ctrl.status_code == 200, paused_ctrl.text
+        assert paused_ctrl.json()["operator_paused"] is True
+
+        paused_attempt = await api_a.post(
+            f"{base_a}/close-assistant",
+            json={
+                "period_label": "2026-11",
+                "materiality_threshold": "500.00",
+                "check_recurring_omissions": True,
+            },
+        )
+        assert paused_attempt.status_code == 409
+        assert paused_attempt.json()["error"]["code"] == "ERR_AI_PAUSED"
+
+        unpaused_ctrl = await api_a.post(
+            f"{base_a}/controls",
+            json={
+                "ai_enabled": True,
+                "operator_paused": False,
+                "pause_reason": "",
+                "monthly_budget_usd": "25.000000",
+                "monthly_token_budget": 500000,
+                "max_concurrent_runs": 4,
+            },
+        )
+        assert unpaused_ctrl.status_code == 200
+
+        # 11e. W0 Item 6: Predefined P3 OCR/AI cost benchmark figures labeled simulated
+        p3_bench = await api_a.get(f"/api/v1/businesses/{bid_a}/p3/ai-benchmarks")
+        assert p3_bench.status_code == 200, p3_bench.text
+        assert p3_bench.json()["provenance_mode"] == "SIMULATED_SYNTHETIC_FIXTURE"
+        assert p3_bench.json()["is_simulated_baseline"] is True
+
         # 12. Cross-tenant RLS & HTTP authorization isolation (Tenant B cannot access Tenant A)
         cross_get = await api_b.get(f"{base_a}/overview")
         assert cross_get.status_code == 404

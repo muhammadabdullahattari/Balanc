@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 288,
-  "distinct_operations": 245,
+  "call_sites": 291,
+  "distinct_operations": 248,
   "operations": [
     {
       "file": "App.tsx",
@@ -192,6 +192,21 @@
       "file": "features/ai-copilot.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/ai/voice-session"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/controls"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/ai/runs/{run_id}/export"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/datasets/evaluate"
     },
     {
       "file": "features/ai-copilot.tsx",
