@@ -1,5 +1,9 @@
 # LedgerPilot Implementation Plan
 
+## AI scope addendum — 25 November 2026
+
+Added [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md) as the detailed plan and tracker for ten differentiated AI features, AI-01–AI-10. Delivery waves W0–W6 extend P3 and preserve current phase/package IDs and architecture. Includes dependencies, proposed data/API/UI responsibilities, required user inputs, local/open-source options, evaluation, approval and rollout gates. This is a documentation update only; no implementation, benchmark or release completion is asserted. Related cross-references are recorded in the P3 and consolidated next-phase plans.
+
 ## Sequenced engineering delivery from project setup to production
 
 **Plan version:** 2.30

@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 274,
-  "distinct_operations": 231,
+  "call_sites": 288,
+  "distinct_operations": 245,
   "operations": [
     {
       "file": "App.tsx",
@@ -142,6 +142,76 @@
       "file": "features/advances.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/advances"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/ai/overview"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/impact-preview"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/memories"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/memories/{memory_id}/decision"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/reconciliation-detective"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/clarifications"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/clarifications/{clarification_id}/reply"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/close-assistant"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/portfolio-planner"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/voice-session"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/voice-session/{session_id}/confirm"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/contract-verification"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/cash-scenarios"
+    },
+    {
+      "file": "features/ai-copilot.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/ai/runs/{run_id}/decision"
     },
     {
       "file": "features/asset-register.tsx",

@@ -1,5 +1,9 @@
 # LedgerPilot P3 and P4 feature implementation plan
 
+## Detailed AI delivery addendum — 25 November 2026
+
+Use [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md) for AI-01–AI-10 and W0–W6 sequencing. This accepted planning scope extends the package work below; it does not certify implementation or replace P3/P4 identifiers. P3 supplies the application capabilities; P4 remains responsible for separately measured enterprise capacity, migration and regional resilience. The addendum explicitly covers model execution, deterministic financial validation, human approval, retrieval isolation, evaluation and feature-specific inputs.
+
 Updated 18 November 2026. This plan expands the accepted P3/P4 scope in Next_Phases_Implementation_Plan.md. Package labels remain stable. The order below follows technical dependencies rather than alphabetical package labels. This document schedules future work and makes no claim that it is implemented.
 
 ## Shared delivery method

@@ -1,6 +1,38 @@
 {
   "components": {
     "schemas": {
+      "AIRunDecisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "reject",
+              "cancel"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "expected_content_hash": {
+            "maxLength": 64,
+            "minLength": 6,
+            "title": "Expected Content Hash",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision",
+          "expected_content_hash"
+        ],
+        "title": "AIRunDecisionInput",
+        "type": "object"
+      },
       "AcceptedInvitation": {
         "additionalProperties": false,
         "properties": {
@@ -282,6 +314,143 @@
           "total_amount"
         ],
         "title": "AccountingExpansionExecuteInput",
+        "type": "object"
+      },
+      "AccountingMemoryCreateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "account_code": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Account Code",
+            "type": "string"
+          },
+          "account_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Account Name",
+            "type": "string"
+          },
+          "accounting_framework": {
+            "default": "US_GAAP",
+            "enum": [
+              "US_GAAP",
+              "IFRS",
+              "TAX_BASIS"
+            ],
+            "title": "Accounting Framework",
+            "type": "string"
+          },
+          "binding_kind": {
+            "default": "binding_policy",
+            "enum": [
+              "binding_policy",
+              "past_example"
+            ],
+            "title": "Binding Kind",
+            "type": "string"
+          },
+          "category": {
+            "default": "categorization",
+            "enum": [
+              "categorization",
+              "recognition",
+              "materiality",
+              "vendor_policy",
+              "close_rule"
+            ],
+            "title": "Category",
+            "type": "string"
+          },
+          "effective_from": {
+            "format": "date",
+            "title": "Effective From",
+            "type": "string"
+          },
+          "effective_to": {
+            "anyOf": [
+              {
+                "format": "date",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Effective To"
+          },
+          "evidence_note": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Evidence Note",
+            "type": "string"
+          },
+          "materiality_threshold": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "500.00",
+            "title": "Materiality Threshold"
+          },
+          "memory_key": {
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Memory Key",
+            "type": "string"
+          },
+          "rule_condition": {
+            "maxLength": 400,
+            "minLength": 3,
+            "title": "Rule Condition",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 140,
+            "minLength": 2,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "memory_key",
+          "title",
+          "rule_condition",
+          "account_code",
+          "account_name",
+          "effective_from"
+        ],
+        "title": "AccountingMemoryCreateInput",
+        "type": "object"
+      },
+      "AccountingMemoryDecisionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "decision": {
+            "enum": [
+              "approve",
+              "supersede",
+              "revoke"
+            ],
+            "title": "Decision",
+            "type": "string"
+          },
+          "reason": {
+            "default": "",
+            "maxLength": 240,
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "decision"
+        ],
+        "title": "AccountingMemoryDecisionInput",
         "type": "object"
       },
       "Accrual": {
@@ -2909,6 +3078,122 @@
         "title": "CashInterval",
         "type": "object"
       },
+      "CashScenarioInput": {
+        "additionalProperties": false,
+        "properties": {
+          "baseline_starting_cash": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "50000.00",
+            "title": "Baseline Starting Cash"
+          },
+          "baseline_weekly_inflow": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "12000.00",
+            "title": "Baseline Weekly Inflow"
+          },
+          "baseline_weekly_outflow": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "9500.00",
+            "title": "Baseline Weekly Outflow"
+          },
+          "collections_change_pct": {
+            "anyOf": [
+              {
+                "maximum": 200.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Collections Change Pct"
+          },
+          "equipment_purchase_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Equipment Purchase Amount"
+          },
+          "horizon_weeks": {
+            "default": 13,
+            "maximum": 52.0,
+            "minimum": 4.0,
+            "title": "Horizon Weeks",
+            "type": "integer"
+          },
+          "natural_language_prompt": {
+            "maxLength": 400,
+            "minLength": 3,
+            "title": "Natural Language Prompt",
+            "type": "string"
+          },
+          "payment_delay_weeks": {
+            "default": 0,
+            "maximum": 12.0,
+            "minimum": 0.0,
+            "title": "Payment Delay Weeks",
+            "type": "integer"
+          },
+          "recurring_cost_change_pct": {
+            "anyOf": [
+              {
+                "maximum": 200.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Recurring Cost Change Pct"
+          },
+          "scenario_name": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Scenario Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scenario_name",
+          "natural_language_prompt"
+        ],
+        "title": "CashScenarioInput",
+        "type": "object"
+      },
       "CashTreatment": {
         "additionalProperties": false,
         "properties": {
@@ -3006,6 +3291,132 @@
           "reason"
         ],
         "title": "ChangeRequest",
+        "type": "object"
+      },
+      "ClientClarificationCreateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "default": "email",
+            "enum": [
+              "email",
+              "whatsapp",
+              "slack"
+            ],
+            "title": "Channel",
+            "type": "string"
+          },
+          "context_summary": {
+            "maxLength": 400,
+            "minLength": 3,
+            "title": "Context Summary",
+            "type": "string"
+          },
+          "exception_kind": {
+            "default": "missing_invoice",
+            "enum": [
+              "bank_row",
+              "missing_invoice",
+              "unmatched_payment",
+              "contract_variance"
+            ],
+            "title": "Exception Kind",
+            "type": "string"
+          },
+          "exception_ref": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Exception Ref",
+            "type": "string"
+          },
+          "recipient_key": {
+            "maxLength": 80,
+            "minLength": 2,
+            "title": "Recipient Key",
+            "type": "string"
+          },
+          "required_documents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Required Documents",
+            "type": "array"
+          }
+        },
+        "required": [
+          "exception_ref",
+          "recipient_key",
+          "context_summary"
+        ],
+        "title": "ClientClarificationCreateInput",
+        "type": "object"
+      },
+      "ClientClarificationReplyInput": {
+        "additionalProperties": false,
+        "properties": {
+          "client_action": {
+            "default": "reply",
+            "enum": [
+              "reply",
+              "opt_out",
+              "dispute"
+            ],
+            "title": "Client Action",
+            "type": "string"
+          },
+          "client_reply_text": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Client Reply Text",
+            "type": "string"
+          },
+          "provided_documents": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Provided Documents",
+            "type": "array"
+          },
+          "uploaded_evidence_ref": {
+            "default": "",
+            "maxLength": 160,
+            "title": "Uploaded Evidence Ref",
+            "type": "string"
+          }
+        },
+        "title": "ClientClarificationReplyInput",
+        "type": "object"
+      },
+      "CloseAssistantInput": {
+        "additionalProperties": false,
+        "properties": {
+          "check_recurring_omissions": {
+            "default": true,
+            "title": "Check Recurring Omissions",
+            "type": "boolean"
+          },
+          "materiality_threshold": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "500.00",
+            "title": "Materiality Threshold"
+          },
+          "period_label": {
+            "default": "2026-11",
+            "maxLength": 32,
+            "minLength": 4,
+            "title": "Period Label",
+            "type": "string"
+          }
+        },
+        "title": "CloseAssistantInput",
         "type": "object"
       },
       "ClosePackage": {
@@ -3399,6 +3810,87 @@
           "next_cursor"
         ],
         "title": "Consents",
+        "type": "object"
+      },
+      "ContractVerificationInput": {
+        "additionalProperties": false,
+        "properties": {
+          "contract_clause_text": {
+            "maxLength": 1000,
+            "minLength": 5,
+            "title": "Contract Clause Text",
+            "type": "string"
+          },
+          "contract_reference": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Contract Reference",
+            "type": "string"
+          },
+          "contracted_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Contracted Amount"
+          },
+          "invoiced_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Invoiced Amount"
+          },
+          "paid_amount": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Paid Amount"
+          },
+          "prior_payment_count": {
+            "default": 0,
+            "maximum": 50.0,
+            "minimum": 0.0,
+            "title": "Prior Payment Count",
+            "type": "integer"
+          },
+          "unapproved_milestone_billed": {
+            "default": false,
+            "title": "Unapproved Milestone Billed",
+            "type": "boolean"
+          },
+          "vendor_or_customer": {
+            "maxLength": 120,
+            "minLength": 2,
+            "title": "Vendor Or Customer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "contract_reference",
+          "vendor_or_customer",
+          "contract_clause_text",
+          "contracted_amount",
+          "invoiced_amount"
+        ],
+        "title": "ContractVerificationInput",
         "type": "object"
       },
       "ControlReport": {
@@ -7286,6 +7778,123 @@
           "reason"
         ],
         "title": "IdentityReview",
+        "type": "object"
+      },
+      "ImpactPreviewLineInput": {
+        "additionalProperties": false,
+        "properties": {
+          "account_code": {
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Account Code",
+            "type": "string"
+          },
+          "account_name": {
+            "default": "",
+            "maxLength": 120,
+            "title": "Account Name",
+            "type": "string"
+          },
+          "control": {
+            "default": "none",
+            "enum": [
+              "ar",
+              "ap",
+              "tax",
+              "clearing",
+              "deposit",
+              "cash",
+              "none"
+            ],
+            "title": "Control",
+            "type": "string"
+          },
+          "credit": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Credit"
+          },
+          "debit": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "0.00",
+            "title": "Debit"
+          },
+          "kind": {
+            "default": "expense",
+            "enum": [
+              "asset",
+              "liability",
+              "equity",
+              "income",
+              "expense"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "account_code"
+        ],
+        "title": "ImpactPreviewLineInput",
+        "type": "object"
+      },
+      "ImpactPreviewRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "accounting_date": {
+            "format": "date",
+            "title": "Accounting Date",
+            "type": "string"
+          },
+          "expected_business_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expected Business Version"
+          },
+          "lines": {
+            "items": {
+              "$ref": "#/components/schemas/ImpactPreviewLineInput"
+            },
+            "maxItems": 50,
+            "minItems": 2,
+            "title": "Lines",
+            "type": "array"
+          },
+          "memo": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Memo",
+            "type": "string"
+          }
+        },
+        "required": [
+          "accounting_date",
+          "memo",
+          "lines"
+        ],
+        "title": "ImpactPreviewRequest",
         "type": "object"
       },
       "ImportApply": {
@@ -11641,6 +12250,33 @@
         "title": "PolicyView",
         "type": "object"
       },
+      "PortfolioPlannerInput": {
+        "additionalProperties": false,
+        "properties": {
+          "horizon_days": {
+            "default": 7,
+            "maximum": 30.0,
+            "minimum": 1.0,
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "materiality_threshold": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "default": "500.00",
+            "title": "Materiality Threshold"
+          }
+        },
+        "title": "PortfolioPlannerInput",
+        "type": "object"
+      },
       "PortfolioRow": {
         "additionalProperties": false,
         "properties": {
@@ -12701,6 +13337,57 @@
           "due_date"
         ],
         "title": "Recognize",
+        "type": "object"
+      },
+      "ReconciliationDetectiveInput": {
+        "additionalProperties": false,
+        "properties": {
+          "bank_row_id": {
+            "anyOf": [
+              {
+                "format": "uuid",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bank Row Id"
+          },
+          "is_duplicate_external_id": {
+            "default": false,
+            "title": "Is Duplicate External Id",
+            "type": "boolean"
+          },
+          "posted_date": {
+            "format": "date",
+            "title": "Posted Date",
+            "type": "string"
+          },
+          "statement_amount": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Statement Amount"
+          },
+          "statement_description": {
+            "maxLength": 240,
+            "minLength": 2,
+            "title": "Statement Description",
+            "type": "string"
+          }
+        },
+        "required": [
+          "statement_description",
+          "statement_amount",
+          "posted_date"
+        ],
+        "title": "ReconciliationDetectiveInput",
         "type": "object"
       },
       "RecordedConsent": {
@@ -15804,6 +16491,102 @@
           "type"
         ],
         "title": "ValidationField",
+        "type": "object"
+      },
+      "VoiceAccountingConfirmInput": {
+        "additionalProperties": false,
+        "properties": {
+          "confirmed_account_code": {
+            "default": "5000",
+            "maxLength": 30,
+            "minLength": 1,
+            "title": "Confirmed Account Code",
+            "type": "string"
+          },
+          "confirmed_amount": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Confirmed Amount"
+          },
+          "confirmed_currency": {
+            "default": "USD",
+            "maxLength": 3,
+            "minLength": 3,
+            "title": "Confirmed Currency",
+            "type": "string"
+          },
+          "confirmed_date": {
+            "format": "date",
+            "title": "Confirmed Date",
+            "type": "string"
+          },
+          "confirmed_party_name": {
+            "maxLength": 120,
+            "minLength": 1,
+            "title": "Confirmed Party Name",
+            "type": "string"
+          },
+          "corrected_transcript": {
+            "maxLength": 600,
+            "minLength": 3,
+            "title": "Corrected Transcript",
+            "type": "string"
+          }
+        },
+        "required": [
+          "corrected_transcript",
+          "confirmed_party_name",
+          "confirmed_amount",
+          "confirmed_date"
+        ],
+        "title": "VoiceAccountingConfirmInput",
+        "type": "object"
+      },
+      "VoiceAccountingSessionInput": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_base64": {
+            "default": "",
+            "maxLength": 200000,
+            "title": "Audio Base64",
+            "type": "string"
+          },
+          "audio_format": {
+            "default": "audio/webm",
+            "maxLength": 40,
+            "title": "Audio Format",
+            "type": "string"
+          },
+          "language_locale": {
+            "default": "en_ur_mixed",
+            "enum": [
+              "en_US",
+              "ur_PK",
+              "en_ur_mixed"
+            ],
+            "title": "Language Locale",
+            "type": "string"
+          },
+          "request_livekit_room": {
+            "default": false,
+            "title": "Request Livekit Room",
+            "type": "boolean"
+          },
+          "transcript_input": {
+            "default": "",
+            "maxLength": 600,
+            "title": "Transcript Input",
+            "type": "string"
+          }
+        },
+        "title": "VoiceAccountingSessionInput",
         "type": "object"
       },
       "VoiceInstructionCreateInput": {
@@ -24058,6 +24841,2710 @@
         "summary": "Advance Apply",
         "tags": [
           "trade"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/cash-scenarios": {
+      "post": {
+        "description": "AI-08: Compute baseline vs. what-if cash-flow projections in canonical Decimal.",
+        "operationId": "run_ai_cash_flow_scenario_api_v1_businesses__business_id__ai_cash_scenarios_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CashScenarioInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Cash Flow Scenario Api V1 Businesses  Business Id  Ai Cash Scenarios Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Cash Flow Scenario",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/clarifications": {
+      "post": {
+        "description": "AI-03: Convert an unresolved exception into a deduplicated clarification request.",
+        "operationId": "create_ai_client_clarification_api_v1_businesses__business_id__ai_clarifications_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientClarificationCreateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Ai Client Clarification Api V1 Businesses  Business Id  Ai Clarifications Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Create Ai Client Clarification",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/clarifications/{clarification_id}/reply": {
+      "post": {
+        "description": "AI-03: Validate client reply and documents for completeness, or close/escalate.",
+        "operationId": "process_ai_client_clarification_reply_api_v1_businesses__business_id__ai_clarifications__clarification_id__reply_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "clarification_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Clarification Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ClientClarificationReplyInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Process Ai Client Clarification Reply Api V1 Businesses  Business Id  Ai Clarifications  Clarification Id  Reply Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Process Ai Client Clarification Reply",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/close-assistant": {
+      "post": {
+        "description": "AI-05: Build close readiness report, detect recurring omissions, and draft workpaper.",
+        "operationId": "run_ai_continuous_close_assistant_api_v1_businesses__business_id__ai_close_assistant_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CloseAssistantInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Continuous Close Assistant Api V1 Businesses  Business Id  Ai Close Assistant Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Continuous Close Assistant",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/contract-verification": {
+      "post": {
+        "description": "AI-07: Extract cited contract terms and compare against invoiced and paid amounts.",
+        "operationId": "run_ai_contract_verification_api_v1_businesses__business_id__ai_contract_verification_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContractVerificationInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Contract Verification Api V1 Businesses  Business Id  Ai Contract Verification Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Contract Verification",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/impact-preview": {
+      "post": {
+        "description": "AI-02: Compute deterministic before/after account, P&L, BS, AR/AP, and cash impacts.",
+        "operationId": "run_ai_financial_impact_preview_api_v1_businesses__business_id__ai_impact_preview_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImpactPreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Financial Impact Preview Api V1 Businesses  Business Id  Ai Impact Preview Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Financial Impact Preview",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/memories": {
+      "post": {
+        "description": "AI-04: Create a structured framework-scoped accounting memory requiring approval.",
+        "operationId": "create_ai_accounting_memory_api_v1_businesses__business_id__ai_memories_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountingMemoryCreateInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Ai Accounting Memory Api V1 Businesses  Business Id  Ai Memories Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Create Ai Accounting Memory",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/memories/{memory_id}/decision": {
+      "post": {
+        "description": "AI-04: Approve, supersede, or revoke an accounting memory (Owner/Accountant only).",
+        "operationId": "decide_ai_accounting_memory_api_v1_businesses__business_id__ai_memories__memory_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "memory_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Memory Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountingMemoryDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Decide Ai Accounting Memory Api V1 Businesses  Business Id  Ai Memories  Memory Id  Decision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Decide Ai Accounting Memory",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/overview": {
+      "get": {
+        "description": "Return W0 foundation status, AI-10 evidence records, tool audits, and AI items.",
+        "operationId": "get_ai_copilot_overview_api_v1_businesses__business_id__ai_overview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Get Ai Copilot Overview Api V1 Businesses  Business Id  Ai Overview Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Get Ai Copilot Overview",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/portfolio-planner": {
+      "post": {
+        "description": "AI-09: Rank authorized portfolio work without summing unlike currencies.",
+        "operationId": "run_ai_portfolio_work_planner_api_v1_businesses__business_id__ai_portfolio_planner_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PortfolioPlannerInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Portfolio Work Planner Api V1 Businesses  Business Id  Ai Portfolio Planner Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Portfolio Work Planner",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/reconciliation-detective": {
+      "post": {
+        "description": "AI-01: Deterministically evaluate reconciliation candidates and explain findings.",
+        "operationId": "run_ai_reconciliation_detective_api_v1_businesses__business_id__ai_reconciliation_detective_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReconciliationDetectiveInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Run Ai Reconciliation Detective Api V1 Businesses  Business Id  Ai Reconciliation Detective Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Run Ai Reconciliation Detective",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/runs/{run_id}/decision": {
+      "post": {
+        "description": "AI-10: Approve, reject, or cancel an AI run with content-hash and version binding.",
+        "operationId": "decide_ai_run_evidence_record_api_v1_businesses__business_id__ai_runs__run_id__decision_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIRunDecisionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Decide Ai Run Evidence Record Api V1 Businesses  Business Id  Ai Runs  Run Id  Decision Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Decide Ai Run Evidence Record",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/voice-session": {
+      "post": {
+        "description": "AI-06: Transcribe voice note via Groq Whisper and require human confirmation.",
+        "operationId": "create_ai_voice_accounting_session_api_v1_businesses__business_id__ai_voice_session_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceAccountingSessionInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Create Ai Voice Accounting Session Api V1 Businesses  Business Id  Ai Voice Session Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Create Ai Voice Accounting Session",
+        "tags": [
+          "ai-copilot"
+        ]
+      }
+    },
+    "/api/v1/businesses/{business_id}/ai/voice-session/{session_id}/confirm": {
+      "post": {
+        "description": "AI-06: Confirm critical fields on a voice session and create a source draft.",
+        "operationId": "confirm_ai_voice_accounting_session_api_v1_businesses__business_id__ai_voice_session__session_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "business_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Business Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceAccountingConfirmInput"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Confirm Ai Voice Accounting Session Api V1 Businesses  Business Id  Ai Voice Session  Session Id  Confirm Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "405": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Method Not Allowed"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "410": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Gone"
+          },
+          "412": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Precondition Failed"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Request Entity Too Large"
+          },
+          "416": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Requested Range Not Satisfiable"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "BrowserSession": []
+          }
+        ],
+        "summary": "Confirm Ai Voice Accounting Session",
+        "tags": [
+          "ai-copilot"
         ]
       }
     },

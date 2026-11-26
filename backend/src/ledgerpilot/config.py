@@ -62,6 +62,16 @@ class Settings(BaseSettings):
     whatsapp_business_account_id: str = ""
     whatsapp_access_token: SecretStr | None = None
     whatsapp_default_recipient: str = ""
+    groq_api_key: SecretStr | None = None
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_llm_model: str = "llama-3.3-70b-versatile"
+    groq_stt_model: str = "whisper-large-v3-turbo"
+    ai_request_timeout_seconds: float = Field(default=12.0, gt=0.5, le=60.0)
+    ai_max_retries: int = Field(default=2, ge=0, le=5)
+    ai_max_tokens: int = Field(default=1024, ge=64, le=4096)
+    livekit_url: str = ""
+    livekit_api_key: str = ""
+    livekit_api_secret: SecretStr | None = None
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     db_pool_size: int = Field(default=5, ge=1, le=20)
     db_max_overflow: int = Field(default=5, ge=0, le=20)

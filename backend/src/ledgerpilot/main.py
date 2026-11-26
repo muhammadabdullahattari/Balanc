@@ -423,9 +423,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(audit_access_router, prefix=configured.api_v1_prefix)
     application.include_router(provider_router, prefix=configured.api_v1_prefix)
     application.include_router(evidence_router, prefix=configured.api_v1_prefix)
+    from ledgerpilot.ai.router import router as ai_router
     from ledgerpilot.workspace.p3_automation import router as p3_automation_router
 
     application.include_router(p3_automation_router, prefix=configured.api_v1_prefix)
+    application.include_router(ai_router, prefix=configured.api_v1_prefix)
     application.include_router(observability_router)
     return application
 

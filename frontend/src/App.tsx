@@ -129,7 +129,13 @@ const P3AutomationHub = lazy(() =>
     default: m.P3AutomationHub,
   })),
 );
+const AICopilotHub = lazy(() =>
+  import("./features/ai-copilot").then((m) => ({
+    default: m.AICopilotHub,
+  })),
+);
 const navigation = [
+  { to: "/ai-copilot", label: "AI accounting copilot", icon: CheckSquare },
   { to: "/drafts", label: "Draft review", icon: FileText },
   { to: "/refunds", label: "Payments & refunds", icon: ArrowLeftRight },
   { to: "/advances", label: "Advances", icon: Landmark },
@@ -570,6 +576,7 @@ function Workspace() {
                 {
                   title: "Manage",
                   paths: [
+                    "/ai-copilot",
                     "/rules",
                     "/openings",
                     "/reminders",
@@ -740,6 +747,7 @@ function Workspace() {
                   <Route path="/prepaids" element={<Prepaids />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
+                  <Route path="/ai-copilot" element={<AICopilotHub />} />
                   <Route
                     path="/reminders"
                     element={<P3AutomationHub initialTab="reminders" />}

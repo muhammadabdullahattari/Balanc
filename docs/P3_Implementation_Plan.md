@@ -1,5 +1,9 @@
 # LedgerPilot P3 implementation plan
 
+## AI feature expansion — planned 25 November 2026
+
+The [ten-feature AI implementation plan](AI_Features_Implementation_Plan.md) adds AI-01–AI-10 with delivery waves W0–W6, required resources, accounting decisions and passing-test gates. It extends existing P3 packages without renaming them: reconciliation detective, impact preview, closed-loop clarification, approved business memory, continuous close, multilingual voice, contract verification, cash scenarios, portfolio planning and verifiable evidence. These additions are planned, not completion claims. Start with W0 real model/tool execution and evaluation; reuse existing ledger and approval paths.
+
 The [consolidated P3 plan](Next_Phases_Implementation_Plan.md#p3-broader-automation-and-integrations) also lists the SRS accounting, integration and regional access packages P3-I through P3-K.
 
 P3 extends the supported P2 product with approved integrations, richer human-reviewed workflows, controlled payment execution and evidence-backed AI. P3 begins only after P2 production controls, provider eligibility, jurisdiction rules, accounting/security owners and funded operating capacity are established. This is a proposed delivery sequence; estimate and revalidate scope at P3 entry.
