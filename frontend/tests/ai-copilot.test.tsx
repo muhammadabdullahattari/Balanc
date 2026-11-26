@@ -27,8 +27,8 @@ const mockBusiness = {
   p2_prepaids_available: true,
 };
 
-describe("W0 and AI-01..AI-10 AI Accounting Copilot UI", () => {
-  it("renders W0 foundation status, AI-10 evidence records, and switches across all AI capability tabs", async () => {
+describe("AI accounting assistant UI", () => {
+  it("renders plain-language summary, clean tabs, and voice audio controls without internal labels", async () => {
     queryClient.clear();
     const getSpy = vi.spyOn(api, "GET").mockImplementation((async (
       url: string,
@@ -62,7 +62,7 @@ describe("W0 and AI-01..AI-10 AI Accounting Copilot UI", () => {
                 provider: "groq",
                 model_name: "llama-3.3-70b-versatile",
                 status: "completed",
-                input_summary: "Impact preview (1250.00 USD): Cloud hosting",
+                input_summary: "Entry preview (1250.00 USD): Cloud hosting",
                 confidence_score: "1.0000",
                 uncertainty_flags: [],
                 snapshot_hash: "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4",
@@ -169,91 +169,76 @@ describe("W0 and AI-01..AI-10 AI Accounting Copilot UI", () => {
     await waitFor(() => {
       expect(
         screen.getByRole("heading", {
-          name: /Trustworthy AI Accounting Copilot/i,
+          name: /AI accounting assistant/i,
         }),
       ).toBeInTheDocument();
     });
 
-    expect(screen.getByText("GROQ CLOUD LIVE")).toBeInTheDocument();
-    expect(screen.getByText("READ-ONLY TOOLS")).toBeInTheDocument();
+    expect(screen.getByText("You stay in control")).toBeInTheDocument();
     expect(
       screen.getByRole("heading", {
-        name: /AI-10 · Verifiable AI Evidence Record & Tool Audit Trail/i,
+        name: /Recent suggestions & approvals/i,
       }),
     ).toBeInTheDocument();
 
     const user = userEvent.setup();
 
-    await user.click(
-      screen.getByRole("tab", { name: /AI-02 · Financial Impact Preview/i }),
-    );
+    await user.click(screen.getByRole("tab", { name: /^Entry preview$/i }));
     expect(
       await screen.findByRole("heading", {
-        name: /AI-02 · Deterministic Financial Impact Preview/i,
+        name: /Preview an entry before posting/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Accounting rules$/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Saved accounting rules/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Bank matching$/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Match an unexplained bank line/i,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: /^Client requests$/i }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Follow up on missing documents/i,
       }),
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("tab", { name: /AI-04 · Approved Accounting Memory/i }),
+      screen.getByRole("tab", { name: /Month-end & priorities/i }),
     );
     expect(
       await screen.findByRole("heading", {
-        name: /AI-04 · Approved Business Accounting Memory/i,
+        name: /Month-end readiness & workspace priorities/i,
       }),
     ).toBeInTheDocument();
 
-    await user.click(
-      screen.getByRole("tab", { name: /AI-01 · Reconciliation Detective/i }),
-    );
+    await user.click(screen.getByRole("tab", { name: /^Voice entry$/i }));
     expect(
       await screen.findByRole("heading", {
-        name: /AI-01 · Reconciliation Detective/i,
-      }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("tab", { name: /AI-03 · Client Clarification/i }),
-    );
-    expect(
-      await screen.findByRole("heading", {
-        name: /AI-03 · Closed-Loop Client Clarification/i,
-      }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("tab", { name: /AI-05 & AI-09 · Close & Portfolio/i }),
-    );
-    expect(
-      await screen.findByRole("heading", {
-        name: /AI-05 · Continuous Close Assistant/i,
-      }),
-    ).toBeInTheDocument();
-
-    await user.click(
-      screen.getByRole("tab", {
-        name: /AI-06 · Multilingual Voice & LiveKit/i,
-      }),
-    );
-    expect(
-      await screen.findByRole("heading", {
-        name: /AI-06 · Multilingual Voice Accounting/i,
+        name: /Record a bill or expense by voice/i,
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Record Microphone Audio/i }),
+      screen.getByRole("button", { name: /Record with microphone/i }),
     ).toBeInTheDocument();
     expect(
       screen.getByLabelText(/Upload Audio Recording/i),
     ).toBeInTheDocument();
 
     await user.click(
-      screen.getByRole("tab", {
-        name: /AI-07 & AI-08 · Contracts & Cash Scenarios/i,
-      }),
+      screen.getByRole("tab", { name: /Contracts & cash forecast/i }),
     );
     expect(
       await screen.findByRole("heading", {
-        name: /AI-07 · Contract \/ Invoice \/ Payment Verification/i,
+        name: /Check an invoice against a contract/i,
       }),
     ).toBeInTheDocument();
 

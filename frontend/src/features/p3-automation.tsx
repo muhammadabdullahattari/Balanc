@@ -13,6 +13,62 @@ import {
 } from "../components/ui";
 import { useAccess, useBusiness } from "./context";
 
+function humanize(value: string | null | undefined): string {
+  if (!value) return "—";
+  const text = value.replace(/[_-]+/g, " ").trim();
+  return text.charAt(0).toUpperCase() + text.slice(1).toLowerCase();
+}
+
+function channelName(value: string | null | undefined): string {
+  const key = (value || "").toLowerCase();
+  if (key === "whatsapp") return "WhatsApp";
+  if (key === "slack") return "Slack";
+  if (key === "email") return "Email";
+  if (key === "auto") return "Preferred channel";
+  return humanize(value);
+}
+
+function railLabel(value: string | null | undefined): string {
+  const key = (value || "").toLowerCase();
+  if (key === "stripe_live") return "Stripe payout";
+  if (key === "ach_nacha") return "US bank transfer (ACH)";
+  if (key === "swift_wire") return "International wire";
+  return humanize(value);
+}
+
+function formatWhen(value: string | null | undefined): string {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat("en-US", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+const REGION_LABELS: Record<string, string> = {
+  "us-east-va-cell-1": "United States (Virginia)",
+  "eu-central-fra-cell-1": "Europe (Frankfurt)",
+  "me-central-dxb-cell-1": "Middle East (Dubai)",
+  "ap-south-khi-cell-1": "South Asia (Karachi)",
+};
+
+function regionName(cellId: string | null | undefined): string {
+  if (!cellId) return "Default region";
+  return REGION_LABELS[cellId] || humanize(cellId);
+}
+
+const LEDGER_AREA_LABELS: Record<string, string> = {
+  "app.journal_lines": "Journal lines",
+  "app.journals": "Journal entries",
+  "app.trade_documents": "Invoices and bills",
+  "app.bank_rows": "Bank transactions",
+};
+
+function ledgerAreaName(raw: string): string {
+  return LEDGER_AREA_LABELS[raw] || humanize(raw);
+}
+
 interface RemindersData {
   channels_status: {
     whatsapp_cloud_connected: boolean;
@@ -159,23 +215,23 @@ interface PaymentsData {
   }>;
 }
 
-export function MultichannelReminders() {
+export function MultichannelReminders({
+  channelFilter = "all",
+}: {
+  channelFilter?: "all" | "whatsapp" | "slack";
+} = {}) {
   const b = useBusiness();
   const path = { business_id: b.id };
   const [targetKind, setTargetKind] = useState<
     "bill" | "invoice" | "evidence" | "approval"
   >("bill");
   const [selectedDocId, setSelectedDocId] = useState<string>("");
-  const [targetLabel, setTargetLabel] = useState(
-    "AWS Cloud Hosting Bill #INV-2026-114 ($800.00 - Due in 2 days)",
-  );
+  const [targetLabel, setTargetLabel] = useState("");
   const [recipientKey, setRecipientKey] = useState("ap-finance-owner");
   const [channel, setChannel] = useState<
     "auto" | "whatsapp" | "slack" | "email"
-  >("whatsapp");
-  const [customMessage, setCustomMessage] = useState(
-    "LedgerPilot Reminder: AWS Cloud Hosting Bill #INV-2026-114 for $800.00 is awaiting approval & supporting receipt.",
-  );
+  >(channelFilter === "slack" ? "slack" : "whatsapp");
+  const [customMessage, setCustomMessage] = useState("");
   const [lastResult, setLastResult] = useState<string>("");
 
   const query = useQuery({
@@ -217,7 +273,7 @@ export function MultichannelReminders() {
       },
     onSuccess: (res) => {
       setLastResult(
-        `Dispatched via ${res.channel.toUpperCase()} to ${res.destination} — Status: ${res.status} (${res.provider_message_id || "recorded"})`,
+        `Reminder sent on ${channelName(res.channel)} to ${res.destination}. Status: ${humanize(res.status)}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-reminders"],
@@ -235,11 +291,9 @@ export function MultichannelReminders() {
             recipient_key: String(
               fd.get("recipient_key") || "ap-finance-owner",
             ),
-            recipient_name: String(
-              fd.get("recipient_name") || "Finance Approver",
-            ),
-            whatsapp_phone: String(fd.get("whatsapp_phone") || "+923412685261"),
-            slack_channel: String(fd.get("slack_channel") || "#all-balanc"),
+            recipient_name: String(fd.get("recipient_name") || "Finance team"),
+            whatsapp_phone: String(fd.get("whatsapp_phone") || ""),
+            slack_channel: String(fd.get("slack_channel") || ""),
             email_address: String(fd.get("email_address") || ""),
             whatsapp_opt_in: fd.get("whatsapp_opt_in") === "on",
             slack_opt_in: fd.get("slack_opt_in") === "on",
@@ -262,7 +316,8 @@ export function MultichannelReminders() {
   });
 
   const cs = query.data?.channels_status;
-  const [channelStatusNotice, setChannelStatusNotice] = useState<string>("");
+  const [whatsappNotice, setWhatsappNotice] = useState<string>("");
+  const [slackNotice, setSlackNotice] = useState<string>("");
 
   const webhookStatusMutation = useMutation({
     mutationFn: (payload: {
@@ -290,9 +345,7 @@ export function MultichannelReminders() {
       ),
     onSuccess: (res) => {
       const r = res as { status: string; interactive_action: string };
-      setLastResult(
-        `Webhook callback processed -> Status updated to ${r.status.toUpperCase()} (Action: ${r.interactive_action})`,
-      );
+      setLastResult(`Reminder updated. Status: ${humanize(r.status)}.`);
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-reminders"],
       });
@@ -331,203 +384,306 @@ export function MultichannelReminders() {
           },
         }),
       ),
-    onSuccess: () => {
-      setChannelStatusNotice(
-        "Workspace WhatsApp & Slack integration credentials saved and encrypted for this business.",
+    onSuccess: (_res, vars) => {
+      const isWhatsapp = Boolean(
+        vars.disconnect_whatsapp ||
+        vars.whatsapp_phone_number_id ||
+        vars.whatsapp_business_account_id ||
+        vars.whatsapp_access_token ||
+        vars.default_whatsapp_recipient !== undefined,
       );
+      const message = vars.disconnect_whatsapp
+        ? "WhatsApp has been disconnected."
+        : vars.disconnect_slack
+          ? "Slack has been disconnected."
+          : isWhatsapp
+            ? "WhatsApp connection saved. You can now send reminders on WhatsApp."
+            : "Slack connection saved. You can now send reminders on Slack.";
+      if (isWhatsapp) setWhatsappNotice(message);
+      else setSlackNotice(message);
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-reminders"],
       });
     },
   });
 
+  const whatsappConnected =
+    cs?.whatsapp_mode === "workspace_custom" ||
+    Boolean(cs?.whatsapp_cloud_connected);
+  const slackConnected =
+    cs?.slack_mode === "workspace_custom" || Boolean(cs?.slack_connected);
+  const connectVars = connectChannelsMutation.variables;
+  const whatsappError =
+    connectVars &&
+    (connectVars.disconnect_whatsapp ||
+      connectVars.whatsapp_phone_number_id ||
+      connectVars.whatsapp_access_token ||
+      connectVars.whatsapp_business_account_id ||
+      connectVars.default_whatsapp_recipient !== undefined)
+      ? connectChannelsMutation.error
+      : null;
+  const slackError =
+    connectVars &&
+    (connectVars.disconnect_slack ||
+      connectVars.slack_webhook_url ||
+      connectVars.slack_bot_token ||
+      connectVars.slack_workspace_name ||
+      connectVars.default_slack_channel !== undefined)
+      ? connectChannelsMutation.error
+      : null;
+
+  const showWhatsapp = channelFilter === "all" || channelFilter === "whatsapp";
+  const showSlack = channelFilter === "all" || channelFilter === "slack";
+
   return (
     <div className="stack">
       <div className="panel">
-        <h2>P3 Feature C · Multichannel WhatsApp & Slack Reminders</h2>
+        <h2>
+          {channelFilter === "whatsapp"
+            ? "WhatsApp notifications"
+            : channelFilter === "slack"
+              ? "Slack notifications"
+              : "Reminders"}
+        </h2>
         <p className="muted">
-          Consent-based evidence chasing, overdue bill alerts, and approval
-          reminders across Official Meta WhatsApp Cloud API and Slack with
-          automatic resolution recheck, quiet hours, attempt caps, and email
-          fallback.
+          {channelFilter === "whatsapp"
+            ? "Connect your WhatsApp Business account independently to send document requests and payment reminders."
+            : channelFilter === "slack"
+              ? "Connect your Slack workspace independently to post finance reminders and approval alerts to your team."
+              : "Connect WhatsApp and Slack separately below, then send reminders for missing receipts, overdue bills, or pending approvals. Email backup is always enabled."}
         </p>
         <div className="p3-badge-row">
-          <Badge>
-            WhatsApp Cloud API:{" "}
-            {cs?.whatsapp_mode === "workspace_custom"
-              ? `WORKSPACE CONNECTED (${cs.default_whatsapp_recipient || "Configured"})`
-              : cs?.whatsapp_cloud_connected
-                ? "PLATFORM CONNECTED"
-                : "SANDBOX READY"}
-          </Badge>
-          <Badge>
-            Slack Workspace:{" "}
-            {cs?.slack_mode === "workspace_custom"
-              ? `WORKSPACE CONNECTED (${cs.slack_workspace_name || "Custom"})`
-              : cs?.slack_connected
-                ? "CONNECTED"
-                : "SANDBOX READY"}{" "}
-            ({cs?.default_slack_channel || "#finance-alerts"})
-          </Badge>
-          <Badge>Email Fallback: ACTIVE</Badge>
+          {showWhatsapp && (
+            <Badge tone={whatsappConnected ? "good" : "neutral"}>
+              WhatsApp: {whatsappConnected ? "Connected" : "Not connected yet"}
+            </Badge>
+          )}
+          {showSlack && (
+            <Badge tone={slackConnected ? "good" : "neutral"}>
+              Slack: {slackConnected ? "Connected" : "Not connected yet"}
+            </Badge>
+          )}
+          <Badge>Email backup: Always on</Badge>
         </div>
       </div>
 
-      <div className="panel">
-        <h3>Step 1 · Connect Your Workspace WhatsApp &amp; Slack Accounts</h3>
-        <p className="muted">
-          Connect your own business Meta WhatsApp Cloud API sender and Slack
-          Workspace (encrypted per business workspace), or leave blank to use
-          the default connected platform channels.
-        </p>
-        <ErrorNotice error={connectChannelsMutation.error} />
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            const fd = new FormData(e.currentTarget);
-            connectChannelsMutation.mutate({
-              whatsapp_phone_number_id: String(
-                fd.get("whatsapp_phone_number_id") || "",
-              ),
-              whatsapp_business_account_id: String(
-                fd.get("whatsapp_business_account_id") || "",
-              ),
-              whatsapp_access_token: String(
-                fd.get("whatsapp_access_token") || "",
-              ),
-              default_whatsapp_recipient: String(
-                fd.get("default_whatsapp_recipient") || "",
-              ),
-              slack_workspace_name: String(
-                fd.get("slack_workspace_name") || "",
-              ),
-              slack_webhook_url: String(fd.get("slack_webhook_url") || ""),
-              slack_bot_token: String(fd.get("slack_bot_token") || ""),
-              default_slack_channel: String(
-                fd.get("default_slack_channel") || "",
-              ),
-            });
-          }}
-        >
-          <div className="form-grid">
-            <Field label="WhatsApp Phone Number ID">
-              <input
-                name="whatsapp_phone_number_id"
-                placeholder={
-                  cs?.whatsapp_phone_number_id || "e.g. 1391722684032246"
-                }
-              />
-            </Field>
-            <Field label="WhatsApp Business Account ID (WABA)">
-              <input
-                name="whatsapp_business_account_id"
-                placeholder={
-                  cs?.whatsapp_business_account_id || "e.g. 1877048859962524"
-                }
-              />
-            </Field>
-            <Field
-              label={`Meta Cloud API Access Token ${cs?.whatsapp_token_masked ? `(Saved: ${cs.whatsapp_token_masked})` : ""}`}
-            >
-              <input
-                name="whatsapp_access_token"
-                type="password"
-                placeholder="EAAa... (Fernet-encrypted at rest)"
-              />
-            </Field>
-            <Field label="Default WhatsApp Recipient (E.164)">
-              <input
-                name="default_whatsapp_recipient"
-                defaultValue={
-                  cs?.whatsapp_mode === "workspace_custom"
-                    ? cs?.default_whatsapp_recipient || ""
-                    : ""
-                }
-                placeholder="e.g. +15550192834"
-              />
-            </Field>
-            <Field label="Slack Workspace Name">
-              <input
-                name="slack_workspace_name"
-                defaultValue={cs?.slack_workspace_name || ""}
-                placeholder="e.g. Acme Finance Workspace"
-              />
-            </Field>
-            <Field
-              label={`Slack Incoming Webhook URL ${cs?.slack_credentials_masked ? `(Saved: ${cs.slack_credentials_masked})` : ""}`}
-            >
-              <input
-                name="slack_webhook_url"
-                type="password"
-                placeholder="https://hooks.slack.com/services/T.../B.../..."
-              />
-            </Field>
-            <Field label="Slack Bot OAuth Token (Optional)">
-              <input
-                name="slack_bot_token"
-                type="password"
-                placeholder="xoxb-... (Optional if Webhook URL is provided)"
-              />
-            </Field>
-            <Field label="Default Slack Channel">
-              <input
-                name="default_slack_channel"
-                defaultValue={cs?.default_slack_channel || "#all-balanc"}
-                placeholder="#finance-alerts"
-              />
-            </Field>
-          </div>
-          <div className="p3-actions-row">
-            <Button type="submit" busy={connectChannelsMutation.isPending}>
-              Save Workspace WhatsApp & Slack Connection
-            </Button>
-            {cs?.whatsapp_mode === "workspace_custom" && (
-              <Button
-                type="button"
-                variant="secondary"
-                busy={connectChannelsMutation.isPending}
-                onClick={() =>
-                  connectChannelsMutation.mutate({ disconnect_whatsapp: true })
-                }
+      {showWhatsapp && (
+        <div className="panel">
+          <h3>Connect WhatsApp</h3>
+          <p className="muted">
+            Link your own WhatsApp Business number so reminders come from your
+            business. Your access token is stored securely and never shown
+            again.
+          </p>
+          <ol className="muted">
+            <li>Open your WhatsApp Business account in Meta Business Suite.</li>
+            <li>Copy the phone number ID, account ID and access token.</li>
+            <li>Paste them below and choose who should receive reminders.</li>
+          </ol>
+          <ErrorNotice error={whatsappError} />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              setWhatsappNotice("");
+              connectChannelsMutation.mutate({
+                whatsapp_phone_number_id: String(
+                  fd.get("whatsapp_phone_number_id") || "",
+                ),
+                whatsapp_business_account_id: String(
+                  fd.get("whatsapp_business_account_id") || "",
+                ),
+                whatsapp_access_token: String(
+                  fd.get("whatsapp_access_token") || "",
+                ),
+                default_whatsapp_recipient: String(
+                  fd.get("default_whatsapp_recipient") || "",
+                ),
+              });
+            }}
+          >
+            <div className="form-grid">
+              <Field label="Phone number ID">
+                <input
+                  name="whatsapp_phone_number_id"
+                  placeholder={
+                    cs?.whatsapp_phone_number_id || "e.g. 1391722684032246"
+                  }
+                />
+              </Field>
+              <Field label="Business account ID">
+                <input
+                  name="whatsapp_business_account_id"
+                  placeholder={
+                    cs?.whatsapp_business_account_id || "e.g. 1877048859962524"
+                  }
+                />
+              </Field>
+              <Field
+                label={`Access token ${cs?.whatsapp_token_masked ? `(saved: ${cs.whatsapp_token_masked})` : ""}`}
               >
-                Disconnect Custom WhatsApp
+                <input
+                  name="whatsapp_access_token"
+                  type="password"
+                  placeholder="Paste your access token"
+                />
+              </Field>
+              <Field label="Default recipient (phone number)">
+                <input
+                  name="default_whatsapp_recipient"
+                  defaultValue={
+                    cs?.whatsapp_mode === "workspace_custom"
+                      ? cs?.default_whatsapp_recipient || ""
+                      : ""
+                  }
+                  placeholder="e.g. +15550192834"
+                />
+              </Field>
+            </div>
+            <div className="p3-actions-row">
+              <Button type="submit" busy={connectChannelsMutation.isPending}>
+                Save WhatsApp connection
               </Button>
-            )}
-            {cs?.slack_mode === "workspace_custom" && (
-              <Button
-                type="button"
-                variant="secondary"
-                busy={connectChannelsMutation.isPending}
-                onClick={() =>
-                  connectChannelsMutation.mutate({ disconnect_slack: true })
-                }
+              {cs?.whatsapp_mode === "workspace_custom" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  busy={connectChannelsMutation.isPending}
+                  onClick={() => {
+                    setWhatsappNotice("");
+                    connectChannelsMutation.mutate({
+                      disconnect_whatsapp: true,
+                    });
+                  }}
+                >
+                  Disconnect WhatsApp
+                </Button>
+              )}
+            </div>
+            {whatsappNotice && (
+              <p
+                role="status"
+                className="success-text"
+                style={{ marginTop: "8px" }}
               >
-                Disconnect Custom Slack
-              </Button>
+                {whatsappNotice}
+              </p>
             )}
-          </div>
-          {channelStatusNotice && (
-            <p
-              role="status"
-              className="success-text"
-              style={{ marginTop: "8px" }}
-            >
-              {channelStatusNotice}
-            </p>
-          )}
-        </form>
-      </div>
+          </form>
+        </div>
+      )}
+
+      {showSlack && (
+        <div className="panel">
+          <h3>Connect Slack</h3>
+          <p className="muted">
+            Post reminders to a Slack channel your team already uses. Your
+            webhook link is stored securely and never shown again.
+          </p>
+          <ol className="muted">
+            <li>
+              In Slack, open your workspace's app settings and add an incoming
+              webhook.
+            </li>
+            <li>
+              Pick the channel it should post to and copy the webhook link.
+            </li>
+            <li>Paste the link below and save.</li>
+          </ol>
+          <ErrorNotice error={slackError} />
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              const fd = new FormData(e.currentTarget);
+              setSlackNotice("");
+              connectChannelsMutation.mutate({
+                slack_workspace_name: String(
+                  fd.get("slack_workspace_name") || "",
+                ),
+                slack_webhook_url: String(fd.get("slack_webhook_url") || ""),
+                slack_bot_token: String(fd.get("slack_bot_token") || ""),
+                default_slack_channel: String(
+                  fd.get("default_slack_channel") || "",
+                ),
+              });
+            }}
+          >
+            <div className="form-grid">
+              <Field label="Workspace name">
+                <input
+                  name="slack_workspace_name"
+                  defaultValue={cs?.slack_workspace_name || ""}
+                  placeholder="e.g. Acme Finance"
+                />
+              </Field>
+              <Field
+                label={`Incoming webhook link ${cs?.slack_credentials_masked ? `(saved: ${cs.slack_credentials_masked})` : ""}`}
+              >
+                <input
+                  name="slack_webhook_url"
+                  type="password"
+                  placeholder="Paste your Slack webhook link"
+                />
+              </Field>
+              <Field label="Bot token (optional)">
+                <input
+                  name="slack_bot_token"
+                  type="password"
+                  placeholder="Only needed if you are not using a webhook link"
+                />
+              </Field>
+              <Field label="Default channel">
+                <input
+                  name="default_slack_channel"
+                  defaultValue={
+                    cs?.slack_mode === "workspace_custom"
+                      ? cs?.default_slack_channel || ""
+                      : ""
+                  }
+                  placeholder="e.g. #finance-alerts"
+                />
+              </Field>
+            </div>
+            <div className="p3-actions-row">
+              <Button type="submit" busy={connectChannelsMutation.isPending}>
+                Save Slack connection
+              </Button>
+              {cs?.slack_mode === "workspace_custom" && (
+                <Button
+                  type="button"
+                  variant="secondary"
+                  busy={connectChannelsMutation.isPending}
+                  onClick={() => {
+                    setSlackNotice("");
+                    connectChannelsMutation.mutate({ disconnect_slack: true });
+                  }}
+                >
+                  Disconnect Slack
+                </Button>
+              )}
+            </div>
+            {slackNotice && (
+              <p
+                role="status"
+                className="success-text"
+                style={{ marginTop: "8px" }}
+              >
+                {slackNotice}
+              </p>
+            )}
+          </form>
+        </div>
+      )}
 
       <div className="panel">
-        <h3>Step 2 · Send Live WhatsApp or Slack Reminder</h3>
+        <h3>Send a reminder</h3>
         <p className="muted">
-          Select an open supplier bill or customer invoice directly from your
-          workspace ledger (or enter a custom follow-up target) to dispatch a
-          consent-checked reminder with automatic resolution verification.
+          Pick an open bill or invoice (or describe what you are chasing), then
+          choose where to send the reminder.
         </p>
         <ErrorNotice error={dispatchMutation.error} />
         <div className="form-grid">
-          <Field label="Link to Open Ledger Bill / Invoice (Optional)">
+          <Field label="Open bill or invoice (optional)">
             <select
               value={selectedDocId}
               onChange={(e) => {
@@ -539,27 +695,24 @@ export function MultichannelReminders() {
                 if (doc) {
                   const nextKind = doc.kind === "invoice" ? "invoice" : "bill";
                   setTargetKind(nextKind);
-                  const lbl = `${doc.party_name} ${doc.kind.toUpperCase()} #${doc.number} (${doc.currency} ${doc.outstanding_amount} · Due ${doc.due_date})`;
+                  const lbl = `${doc.party_name} ${humanize(doc.kind)} #${doc.number} (${doc.currency} ${doc.outstanding_amount} · Due ${doc.due_date})`;
                   setTargetLabel(lbl);
                   setCustomMessage(
-                    `LedgerPilot Reminder: ${lbl} is awaiting review, settlement, or supporting evidence.`,
+                    `Balanc reminder: ${lbl} is awaiting review, payment, or supporting documents.`,
                   );
                 }
               }}
             >
-              <option value="">
-                -- Custom / Manual Target Reference (or pick open ledger
-                document) --
-              </option>
+              <option value="">Enter details manually</option>
               {(query.data?.open_documents || []).map((doc) => (
                 <option key={doc.id} value={doc.id}>
-                  [{doc.kind.toUpperCase()}] #{doc.number} — {doc.party_name} (
+                  {humanize(doc.kind)} #{doc.number} — {doc.party_name} (
                   {doc.currency} {doc.outstanding_amount} · Due {doc.due_date})
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Reminder Target Type">
+          <Field label="What are you chasing?">
             <select
               value={targetKind}
               onChange={(e) =>
@@ -569,25 +722,27 @@ export function MultichannelReminders() {
                 )
               }
             >
-              <option value="bill">Overdue Supplier Bill</option>
-              <option value="evidence">Missing Receipt / Document</option>
-              <option value="approval">Pending Payment Approval</option>
-              <option value="invoice">Customer Invoice Follow-Up</option>
+              <option value="bill">Overdue supplier bill</option>
+              <option value="evidence">Missing receipt or document</option>
+              <option value="approval">Pending payment approval</option>
+              <option value="invoice">Customer invoice follow-up</option>
             </select>
           </Field>
-          <Field label="Recipient Key">
+          <Field label="Contact reference">
             <input
               value={recipientKey}
               onChange={(e) => setRecipientKey(e.target.value)}
+              placeholder="Saved contact below, e.g. ap-finance-owner"
             />
           </Field>
-          <Field label="Target Description / Bill Reference">
+          <Field label="Short description">
             <input
               value={targetLabel}
               onChange={(e) => setTargetLabel(e.target.value)}
+              placeholder="e.g. Hosting bill #INV-114 ($800, due in 2 days)"
             />
           </Field>
-          <Field label="Delivery Channel">
+          <Field label="Send via">
             <select
               value={channel}
               onChange={(e) =>
@@ -596,20 +751,24 @@ export function MultichannelReminders() {
                 )
               }
             >
-              <option value="whatsapp">WhatsApp Cloud API</option>
+              <option value="whatsapp">WhatsApp</option>
               <option value="slack">
-                Slack Channel ({cs?.default_slack_channel || "#all-balanc"})
+                Slack
+                {cs?.default_slack_channel
+                  ? ` (${cs.default_slack_channel})`
+                  : ""}
               </option>
-              <option value="email">Email Fallback</option>
-              <option value="auto">Auto (Recipient Preference Order)</option>
+              <option value="email">Email</option>
+              <option value="auto">Contact's preferred order</option>
             </select>
           </Field>
         </div>
-        <Field label="Message Body">
+        <Field label="Message">
           <textarea
             rows={2}
             value={customMessage}
             onChange={(e) => setCustomMessage(e.target.value)}
+            placeholder="e.g. Hi, a bill for $800 is waiting for your approval and receipt."
           />
         </Field>
         <div className="p3-actions-row">
@@ -617,21 +776,21 @@ export function MultichannelReminders() {
             busy={dispatchMutation.isPending}
             onClick={() => dispatchMutation.mutate("whatsapp")}
           >
-            Send Live WhatsApp Reminder
+            Send on WhatsApp
           </Button>
           <Button
             variant="secondary"
             busy={dispatchMutation.isPending}
             onClick={() => dispatchMutation.mutate("slack")}
           >
-            Send Live Slack Reminder (#all-balanc)
+            Send on Slack
           </Button>
           <Button
             variant="secondary"
             busy={dispatchMutation.isPending}
             onClick={() => dispatchMutation.mutate(undefined)}
           >
-            Dispatch Selected Channel
+            Send via selected channel
           </Button>
         </div>
         {lastResult && (
@@ -646,7 +805,11 @@ export function MultichannelReminders() {
       </div>
 
       <div className="panel">
-        <h3>Step 3 · Recipient Consent, Quiet Hours &amp; Attempt Caps</h3>
+        <h3>Who to remind and when</h3>
+        <p className="muted">
+          Save a contact, their WhatsApp number or Slack channel, and the hours
+          when we should not message them.
+        </p>
         <ErrorNotice error={prefMutation.error} />
         <form
           onSubmit={(e) => {
@@ -655,21 +818,21 @@ export function MultichannelReminders() {
           }}
         >
           <div className="form-grid">
-            <Field label="Recipient Key">
+            <Field label="Contact reference">
               <input
                 name="recipient_key"
                 defaultValue="ap-finance-owner"
                 required
               />
             </Field>
-            <Field label="Recipient Name">
+            <Field label="Contact name">
               <input
                 name="recipient_name"
-                defaultValue="Accounts Payable & Finance Team"
+                placeholder="e.g. Accounts team"
                 required
               />
             </Field>
-            <Field label="WhatsApp Phone (E.164)">
+            <Field label="WhatsApp number">
               <input
                 name="whatsapp_phone"
                 defaultValue={
@@ -680,13 +843,18 @@ export function MultichannelReminders() {
                 placeholder="e.g. +15550192834"
               />
             </Field>
-            <Field label="Slack Channel">
+            <Field label="Slack channel">
               <input
                 name="slack_channel"
-                defaultValue={cs?.default_slack_channel || "#all-balanc"}
+                defaultValue={
+                  cs?.slack_mode === "workspace_custom"
+                    ? cs?.default_slack_channel || ""
+                    : ""
+                }
+                placeholder="e.g. #finance-alerts"
               />
             </Field>
-            <Field label="Quiet Hours Start (0-23)">
+            <Field label="Quiet hours start (0-23)">
               <input
                 name="quiet_start_hour"
                 type="number"
@@ -695,7 +863,7 @@ export function MultichannelReminders() {
                 defaultValue={22}
               />
             </Field>
-            <Field label="Quiet Hours End (0-23)">
+            <Field label="Quiet hours end (0-23)">
               <input
                 name="quiet_end_hour"
                 type="number"
@@ -704,7 +872,7 @@ export function MultichannelReminders() {
                 defaultValue={7}
               />
             </Field>
-            <Field label="Max Reminder Attempts">
+            <Field label="Maximum reminders per item">
               <input
                 name="max_attempts"
                 type="number"
@@ -723,56 +891,49 @@ export function MultichannelReminders() {
             }}
           >
             <label>
-              <input name="whatsapp_opt_in" type="checkbox" defaultChecked />{" "}
-              WhatsApp Consent Opt-In
+              <input name="whatsapp_opt_in" type="checkbox" defaultChecked /> OK
+              to message on WhatsApp
             </label>
             <label>
-              <input name="slack_opt_in" type="checkbox" defaultChecked /> Slack
-              Consent Opt-In
+              <input name="slack_opt_in" type="checkbox" defaultChecked /> OK to
+              message on Slack
             </label>
             <label>
-              <input name="opted_out" type="checkbox" /> Opted Out (Block All
-              Chasing)
+              <input name="opted_out" type="checkbox" /> Do not send any
+              reminders to this contact
             </label>
           </div>
-          <Button busy={prefMutation.isPending}>
-            Save Recipient Preferences
-          </Button>
+          <Button busy={prefMutation.isPending}>Save contact</Button>
         </form>
       </div>
 
       {query.data && (
         <div className="panel">
-          <h3>3. Multichannel Delivery History & Guard Outcomes</h3>
+          <h3>Reminder history</h3>
+          <p className="muted">
+            Every reminder we sent, and whether it was delivered.
+          </p>
           <Table
-            caption="Dispatched & Guard-Evaluated Reminders"
+            caption="Reminders sent"
             rows={query.data.reminders}
             rowKey={(r) => r.id}
             columns={[
-              { label: "Target", render: (r) => r.target_label },
+              { label: "About", render: (r) => r.target_label },
               {
                 label: "Channel",
-                render: (r) => <Badge>{r.channel.toUpperCase()}</Badge>,
+                render: (r) => <Badge>{channelName(r.channel)}</Badge>,
               },
-              { label: "Destination", render: (r) => r.destination },
+              { label: "Sent to", render: (r) => r.destination },
               {
                 label: "Attempt",
                 render: (r) => `#${r.attempt_number}`,
               },
               {
                 label: "Status",
-                render: (r) => <Badge>{r.status}</Badge>,
+                render: (r) => <Badge>{humanize(r.status)}</Badge>,
               },
               {
-                label: "Provider Message ID",
-                render: (r) => (
-                  <code style={{ fontSize: "0.78rem" }}>
-                    {r.provider_message_id || "—"}
-                  </code>
-                ),
-              },
-              {
-                label: "Webhook Receipts & Slack Actions",
+                label: "Delivery updates",
                 render: (r) =>
                   r.status === "sent" || r.status === "delivered" ? (
                     <div
@@ -791,7 +952,7 @@ export function MultichannelReminders() {
                             })
                           }
                         >
-                          Mark Delivered
+                          Mark as delivered
                         </Button>
                       )}
                       <Button
@@ -809,11 +970,13 @@ export function MultichannelReminders() {
                           })
                         }
                       >
-                        {r.channel === "slack" ? "Slack Ack" : "WhatsApp Read"}
+                        {r.channel === "slack"
+                          ? "Mark as acknowledged"
+                          : "Mark as read"}
                       </Button>
                     </div>
                   ) : (
-                    <Badge>{r.status}</Badge>
+                    <Badge>{humanize(r.status)}</Badge>
                   ),
               },
             ]}
@@ -827,7 +990,7 @@ export function MultichannelReminders() {
 export function SupplierPortalConnectors() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [vendorName, setVendorName] = useState("K-Electric / AWS Cloud Portal");
+  const [vendorName, setVendorName] = useState("");
   const [portalKind, setPortalKind] = useState<
     | "web_totp"
     | "api_stripe"
@@ -835,21 +998,17 @@ export function SupplierPortalConnectors() {
     | "telecom_portal"
     | "cloud_portal"
   >("web_totp");
-  const [portalUrl, setPortalUrl] = useState(
-    "https://billing.vendor-portal.example/viewer/invoices",
-  );
-  const [loginUsername, setLoginUsername] = useState(
-    "billing-viewer@balanc.local",
-  );
-  const [password, setPassword] = useState("ViewerSubUser#2026");
-  const [totpSeed, setTotpSeed] = useState("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP");
+  const [portalUrl, setPortalUrl] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [totpSeed, setTotpSeed] = useState("");
   const [liveTotpInfo, setLiveTotpInfo] = useState<{
     code: string;
     remaining: number;
   } | null>(null);
   const [syncInvoiceNumber, setSyncInvoiceNumber] = useState("");
-  const [syncTotalAmount, setSyncTotalAmount] = useState("425.00");
-  const [syncTaxAmount, setSyncTaxAmount] = useState("25.00");
+  const [syncTotalAmount, setSyncTotalAmount] = useState("");
+  const [syncTaxAmount, setSyncTaxAmount] = useState("");
   const [syncMessage, setSyncMessage] = useState("");
   const [revokeTarget, setRevokeTarget] = useState<{
     id: string;
@@ -953,7 +1112,7 @@ export function SupplierPortalConnectors() {
       },
     onSuccess: (res) => {
       setSyncMessage(
-        `Portal authenticated with 2FA code ${res.totp_6_digit_code_used || "API"} -> Ingested Invoice ${res.invoice_number} (${res.currency} ${res.total_amount}) into OCR Purchase Bill Draft (${res.status})!`,
+        `Signed in to the supplier portal and imported invoice ${res.invoice_number} (${res.currency} ${res.total_amount}) as a draft bill for your review. Status: ${humanize(res.status)}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-portals"],
@@ -1001,7 +1160,7 @@ export function SupplierPortalConnectors() {
       },
     onSuccess: (res) => {
       setSyncMessage(
-        `Promoted ${res.supplier_name} Invoice ${res.bill_reference} (${res.currency} ${res.amount}) into Supplier Payment Queue (Draft #${res.payment_id.slice(0, 8)} · State: ${res.state})!`,
+        `Added ${res.supplier_name} invoice ${res.bill_reference} (${res.currency} ${res.amount}) to your supplier payments as a draft. Status: ${humanize(res.state)}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1012,22 +1171,21 @@ export function SupplierPortalConnectors() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>P3 Feature D · Authorized Supplier Portal Invoice Connectors</h2>
+        <h2>Supplier portals</h2>
         <p className="muted">
-          Connect read-only vendor billing sub-users (Method B: Utilities,
-          Telecom, Software portals with 32-character Google Authenticator TOTP
-          seed, or Method A: Stripe Vendor Invoices API). Credentials and TOTP
-          seeds are Fernet-encrypted at rest; fetched invoices go through OCR
-          into Purchase Bill Drafts for human review.
+          Connect your suppliers' billing portals (utilities, telecom, software
+          and cloud providers) so their invoices are fetched automatically and
+          turned into draft bills for you to review. Your logins are stored
+          securely.
         </p>
       </div>
 
       <div className="panel">
-        <h3>1. Connect Supplier Portal (with 32-Character 2FA TOTP Seed)</h3>
+        <h3>Connect a supplier portal</h3>
         <p className="muted">
-          Enter your read-only vendor billing sub-user credentials and 32-char
-          Base32 TOTP seed, or load a vendor preset below to test automated 2FA
-          portal invoice ingestion.
+          Enter the login of a view-only billing user at your supplier. If the
+          portal asks for a two-step verification code, add its setup key too.
+          Tip: use a quick fill below to start.
         </p>
         <div
           className="p3-actions-row"
@@ -1042,10 +1200,9 @@ export function SupplierPortalConnectors() {
               setPortalUrl(
                 "https://console.aws.amazon.com/billing/home#/bills",
               );
-              setLoginUsername("aws-billing-viewer@workspace.local");
             }}
           >
-            Preset: AWS Cloud Portal
+            Quick fill: Cloud hosting
           </Button>
           <Button
             type="button"
@@ -1054,10 +1211,9 @@ export function SupplierPortalConnectors() {
               setVendorName("K-Electric Corporate Utility Portal");
               setPortalKind("utility_portal");
               setPortalUrl("https://billing.ke.com.pk/corporate/invoices");
-              setLoginUsername("utility-viewer@workspace.local");
             }}
           >
-            Preset: Utility Portal
+            Quick fill: Utility provider
           </Button>
           <Button
             type="button"
@@ -1066,23 +1222,24 @@ export function SupplierPortalConnectors() {
               setVendorName("Stripe Vendor Billing API");
               setPortalKind("api_stripe");
               setPortalUrl("https://api.stripe.com/v1/invoices");
-              setLoginUsername("stripe-api-connector@workspace.local");
             }}
           >
-            Preset: Stripe Invoices API
+            Quick fill: Stripe invoices
           </Button>
         </div>
         <ErrorNotice
           error={createPortalMutation.error || generateSeedMutation.error}
         />
         <div className="form-grid">
-          <Field label="Vendor / Supplier Name">
+          <Field label="Supplier name">
+            {" "}
             <input
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
+              placeholder="e.g. City Power & Water"
             />
           </Field>
-          <Field label="Connector Method / Portal Type">
+          <Field label="Type of portal">
             <select
               value={portalKind}
               onChange={(e) =>
@@ -1097,46 +1254,50 @@ export function SupplierPortalConnectors() {
               }
             >
               <option value="web_totp">
-                Method B: Web Login Portal + 32-Char 2FA TOTP Seed
+                Website login with two-step verification
               </option>
               <option value="utility_portal">
-                Method B: Utility Portal (K-Electric / ConEd + TOTP)
+                Utility provider (electricity, gas, water)
               </option>
               <option value="telecom_portal">
-                Method B: Telecom Portal (PTCL / Verizon + TOTP)
+                Telecom provider (phone, internet)
               </option>
-              <option value="cloud_portal">
-                Method B: Cloud / SaaS Portal (AWS / DigitalOcean + TOTP)
-              </option>
+              <option value="cloud_portal">Cloud or software provider</option>
               <option value="api_stripe">
-                Method A: Live Stripe Vendor Invoices API
+                Stripe invoices (direct connection)
               </option>
             </select>
           </Field>
-          <Field label="Vendor Portal Login URL">
+          <Field label="Portal login web address">
+            {" "}
             <input
               value={portalUrl}
               onChange={(e) => setPortalUrl(e.target.value)}
+              placeholder="e.g. https://billing.yoursupplier.com"
             />
           </Field>
-          <Field label="Viewer Sub-User Email / Login">
+          <Field label="Login email or username">
+            {" "}
             <input
               value={loginUsername}
               onChange={(e) => setLoginUsername(e.target.value)}
+              placeholder="e.g. billing-viewer@yourcompany.com"
             />
           </Field>
-          <Field label="Sub-User Password (Encrypted at Rest)">
+          <Field label="Password (stored securely)">
+            {" "}
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password for that login"
             />
           </Field>
-          <Field label="32-Character TOTP Secret Seed ('Can't scan barcode?' code)">
+          <Field label="Two-step verification setup key (optional)">
             <input
               value={totpSeed}
               onChange={(e) => setTotpSeed(e.target.value.toUpperCase())}
-              placeholder="32-char Base32 seed e.g. JBSWY3DPEHPK3PXP..."
+              placeholder="Shown as 'Can't scan the barcode?' in your supplier's portal"
             />
           </Field>
         </div>
@@ -1152,18 +1313,18 @@ export function SupplierPortalConnectors() {
             busy={createPortalMutation.isPending}
             onClick={() => createPortalMutation.mutate()}
           >
-            Save & Authorize Portal Connector
+            Save connection
           </Button>
           <Button
             variant="secondary"
             busy={generateSeedMutation.isPending}
             onClick={() => generateSeedMutation.mutate()}
           >
-            Generate Valid 32-Char TOTP Seed
+            Generate a setup key
           </Button>
           {liveTotpInfo && (
             <Badge>
-              Live 6-Digit Authenticator Code: {liveTotpInfo.code} (valid{" "}
+              Current verification code: {liveTotpInfo.code} (valid for{" "}
               {liveTotpInfo.remaining}s)
             </Badge>
           )}
@@ -1172,43 +1333,43 @@ export function SupplierPortalConnectors() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Authorized Portal Connections</h3>
+          <h3>Your connected portals</h3>
           <p className="muted">
-            Click <strong>Fetch &amp; OCR Invoice Now</strong> on any active
-            portal below. LedgerPilot automatically computes the live 6-digit
-            RFC 6238 TOTP code, authenticates into the vendor portal, and routes
-            fetched PDFs through OCR into Purchase Bill Drafts.
+            Click <strong>Fetch latest invoice</strong> on any active portal
+            below. Balanc signs in for you, reads the newest invoice and creates
+            a draft bill for you to review.
           </p>
           <ErrorNotice
             error={syncPortalMutation.error || revokeMutation.error}
           />
           <details className="p3-advanced-details">
-            <summary>
-              Advanced: Optional Portal Invoice # or Extracted Amount Override
-              (for testing specific invoice payloads)
-            </summary>
+            <summary>Advanced options: invoice number and amounts</summary>
             <div className="form-grid">
-              <Field label="Portal Invoice # (Optional override)">
+              <Field label="Invoice number (optional)">
                 <input
                   value={syncInvoiceNumber}
                   onChange={(e) => setSyncInvoiceNumber(e.target.value)}
-                  placeholder="Auto-detect from portal or enter e.g. INV-2026-991"
+                  placeholder="Leave blank to detect automatically, or e.g. INV-2026-991"
                 />
               </Field>
-              <Field label="Expected / Extracted Total Amount">
+              <Field label="Invoice total (optional)">
+                {" "}
                 <input
                   type="number"
                   step="0.01"
                   value={syncTotalAmount}
                   onChange={(e) => setSyncTotalAmount(e.target.value)}
+                  placeholder="e.g. 425.00"
                 />
               </Field>
-              <Field label="Expected / Extracted Tax Amount">
+              <Field label="Tax amount (optional)">
+                {" "}
                 <input
                   type="number"
                   step="0.01"
                   value={syncTaxAmount}
                   onChange={(e) => setSyncTaxAmount(e.target.value)}
+                  placeholder="e.g. 25.00"
                 />
               </Field>
             </div>
@@ -1219,31 +1380,35 @@ export function SupplierPortalConnectors() {
             </p>
           )}
           <Table
-            caption="Connected Supplier Portals"
+            caption="Connected supplier portals"
             rows={query.data.connections}
             rowKey={(c) => c.id}
             columns={[
-              { label: "Vendor", render: (c) => c.vendor_name },
+              { label: "Supplier", render: (c) => c.vendor_name },
               {
-                label: "Method",
-                render: (c) => <Badge>{c.portal_kind}</Badge>,
+                label: "Type",
+                render: (c) => <Badge>{humanize(c.portal_kind)}</Badge>,
               },
-              { label: "Sub-User", render: (c) => c.login_username },
+              { label: "Login", render: (c) => c.login_username },
               {
-                label: "Encrypted TOTP Seed & Live 6-Digit Code",
+                label: "Two-step verification",
                 render: (c) =>
                   c.totp_enabled ? (
-                    <span>
-                      <code>{c.totp_seed_preview}</code>{" "}
-                      {c.live_totp_preview && (
-                        <Badge>2FA: {c.live_totp_preview}</Badge>
-                      )}
-                    </span>
+                    <Badge>
+                      {" "}
+                      Enabled
+                      {c.live_totp_preview
+                        ? ` · code ${c.live_totp_preview}`
+                        : ""}{" "}
+                    </Badge>
                   ) : (
-                    "API Key"
+                    "Direct connection"
                   ),
               },
-              { label: "Status", render: (c) => <Badge>{c.status}</Badge> },
+              {
+                label: "Status",
+                render: (c) => <Badge>{humanize(c.status)}</Badge>,
+              },
               {
                 label: "Actions",
                 render: (c) => (
@@ -1253,7 +1418,7 @@ export function SupplierPortalConnectors() {
                       busy={syncPortalMutation.isPending}
                       onClick={() => syncPortalMutation.mutate(c.id)}
                     >
-                      Fetch & OCR Invoice Now
+                      Fetch latest invoice
                     </Button>
                     {c.status === "active" && (
                       <Button
@@ -1280,14 +1445,14 @@ export function SupplierPortalConnectors() {
       {revokeTarget && (
         <Modal
           open={true}
-          title="Revoke Supplier Portal Connector"
-          description="Deactivate scheduled invoice syncs and stored TOTP credentials for this vendor."
+          title="Disconnect supplier portal"
+          description="Stop automatic invoice fetching and remove the stored login for this supplier."
           onClose={() => setRevokeTarget(null)}
         >
           <p>
-            Are you sure you want to revoke the authorized portal connection for{" "}
-            <strong>{revokeTarget.vendor_name}</strong>? Scheduled invoice syncs
-            and stored TOTP credentials will be deactivated immediately.
+            Are you sure you want to disconnect{" "}
+            <strong>{revokeTarget.vendor_name}</strong>? Automatic invoice
+            fetching will stop and the stored login will be removed right away.
           </p>
           <div
             style={{
@@ -1314,7 +1479,7 @@ export function SupplierPortalConnectors() {
                 });
               }}
             >
-              Confirm Revoke
+              Disconnect portal
             </Button>
           </div>
         </Modal>
@@ -1322,46 +1487,45 @@ export function SupplierPortalConnectors() {
 
       {query.data && (
         <div className="panel">
-          <h3>3. Ingested Supplier Invoices & OCR Purchase Bill Drafts</h3>
+          <h3>Imported supplier invoices</h3>{" "}
+          <p className="muted">
+            {" "}
+            Invoices fetched from your supplier portals. Review each one, then
+            send it to supplier payments.{" "}
+          </p>
           <Table
-            caption="Auto-Ingested Portal Invoices (Pending Human Draft Approval)"
+            caption="Imported invoices waiting for your review"
             rows={query.data.ingestions}
             rowKey={(i) => i.id}
             columns={[
-              { label: "Vendor", render: (i) => i.vendor_name },
+              { label: "Supplier", render: (i) => i.vendor_name },
               { label: "Invoice #", render: (i) => i.invoice_number },
               {
                 label: "Amount (Tax)",
                 render: (i) =>
-                  `${i.currency} ${i.total_amount} (Tax: ${i.tax_amount})`,
+                  `${i.currency} ${i.total_amount} (tax ${i.tax_amount})`,
               },
               {
-                label: "OCR Confidence",
+                label: "Reading accuracy",
                 render: (i) => `${(i.ocr_confidence * 100).toFixed(1)}%`,
               },
               {
                 label: "Status",
-                render: (i) => <Badge>{i.status}</Badge>,
+                render: (i) => <Badge>{humanize(i.status)}</Badge>,
               },
               {
-                label: "Review Draft ID",
-                render: (i) => (
-                  <code style={{ fontSize: "0.78rem" }}>
-                    {i.trade_draft_id
-                      ? i.trade_draft_id.slice(0, 12) + "…"
-                      : "—"}
-                  </code>
-                ),
+                label: "Draft bill",
+                render: (i) => (i.trade_draft_id ? "Created" : "—"),
               },
               {
-                label: "End-to-End Pipeline",
+                label: "Next step",
                 render: (i) => (
                   <Button
                     variant="secondary"
                     busy={promoteToPaymentMutation.isPending}
                     onClick={() => promoteToPaymentMutation.mutate(i.id)}
                   >
-                    Promote to Payment Queue
+                    Send to supplier payments
                   </Button>
                 ),
               },
@@ -1379,18 +1543,18 @@ export function HumanApprovedSupplierPayments() {
   const access = useAccess();
   const canApprove = access?.role === "owner" || access?.role === "accountant";
 
-  const [supplierName, setSupplierName] = useState("Amazon Web Services Inc.");
-  const [holderName, setHolderName] = useState("Amazon Web Services Treasury");
-  const [bankName, setBankName] = useState("JPMorgan Chase / Stripe Treasury");
-  const [routing, setRouting] = useState("021000021");
-  const [accountNumber, setAccountNumber] = useState("882910444321");
+  const [supplierName, setSupplierName] = useState("");
+  const [holderName, setHolderName] = useState("");
+  const [bankName, setBankName] = useState("");
+  const [routing, setRouting] = useState("");
+  const [accountNumber, setAccountNumber] = useState("");
   const [rail, setRail] = useState<"stripe_live" | "ach_nacha" | "swift_wire">(
     "stripe_live",
   );
 
   const [selectedBeneficiaryId, setSelectedBeneficiaryId] = useState("");
-  const [billRef, setBillRef] = useState("BILL-AWS-2026-114");
-  const [payAmount, setPayAmount] = useState("425.00");
+  const [billRef, setBillRef] = useState("");
+  const [payAmount, setPayAmount] = useState("");
   const [stepUpCode, setStepUpCode] = useState("");
   const [activeRemittance, setActiveRemittance] = useState<string>("");
   const [statusNotice, setStatusNotice] = useState<string>("");
@@ -1398,9 +1562,7 @@ export function HumanApprovedSupplierPayments() {
     PaymentsData["payments"][number] | null
   >(null);
   const [killSwitchModalOpen, setKillSwitchModalOpen] = useState(false);
-  const [killSwitchReason, setKillSwitchReason] = useState(
-    "Paused by Owner/Accountant via Emergency Kill Switch",
-  );
+  const [killSwitchReason, setKillSwitchReason] = useState("");
 
   const query = useQuery({
     queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1499,7 +1661,7 @@ export function HumanApprovedSupplierPayments() {
     },
     onSuccess: (res) => {
       setStatusNotice(
-        `Payment draft prepared (State: ${res.state}, Dual Approval Required: ${res.requires_dual_approval ? "YES" : "NO"}). Awaiting human step-up approval.`,
+        `Payment draft saved. ${res.requires_dual_approval ? "Two people need to approve it." : "It needs one approval."} Find it in the approval list below.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1533,7 +1695,7 @@ export function HumanApprovedSupplierPayments() {
       }
       setStatusNotice(
         res.message ||
-          `Payment settled! State: ${res.state} — Live Reference: ${res.provider_reference}`,
+          `Payment approved. Status: ${humanize(res.state)}.${res.provider_reference ? ` Reference: ${res.provider_reference}.` : ""}`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-supplier-payments"],
@@ -1546,13 +1708,12 @@ export function HumanApprovedSupplierPayments() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>P3 Feature E · Human-Approved Supplier Payment Execution</h2>
+        <h2>Supplier payments</h2>
         <p className="muted">
-          AI and bookkeepers may prepare payment drafts, but only an authorized
-          human (Owner/Accountant) with Step-Up 2FA can approve and release
-          funds. Includes Out-of-Band Beneficiary Verification, Account-Takeover
-          Invalidation, Dual Approval thresholds, Emergency Kill Switch, and
-          Live Stripe Payment Rail + NACHA ACH / SWIFT Wire settlement.
+          Prepare supplier payments, then have an owner or accountant approve
+          them. Nothing is paid until a person approves it with a verification
+          code. Start by adding the supplier's bank details, then prepare a
+          payment.
         </p>
         {ctrl && (
           <div
@@ -1565,16 +1726,15 @@ export function HumanApprovedSupplierPayments() {
             }}
           >
             <Badge>
-              Kill Switch:{" "}
-              {ctrl.kill_switch_active ? "PAUSED (ACTIVE)" : "ARMED (NORMAL)"}
+              Payments: {ctrl.kill_switch_active ? "Paused" : "Active"}
             </Badge>
-            <Badge>Single Payment Limit: ${ctrl.single_payment_limit}</Badge>
+            <Badge>Single payment limit: ${ctrl.single_payment_limit}</Badge>
             <Badge>
-              Dual Approval Threshold: ${ctrl.dual_approval_threshold}
+              Two approvals needed above: ${ctrl.dual_approval_threshold}
             </Badge>
             <Badge>
-              Stripe Live Payment Rail:{" "}
-              {ctrl.stripe_live_available ? "CONNECTED" : "SANDBOX"}
+              Stripe:{" "}
+              {ctrl.stripe_live_available ? "Connected" : "Not connected yet"}
             </Badge>
             {canApprove && (
               <Button
@@ -1589,8 +1749,8 @@ export function HumanApprovedSupplierPayments() {
                 }}
               >
                 {ctrl.kill_switch_active
-                  ? "Deactivate Kill Switch (Resume Payouts)"
-                  : "Activate Emergency Kill Switch"}
+                  ? "Resume payments"
+                  : "Pause all payments"}
               </Button>
             )}
           </div>
@@ -1598,15 +1758,17 @@ export function HumanApprovedSupplierPayments() {
         {killSwitchModalOpen && (
           <Modal
             open={true}
-            title="Activate Emergency Payment Kill Switch"
-            description="Immediately freeze all outbound supplier payment executions across Stripe, NACHA ACH, and SWIFT rails for this workspace."
+            title="Pause all supplier payments"
+            description="Immediately stop all outgoing supplier payments for this business until you resume them."
             onClose={() => setKillSwitchModalOpen(false)}
           >
             <div className="stack" style={{ gap: "12px" }}>
-              <Field label="Emergency Pause Reason (Audited)">
+              <Field label="Reason for pausing">
+                {" "}
                 <input
                   value={killSwitchReason}
                   onChange={(e) => setKillSwitchReason(e.target.value)}
+                  placeholder="e.g. Suspicious request, checking with the bank"
                   required
                 />
               </Field>
@@ -1625,7 +1787,7 @@ export function HumanApprovedSupplierPayments() {
                   busy={toggleKillSwitch.isPending}
                   onClick={() => toggleKillSwitch.mutate(true)}
                 >
-                  Confirm & Freeze All Payouts
+                  Pause all payments
                 </Button>
               </div>
             </div>
@@ -1634,40 +1796,55 @@ export function HumanApprovedSupplierPayments() {
       </div>
 
       <div className="panel">
-        <h3>1. Register & Verify Supplier Beneficiary (Out-of-Band Checked)</h3>
+        <h3>Add a supplier's bank details</h3>{" "}
+        <p className="muted">
+          {" "}
+          Save the bank account you will pay. Confirm the details with the
+          supplier directly (for example by phone) before saving.{" "}
+        </p>
         <ErrorNotice error={createBeneficiary.error} />
         <div className="form-grid">
-          <Field label="Supplier Name">
+          <Field label="Supplier name">
+            {" "}
             <input
               value={supplierName}
               onChange={(e) => setSupplierName(e.target.value)}
+              placeholder="e.g. Acme Supplies Ltd"
             />
           </Field>
-          <Field label="Account Holder Name">
+          <Field label="Account holder name">
+            {" "}
             <input
               value={holderName}
               onChange={(e) => setHolderName(e.target.value)}
+              placeholder="Name on the bank account"
             />
           </Field>
-          <Field label="Beneficiary Bank">
+          <Field label="Bank name">
+            {" "}
             <input
               value={bankName}
               onChange={(e) => setBankName(e.target.value)}
+              placeholder="e.g. First National Bank"
             />
           </Field>
-          <Field label="ABA Routing / SWIFT BIC">
+          <Field label="Bank routing number or international bank code">
+            {" "}
             <input
               value={routing}
               onChange={(e) => setRouting(e.target.value)}
+              placeholder="Routing number or SWIFT code"
             />
           </Field>
-          <Field label="Account Number">
+          <Field label="Account number">
+            {" "}
             <input
               value={accountNumber}
               onChange={(e) => setAccountNumber(e.target.value)}
+              placeholder="Account number or IBAN"
             />
           </Field>
-          <Field label="Settlement Rail">
+          <Field label="How you will pay">
             <select
               value={rail}
               onChange={(e) =>
@@ -1676,15 +1853,9 @@ export function HumanApprovedSupplierPayments() {
                 )
               }
             >
-              <option value="stripe_live">
-                Live Stripe Payment & Payout Rail (Connected)
-              </option>
-              <option value="ach_nacha">
-                Built-In NACHA ACH Bank Settlement Rail
-              </option>
-              <option value="swift_wire">
-                Built-In SWIFT MT103 International Wire Rail
-              </option>
+              <option value="stripe_live">Stripe payout</option>
+              <option value="ach_nacha">US bank transfer (ACH)</option>
+              <option value="swift_wire">International wire</option>
             </select>
           </Field>
         </div>
@@ -1692,20 +1863,20 @@ export function HumanApprovedSupplierPayments() {
           busy={createBeneficiary.isPending}
           onClick={() => createBeneficiary.mutate()}
         >
-          Verify & Save Supplier Beneficiary
+          Save bank details
         </Button>
       </div>
 
       <div className="panel">
-        <h3>2. Prepare Supplier Payment Draft (Maker Step)</h3>
+        <h3>Prepare a payment</h3>
         <p className="muted">
-          Select an open supplier bill or ingested portal invoice from your
-          workspace (or enter a bill reference) and pair it with an out-of-band
-          verified supplier bank beneficiary.
+          Choose an open supplier bill (or type a reference), pick the
+          supplier's saved bank details and enter the amount. The payment is
+          only a draft until someone approves it.
         </p>
         <ErrorNotice error={preparePayment.error} />
         <div className="form-grid">
-          <Field label="Select Open Supplier Bill / Portal Invoice (Optional)">
+          <Field label="Open supplier bill (optional)">
             <select
               defaultValue=""
               onChange={(e) => {
@@ -1726,22 +1897,20 @@ export function HumanApprovedSupplierPayments() {
                 }
               }}
             >
-              <option value="">
-                -- Custom Bill Reference (or select open workspace bill) --
-              </option>
+              <option value="">Enter a reference manually</option>
               {(query.data?.open_bills || []).map((ob) => (
                 <option
                   key={`${ob.source}:${ob.id}`}
                   value={`${ob.source}:${ob.id}`}
                 >
-                  [{ob.source === "ledger_bill" ? "LEDGER BILL" : "PORTAL BILL"}
-                  ] {ob.bill_reference} — {ob.supplier_name} ({ob.currency}{" "}
+                  [{ob.source === "ledger_bill" ? "Bill" : "Portal invoice"}]{" "}
+                  {ob.bill_reference} — {ob.supplier_name} ({ob.currency}{" "}
                   {ob.amount})
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Verified Supplier Beneficiary">
+          <Field label="Supplier bank details">
             <select
               value={
                 selectedBeneficiaryId || query.data?.beneficiaries[0]?.id || ""
@@ -1750,33 +1919,36 @@ export function HumanApprovedSupplierPayments() {
             >
               {!query.data?.beneficiaries.length && (
                 <option value="">
-                  -- No verified beneficiaries yet (register &amp; verify in
-                  Step 1 above) --
+                  No saved bank details yet. Add them above.
                 </option>
               )}
               {(query.data?.beneficiaries || []).map((ben) => (
                 <option key={ben.id} value={ben.id}>
-                  {ben.supplier_name} — {ben.bank_name} (
-                  {ben.account_number_masked} v{ben.version})
+                  {ben.supplier_name} — {ben.bank_name} ({" "}
+                  {ben.account_number_masked})
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Bill / Invoice Reference">
+          <Field label="Bill or invoice reference">
+            {" "}
             <input
               value={billRef}
               onChange={(e) => setBillRef(e.target.value)}
+              placeholder="e.g. INV-2026-114"
             />
           </Field>
           <Field label="Amount">
+            {" "}
             <input
               type="number"
               step="0.01"
               value={payAmount}
               onChange={(e) => setPayAmount(e.target.value)}
+              placeholder="e.g. 425.00"
             />
           </Field>
-          <Field label="Execution Rail">
+          <Field label="Payment method">
             <select
               value={rail}
               onChange={(e) =>
@@ -1785,9 +1957,9 @@ export function HumanApprovedSupplierPayments() {
                 )
               }
             >
-              <option value="stripe_live">Live Stripe Payment Rail</option>
-              <option value="ach_nacha">NACHA ACH Bank File</option>
-              <option value="swift_wire">SWIFT MT103 Wire</option>
+              <option value="stripe_live">Stripe payout</option>
+              <option value="ach_nacha">US bank transfer (ACH)</option>
+              <option value="swift_wire">International wire</option>
             </select>
           </Field>
         </div>
@@ -1796,15 +1968,18 @@ export function HumanApprovedSupplierPayments() {
           busy={preparePayment.isPending}
           onClick={() => preparePayment.mutate()}
         >
-          Prepare Payment Draft (Requires Human Approval)
+          Prepare payment draft
         </Button>
       </div>
 
       {query.data && (
         <div className="panel">
-          <h3>
-            3. Human Approval & Step-Up 2FA Execution Queue (Checker Step)
-          </h3>
+          <h3>Approve payments</h3>
+          <p className="muted">
+            {" "}
+            Payments wait here until an owner or accountant approves them. Enter
+            your approval code to release a payment.{" "}
+          </p>{" "}
           <ErrorNotice error={approveAndExecute.error} />
           {statusNotice && (
             <p role="status" className="success-text">
@@ -1812,52 +1987,46 @@ export function HumanApprovedSupplierPayments() {
             </p>
           )}
           <div style={{ maxWidth: "360px", marginBottom: "14px" }}>
-            <Field label="Step-Up 2FA Code (6-digit TOTP or APPROVE)">
+            <Field label="Approval code (from your authenticator app)">
               <input
                 value={stepUpCode}
                 onChange={(e) => setStepUpCode(e.target.value)}
-                placeholder="Enter 6-digit authenticator code"
+                placeholder="6-digit code"
               />
             </Field>
           </div>
           <Table
-            caption="Supplier Payment Queue & Settlement History"
+            caption="Supplier payments"
             rows={query.data.payments}
             rowKey={(p) => p.id}
             columns={[
               { label: "Supplier", render: (p) => p.supplier_name },
-              { label: "Bill Ref", render: (p) => p.bill_reference },
+              { label: "Bill reference", render: (p) => p.bill_reference },
               {
                 label: "Amount",
                 render: (p) => `${p.currency} ${p.amount}`,
               },
-              { label: "Rail", render: (p) => <Badge>{p.rail}</Badge> },
               {
-                label: "State",
-                render: (p) => <Badge>{p.state}</Badge>,
+                label: "Method",
+                render: (p) => <Badge>{railLabel(p.rail)}</Badge>,
               },
               {
-                label: "Live Reference",
-                render: (p) => (
-                  <code style={{ fontSize: "0.78rem" }}>
-                    {p.provider_reference ||
-                      p.failure_reason ||
-                      "Awaiting Approval"}
-                  </code>
-                ),
+                label: "Status",
+                render: (p) => <Badge>{humanize(p.state)}</Badge>,
               },
               {
-                label: "Ledger Journal",
-                render: (p) => (
-                  <code style={{ fontSize: "0.78rem" }}>
-                    {p.settlement_journal_id
-                      ? p.settlement_journal_id.slice(0, 10) + "…"
-                      : "—"}
-                  </code>
-                ),
+                label: "Reference",
+                render: (p) =>
+                  p.provider_reference ||
+                  p.failure_reason ||
+                  "Awaiting approval",
               },
               {
-                label: "Human Action",
+                label: "Recorded in your books",
+                render: (p) => (p.settlement_journal_id ? "Yes" : "—"),
+              },
+              {
+                label: "Action",
                 render: (p) => (
                   <div style={{ display: "flex", gap: "8px" }}>
                     {(p.state === "prepared" || p.state === "first_approved") &&
@@ -1867,8 +2036,8 @@ export function HumanApprovedSupplierPayments() {
                           onClick={() => setConfirmPayment(p)}
                         >
                           {p.state === "first_approved"
-                            ? "Final Dual Approve & Release"
-                            : "Approve & Release Payment"}
+                            ? "Give final approval and pay"
+                            : "Approve and pay"}
                         </Button>
                       )}
                     {p.remittance_advice && (
@@ -1876,7 +2045,7 @@ export function HumanApprovedSupplierPayments() {
                         variant="secondary"
                         onClick={() => setActiveRemittance(p.remittance_advice)}
                       >
-                        View Remittance
+                        View payment advice
                       </Button>
                     )}
                   </div>
@@ -1887,14 +2056,14 @@ export function HumanApprovedSupplierPayments() {
           {confirmPayment && (
             <Modal
               open={true}
-              title="Confirm Supplier Payment Settlement"
-              description="Verify beneficiary bank account details and provide your Step-Up 2FA code to release funds."
+              title="Approve supplier payment"
+              description="Check the bank details below and enter your approval code to release the payment."
               onClose={() => setConfirmPayment(null)}
             >
               <div className="stack" style={{ gap: "12px" }}>
                 <p className="muted">
-                  Review beneficiary bank details and provide your Step-Up 2FA
-                  verification code before releasing funds.
+                  Check the bank details and enter your approval code before
+                  releasing the payment.
                 </p>
                 <div
                   className="panel"
@@ -1907,32 +2076,31 @@ export function HumanApprovedSupplierPayments() {
                     <strong>Supplier:</strong> {confirmPayment.supplier_name}
                   </div>
                   <div>
-                    <strong>Bill Reference:</strong>{" "}
+                    <strong>Bill reference:</strong>{" "}
                     {confirmPayment.bill_reference}
                   </div>
                   <div>
-                    <strong>Settlement Amount:</strong>{" "}
-                    {confirmPayment.currency} {confirmPayment.amount}
+                    <strong>Amount:</strong> {confirmPayment.currency}{" "}
+                    {confirmPayment.amount}
                   </div>
                   <div>
-                    <strong>Payment Rail:</strong>{" "}
-                    <Badge>{confirmPayment.rail}</Badge>
+                    <strong>Payment method:</strong>{" "}
+                    <Badge>{railLabel(confirmPayment.rail)}</Badge>
                   </div>
                   <div>
-                    <strong>Beneficiary Account:</strong>{" "}
+                    <strong>Bank account:</strong>{" "}
                     <code>
                       {query.data.beneficiaries.find(
                         (ben) => ben.id === confirmPayment.beneficiary_id,
-                      )?.account_number_masked || "Verified Account"}{" "}
-                      (v{confirmPayment.beneficiary_version})
+                      )?.account_number_masked || "Verified account"}
                     </code>
                   </div>
                 </div>
-                <Field label="Step-Up 2FA Code (6-digit TOTP or APPROVE)">
+                <Field label="Approval code (from your authenticator app)">
                   <input
                     value={stepUpCode}
                     onChange={(e) => setStepUpCode(e.target.value)}
-                    placeholder="Enter 6-digit authenticator code"
+                    placeholder="6-digit code"
                     autoFocus
                   />
                 </Field>
@@ -1960,7 +2128,7 @@ export function HumanApprovedSupplierPayments() {
                       });
                     }}
                   >
-                    Confirm & Execute Settlement
+                    Approve payment
                   </Button>
                 </div>
               </div>
@@ -1974,7 +2142,7 @@ export function HumanApprovedSupplierPayments() {
                 background: "var(--surface-alt)",
               }}
             >
-              <h4>Official Settlement Remittance Advice / Bank File</h4>
+              <h4>Payment advice</h4>
               <pre
                 style={{
                   whiteSpace: "pre-wrap",
@@ -2062,9 +2230,7 @@ export function ReconciliationSlaDashboard() {
         ),
       ),
     onSuccess: () => {
-      setChaseNotice(
-        `One-Day Reconciliation SLA timer started (${slaHours}h window).`,
-      );
+      setChaseNotice(`Countdown started: ${slaHours} hours to finish.`);
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-reconciliation-sla"],
       });
@@ -2090,7 +2256,7 @@ export function ReconciliationSlaDashboard() {
       },
     onSuccess: (res) => {
       setChaseNotice(
-        `Auto-chased ${res.chased_count} SLA blocker notification(s) via ${chaseChannel.toUpperCase()} (${res.total_blockers} open item(s) tracked).`,
+        `Sent ${res.chased_count} reminder(s) via ${channelName(chaseChannel)}. ${res.total_blockers} item(s) still open.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-reconciliation-sla"],
@@ -2108,14 +2274,12 @@ export function ReconciliationSlaDashboard() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          Phase 3.1 (P3-H) · One-Day Reconciliation SLA Tracker & Auto-Chasing
-        </h2>
+        <h2>Daily reconciliation</h2>
         <p className="muted">
-          Real-time 24-hour close and reconciliation SLA countdown across bank
-          feed rows, unlinked supplier bill receipts, pending AI/OCR drafts, and
-          period close tasks—with 1-click multichannel WhatsApp & Slack chasing
-          for missing items.
+          Track how close you are to finishing your daily reconciliation:
+          unchecked bank transactions, bills missing receipts, drafts waiting
+          for review and month-end tasks. One click sends reminders for anything
+          missing.
         </p>
         {t && (
           <div
@@ -2127,25 +2291,29 @@ export function ReconciliationSlaDashboard() {
               alignItems: "center",
             }}
           >
-            <Badge>SLA Status: {t.status.toUpperCase()}</Badge>
+            <Badge>Status: {humanize(t.status)}</Badge>
             <Badge>
-              Countdown: {hrsLeft}h {minsLeft}m remaining (Target: {t.sla_hours}
-              h)
+              Time left: {hrsLeft}h {minsLeft}m (goal: {t.sla_hours}h)
             </Badge>
-            <Badge>Completeness: {t.completion_percent}%</Badge>
-            <Badge>Open Blockers: {t.total_blockers}</Badge>
-            <Badge>Auto-Chases Sent: {t.chased_count}</Badge>
+            <Badge>Complete: {t.completion_percent}%</Badge>
+            <Badge>Open items: {t.total_blockers}</Badge>
+            <Badge>Reminders sent: {t.chased_count}</Badge>
           </div>
         )}
       </div>
 
       <div className="panel">
-        <h3>1. Configure SLA Window & Trigger 1-Click Auto-Chasing</h3>
+        <h3>Set your goal and send reminders</h3>{" "}
+        <p className="muted">
+          {" "}
+          Choose how many hours you want to finish in, then remind people about
+          anything still open.{" "}
+        </p>
         <ErrorNotice
           error={startSlaMutation.error || autoChaseMutation.error}
         />
         <div className="form-grid">
-          <Field label="Target SLA Window (Hours)">
+          <Field label="Goal (hours to finish)">
             <input
               type="number"
               min={1}
@@ -2154,7 +2322,7 @@ export function ReconciliationSlaDashboard() {
               onChange={(e) => setSlaHours(Number(e.target.value) || 24)}
             />
           </Field>
-          <Field label="Auto-Chase Delivery Channel">
+          <Field label="Send reminders via">
             <select
               value={chaseChannel}
               onChange={(e) =>
@@ -2164,11 +2332,11 @@ export function ReconciliationSlaDashboard() {
               }
             >
               <option value="auto">
-                Auto Cascade (WhatsApp -&gt; Slack -&gt; Email)
+                Automatic (WhatsApp, then Slack, then email)
               </option>
-              <option value="whatsapp">WhatsApp Cloud API</option>
-              <option value="slack">Slack Workspace (#all-balanc)</option>
-              <option value="email">Email Fallback</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="slack">Slack</option>
+              <option value="email">Email</option>
             </select>
           </Field>
         </div>
@@ -2177,14 +2345,14 @@ export function ReconciliationSlaDashboard() {
             busy={autoChaseMutation.isPending}
             onClick={() => autoChaseMutation.mutate()}
           >
-            1-Click Auto-Chase Open SLA Blockers
+            Remind about open items
           </Button>
           <Button
             variant="secondary"
             busy={startSlaMutation.isPending}
             onClick={() => startSlaMutation.mutate()}
           >
-            Start / Reset {slaHours}h SLA Countdown
+            Start {slaHours}-hour countdown
           </Button>
         </div>
         {chaseNotice && (
@@ -2200,7 +2368,7 @@ export function ReconciliationSlaDashboard() {
 
       {t && (
         <div className="panel">
-          <h3>2. One-Day Reconciliation Completeness Checklist</h3>
+          <h3>Reconciliation checklist</h3>
           <div
             style={{
               height: "10px",
@@ -2210,7 +2378,7 @@ export function ReconciliationSlaDashboard() {
               overflow: "hidden",
               marginBottom: "14px",
             }}
-            aria-label={`SLA completion ${t.completion_percent}%`}
+            aria-label={`Reconciliation ${t.completion_percent}% complete`}
           >
             <div
               style={{
@@ -2222,28 +2390,28 @@ export function ReconciliationSlaDashboard() {
             />
           </div>
           <Table
-            caption="Reconciliation SLA Completeness Checklist"
+            caption="Reconciliation checklist"
             rows={t.checklist}
             rowKey={(c) => c.key}
             columns={[
-              { label: "Control Gate", render: (c) => c.label },
+              { label: "Task", render: (c) => c.label },
               {
-                label: "Open Items",
+                label: "Open items",
                 render: (c) => <strong>{c.open_count}</strong>,
               },
               {
-                label: "Gate Status",
+                label: "Status",
                 render: (c) => (
-                  <Badge>{c.completed ? "COMPLETED" : "ACTION REQUIRED"}</Badge>
+                  <Badge>{c.completed ? "Done" : "Needs action"}</Badge>
                 ),
               },
             ]}
           />
           {t.unlinked_bills.length > 0 && (
             <div style={{ marginTop: "16px" }}>
-              <h4>Supplier Bills Missing Supporting Receipt / Evidence</h4>
+              <h4>Supplier bills missing a receipt</h4>
               <Table
-                caption="Supplier Bills Missing Evidence"
+                caption="Supplier bills missing a receipt"
                 rows={t.unlinked_bills}
                 rowKey={(b) => b.id}
                 columns={[
@@ -2259,9 +2427,9 @@ export function ReconciliationSlaDashboard() {
           )}
           {t.unreviewed_bank_rows.length > 0 && (
             <div style={{ marginTop: "16px" }}>
-              <h4>Unreviewed Bank Feed Rows Blocking 24h Close</h4>
+              <h4>Bank transactions not yet reviewed</h4>
               <Table
-                caption="Unreviewed Bank Feed Rows"
+                caption="Bank transactions not yet reviewed"
                 rows={t.unreviewed_bank_rows}
                 rowKey={(r) => r.id}
                 columns={[
@@ -2287,7 +2455,7 @@ export function PayoutReconciliationHub() {
     | "amazon_settlement"
     | "square_payouts"
   >("stripe_financial_connections");
-  const [payoutRef, setPayoutRef] = useState("po_stripe_20261125_01");
+  const [payoutRef, setPayoutRef] = useState("");
   const [grossSales, setGrossSales] = useState("2000.00");
   const [processingFee, setProcessingFee] = useState("62.50");
   const [refundAmount, setRefundAmount] = useState("75.00");
@@ -2356,7 +2524,7 @@ export function PayoutReconciliationHub() {
       },
     onSuccess: (res) => {
       setPayoutNotice(
-        `Synced ${res.imported_count} bank feed transaction(s) into Bank Rows (${res.skipped_duplicates} duplicate(s) skipped).`,
+        `Imported ${res.imported_count} bank transaction(s) (${res.skipped_duplicates} duplicate(s) skipped).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-payout-reconciliation"],
@@ -2372,7 +2540,8 @@ export function PayoutReconciliationHub() {
           {
             params: { path },
             body: {
-              payout_reference: payoutRef,
+              payout_reference:
+                payoutRef || `PAYOUT-${new Date().toISOString().slice(0, 10)}`,
               provider,
               currency: b.currency || "USD",
               gross_sales_amount: grossSales,
@@ -2392,7 +2561,7 @@ export function PayoutReconciliationHub() {
       },
     onSuccess: (res) => {
       setPayoutNotice(
-        `Reconciled Payout ${res.payout_reference}: Gross ${res.gross_sales_amount} -> Net Bank Deposit ${res.net_payout_amount} (${res.status}).`,
+        `Saved payout breakdown ${res.payout_reference}: gross sales ${res.gross_sales_amount}, net bank deposit ${res.net_payout_amount}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-payout-reconciliation"],
@@ -2410,47 +2579,46 @@ export function PayoutReconciliationHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          Phase 3.2 (P2-D1 & P3-J) · Live Bank Feed & Gross-to-Net Payout
-          Reconciliation
-        </h2>
+        <h2>Bank feed &amp; merchant payouts</h2>
         <p className="muted">
-          Synchronize live bank feed transactions via Stripe Financial
-          Connections and automatically split net merchant payouts into balanced
-          double-entry lines (Gross Sales Revenue, Processing Fees, Customer
-          Refunds/Disputes, Withheld Tax, and Net Bank Settlement).
+          Import recent bank feed transactions and split merchant deposits
+          (Stripe, Shopify, Amazon, Square) into gross sales, processing fees,
+          refunds, withheld tax, and the net deposit that hit your bank account.
         </p>
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            flexWrap: "wrap",
-            marginTop: "12px",
-            alignItems: "center",
-          }}
-        >
-          <Badge>
-            Bank Feed Mode:{" "}
-            {query.data?.feed_status.provider_mode?.toUpperCase() ||
-              "STRIPE_SANDBOX_FEED"}
+        <div className="p3-actions-row">
+          <Badge
+            tone={
+              query.data?.feed_status.stripe_financial_connections_live
+                ? "good"
+                : "neutral"
+            }
+          >
+            Bank feed:{" "}
+            {query.data?.feed_status.stripe_financial_connections_live
+              ? "Live connection"
+              : "Ready"}
           </Badge>
           <Button
             variant="secondary"
             busy={syncFeedMutation.isPending}
             onClick={() => syncFeedMutation.mutate()}
           >
-            Sync Live Bank Feed Into Bank Rows
+            Import latest bank transactions
           </Button>
         </div>
       </div>
 
       <div className="panel">
-        <h3>1. Reconcile Gross-to-Net Merchant Payout Split</h3>
+        <h3>Split a merchant payout</h3>
+        <p className="muted">
+          Enter the figures from your payment processor statement to create a
+          balanced entry matching your bank deposit.
+        </p>
         <ErrorNotice
           error={syncFeedMutation.error || reconcileMutation.error}
         />
         <div className="form-grid">
-          <Field label="Merchant Payout Provider">
+          <Field label="Payment platform">
             <select
               value={provider}
               onChange={(e) =>
@@ -2463,23 +2631,20 @@ export function PayoutReconciliationHub() {
                 )
               }
             >
-              <option value="stripe_financial_connections">
-                Stripe Financial Connections & Payouts
-              </option>
-              <option value="shopify_payouts">Shopify Payments Payout</option>
-              <option value="amazon_settlement">
-                Amazon Seller Settlement
-              </option>
-              <option value="square_payouts">Square Merchant Payout</option>
+              <option value="stripe_financial_connections">Stripe</option>
+              <option value="shopify_payouts">Shopify Payments</option>
+              <option value="amazon_settlement">Amazon Seller</option>
+              <option value="square_payouts">Square</option>
             </select>
           </Field>
-          <Field label="Payout Reference / Trace ID">
+          <Field label="Payout reference">
             <input
               value={payoutRef}
               onChange={(e) => setPayoutRef(e.target.value)}
+              placeholder="e.g. PO-2026-1126"
             />
           </Field>
-          <Field label="Gross Sales Revenue">
+          <Field label="Gross sales">
             <input
               type="number"
               step="0.01"
@@ -2487,7 +2652,7 @@ export function PayoutReconciliationHub() {
               onChange={(e) => setGrossSales(e.target.value)}
             />
           </Field>
-          <Field label="Merchant Processing Fees">
+          <Field label="Processing fees">
             <input
               type="number"
               step="0.01"
@@ -2495,7 +2660,7 @@ export function PayoutReconciliationHub() {
               onChange={(e) => setProcessingFee(e.target.value)}
             />
           </Field>
-          <Field label="Customer Refunds & Disputes">
+          <Field label="Customer refunds & disputes">
             <input
               type="number"
               step="0.01"
@@ -2503,7 +2668,7 @@ export function PayoutReconciliationHub() {
               onChange={(e) => setRefundAmount(e.target.value)}
             />
           </Field>
-          <Field label="Marketplace Tax Withheld">
+          <Field label="Marketplace tax withheld">
             <input
               type="number"
               step="0.01"
@@ -2512,22 +2677,15 @@ export function PayoutReconciliationHub() {
             />
           </Field>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "12px",
-            alignItems: "center",
-            flexWrap: "wrap",
-          }}
-        >
+        <div className="p3-actions-row">
           <Button
             busy={reconcileMutation.isPending}
             onClick={() => reconcileMutation.mutate()}
           >
-            Split & Reconcile Gross-to-Net Payout
+            Save payout split
           </Button>
           <Badge>
-            Calculated Net Bank Deposit: {b.currency || "USD"} {netPreview}
+            Expected bank deposit: {b.currency || "USD"} {netPreview}
           </Badge>
         </div>
         {payoutNotice && (
@@ -2543,25 +2701,29 @@ export function PayoutReconciliationHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Reconciled Gross-to-Net Payout Splits</h3>
+          <h3>Saved payout splits</h3>
           <Table
-            caption="Gross-to-Net Merchant Payout Reconciliations"
+            caption="Saved merchant payout splits"
+            emptyText="No merchant payouts split yet."
             rows={query.data.reconciliations}
             rowKey={(r) => r.id}
             columns={[
-              { label: "Payout Ref", render: (r) => r.payout_reference },
-              { label: "Provider", render: (r) => <Badge>{r.provider}</Badge> },
+              { label: "Reference", render: (r) => r.payout_reference },
               {
-                label: "Gross Sales",
+                label: "Platform",
+                render: (r) => <Badge>{humanize(r.provider)}</Badge>,
+              },
+              {
+                label: "Gross sales",
                 render: (r) => `${r.currency} ${r.gross_sales_amount}`,
               },
               {
-                label: "Fees / Refunds / Tax",
+                label: "Fees / refunds / tax",
                 render: (r) =>
                   `-${r.processing_fee_amount} / -${r.refund_dispute_amount} / -${r.tax_withheld_amount}`,
               },
               {
-                label: "Net Bank Deposit",
+                label: "Net bank deposit",
                 render: (r) => (
                   <strong>
                     {r.currency} {r.net_payout_amount}
@@ -2569,30 +2731,16 @@ export function PayoutReconciliationHub() {
                 ),
               },
               {
-                label: "Balanced Double-Entry Split Lines",
-                render: (r) => (
-                  <span style={{ fontSize: "0.78rem" }}>
-                    {(r.split_lines || [])
-                      .map((l) =>
-                        Number(l.debit) > 0
-                          ? `DR ${l.label}: ${l.debit}`
-                          : `CR ${l.label}: ${l.credit}`,
-                      )
-                      .join(" · ")}
-                  </span>
-                ),
+                label: "Status",
+                render: (r) => <Badge>{humanize(r.status)}</Badge>,
               },
-              { label: "Status", render: (r) => <Badge>{r.status}</Badge> },
             ]}
           />
           {query.data.recent_bank_feed_rows.length > 0 && (
             <div style={{ marginTop: "16px" }}>
-              <h4>
-                Recent Synced Bank Feed Transactions (Stripe Financial
-                Connections)
-              </h4>
+              <h4>Recently imported bank transactions</h4>
               <Table
-                caption="Recent Synced Bank Feed Transactions"
+                caption="Recently imported bank transactions"
                 rows={query.data.recent_bank_feed_rows}
                 rowKey={(row) => row.id}
                 columns={[
@@ -2600,12 +2748,8 @@ export function PayoutReconciliationHub() {
                   { label: "Description", render: (row) => row.description },
                   { label: "Amount", render: (row) => row.amount },
                   {
-                    label: "Feed Trace ID",
-                    render: (row) => <code>{row.external_id || "—"}</code>,
-                  },
-                  {
-                    label: "Review State",
-                    render: (row) => <Badge>{row.state}</Badge>,
+                    label: "Status",
+                    render: (row) => <Badge>{humanize(row.state)}</Badge>,
                   },
                 ]}
               />
@@ -2623,12 +2767,8 @@ export function VoiceNoteInstructionReview() {
   const access = useAccess();
   const canReview = access?.role === "owner" || access?.role === "accountant";
 
-  const [audioFilename, setAudioFilename] = useState(
-    "founder-voice-note-aws-bill.webm",
-  );
-  const [transcript, setTranscript] = useState(
-    "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax for November production cluster hosting.",
-  );
+  const [audioFilename, setAudioFilename] = useState("");
+  const [transcript, setTranscript] = useState("");
   const [voiceNotice, setVoiceNotice] = useState("");
 
   const query = useQuery({
@@ -2667,7 +2807,7 @@ export function VoiceNoteInstructionReview() {
         api.POST("/api/v1/businesses/{business_id}/p3/voice-instructions", {
           params: { path },
           body: {
-            audio_filename: audioFilename,
+            audio_filename: audioFilename || "voice-note.webm",
             audio_mime_type: "audio/webm",
             audio_duration_seconds: 14,
             audio_base64: "",
@@ -2686,7 +2826,7 @@ export function VoiceNoteInstructionReview() {
       },
     onSuccess: (res) => {
       setVoiceNotice(
-        `Extracted ${res.extracted_action.toUpperCase()} for ${res.extracted_counterparty} (${res.extracted_currency} ${res.extracted_amount}) -> Created Review Draft (${res.source_draft_id?.slice(0, 8) || "pending"}).`,
+        `Prepared a ${humanize(res.extracted_action).toLowerCase()} draft for ${res.extracted_counterparty} (${res.extracted_currency} ${res.extracted_amount}). Review it below.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-voice-instructions"],
@@ -2711,8 +2851,8 @@ export function VoiceNoteInstructionReview() {
               decision,
               reviewer_note:
                 decision === "approve"
-                  ? "Verified voice transcript and approved by accountant"
-                  : "Rejected during human review",
+                  ? "Approved during review"
+                  : "Declined during review",
             },
           },
         ),
@@ -2727,26 +2867,25 @@ export function VoiceNoteInstructionReview() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>Phase 3.3 (P3-C) · Voice-Note Accounting Instruction Review</h2>
+        <h2>Voice notes</h2>
         <p className="muted">
-          Capture or upload spoken accounting instructions, transcribe and
-          extract structured bookkeeping entities (action type, counterparty,
-          amount, tax, confidence score), and route them into linked Source
-          Drafts for mandatory human accountant review before posting.
+          Upload a voice memo or type a quick spoken note to turn bills,
+          expenses, and invoices into drafts for your accountant to review.
         </p>
       </div>
 
       <div className="panel">
-        <h3>1. Upload or Capture Voice-Note Accounting Instruction</h3>
+        <h3>Create a draft from a voice note</h3>
         <ErrorNotice error={ingestMutation.error || reviewMutation.error} />
         <div className="form-grid">
-          <Field label="Voice Note Audio File / Recording Name">
+          <Field label="Recording title (optional)">
             <input
               value={audioFilename}
               onChange={(e) => setAudioFilename(e.target.value)}
+              placeholder="e.g. november-electricity-bill.webm"
             />
           </Field>
-          <Field label="Upload Audio Recording (.webm / .mp3 / .wav)">
+          <Field label="Upload audio file (.webm, .mp3, .wav)">
             <input
               type="file"
               accept="audio/*"
@@ -2759,64 +2898,49 @@ export function VoiceNoteInstructionReview() {
             />
           </Field>
         </div>
-        <div
-          style={{
-            display: "flex",
-            gap: "8px",
-            flexWrap: "wrap",
-            marginBottom: "10px",
-          }}
-        >
+        <div className="p3-actions-row" style={{ marginBottom: "12px" }}>
           <Button
             type="button"
             variant="secondary"
             onClick={() => {
-              setAudioFilename("founder-voice-aws-bill.webm");
+              setAudioFilename("hosting-bill.webm");
               setTranscript(
-                "Record supplier bill from Amazon Web Services for $480.00 including $30.00 tax for November production cluster hosting.",
+                "Record supplier bill from Cloud Hosting Co for $480.00 including $30.00 tax for November hosting.",
               );
             }}
           >
-            Sample: Supplier Bill ($480)
+            Try example: Supplier bill
           </Button>
           <Button
             type="button"
             variant="secondary"
             onClick={() => {
-              setAudioFilename("founder-voice-client-invoice.webm");
+              setAudioFilename("client-invoice.webm");
               setTranscript(
-                "Issue customer invoice to Acme Enterprise Corp for $3500.00 including $250.00 tax for Q4 financial advisory retainer.",
+                "Issue customer invoice to Acme Corp for $3500.00 including $250.00 tax for advisory work.",
               );
             }}
           >
-            Sample: Customer Invoice ($3,500)
-          </Button>
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => {
-              setAudioFilename("founder-voice-kelectric-expense.webm");
-              setTranscript(
-                "Paid expense to K-Electric Utility for $420.00 including $20.00 tax for October office electricity.",
-              );
-            }}
-          >
-            Sample: Utility Expense ($420)
+            Try example: Sales invoice
           </Button>
         </div>
-        <Field label="Transcribed Voice Instruction (or Spoken Prompt)">
+        <Field label="Spoken note or transcript">
           <textarea
             rows={2}
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
+            placeholder="Describe the bill, expense, or invoice in plain words…"
           />
         </Field>
-        <Button
-          busy={ingestMutation.isPending}
-          onClick={() => ingestMutation.mutate()}
-        >
-          Transcribe, Extract & Create Review Draft
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            disabled={!transcript.trim()}
+            busy={ingestMutation.isPending}
+            onClick={() => ingestMutation.mutate()}
+          >
+            Create draft for review
+          </Button>
+        </div>
         {voiceNotice && (
           <p
             role="status"
@@ -2830,39 +2954,43 @@ export function VoiceNoteInstructionReview() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Extracted Voice Instructions Queue (Human Review Gate)</h3>
+          <h3>Voice notes awaiting review</h3>
           <Table
-            caption="Voice-Note Accounting Instructions"
+            caption="Voice notes awaiting review"
+            emptyText="No voice notes submitted yet."
             rows={query.data.instructions}
             rowKey={(i) => i.id}
             columns={[
               {
-                label: "Action",
-                render: (i) => <Badge>{i.extracted_action}</Badge>,
+                label: "Type",
+                render: (i) => <Badge>{humanize(i.extracted_action)}</Badge>,
               },
               {
-                label: "Counterparty",
+                label: "Contact",
                 render: (i) => i.extracted_counterparty,
               },
               {
-                label: "Amount (Tax)",
+                label: "Amount (tax)",
                 render: (i) =>
-                  `${i.extracted_currency} ${i.extracted_amount} (Tax: ${i.extracted_tax_amount})`,
+                  `${i.extracted_currency} ${i.extracted_amount} (tax ${i.extracted_tax_amount})`,
               },
               {
-                label: "Transcript",
+                label: "Note",
                 render: (i) => i.transcript_text,
               },
               {
                 label: "Confidence",
-                render: (i) => `${(i.confidence_score * 100).toFixed(1)}%`,
+                render: (i) => `${Math.round(i.confidence_score * 100)}%`,
               },
-              { label: "Status", render: (i) => <Badge>{i.status}</Badge> },
               {
-                label: "Accountant Action",
+                label: "Status",
+                render: (i) => <Badge>{humanize(i.status)}</Badge>,
+              },
+              {
+                label: "Review",
                 render: (i) =>
                   i.status === "pending_review" && canReview ? (
-                    <div style={{ display: "flex", gap: "8px" }}>
+                    <div className="p4-inline-actions">
                       <Button
                         busy={reviewMutation.isPending}
                         onClick={() =>
@@ -2884,15 +3012,11 @@ export function VoiceNoteInstructionReview() {
                           })
                         }
                       >
-                        Reject
+                        Decline
                       </Button>
                     </div>
                   ) : (
-                    <code>
-                      {i.journal_id?.slice(0, 8) ||
-                        i.source_draft_id?.slice(0, 8) ||
-                        i.status}
-                    </code>
+                    <span className="muted">{humanize(i.status)}</span>
                   ),
               },
             ]}
@@ -2911,9 +3035,7 @@ export function TenantEncryptionKeyVault() {
 
   const [destroyModalOpen, setDestroyModalOpen] = useState(false);
   const [confirmPhrase, setConfirmPhrase] = useState("");
-  const [destroyReason, setDestroyReason] = useState(
-    "Tenant offboarding / GDPR cryptographic erasure drill",
-  );
+  const [destroyReason, setDestroyReason] = useState("");
   const [keyNotice, setKeyNotice] = useState("");
 
   const query = useQuery({
@@ -2961,7 +3083,7 @@ export function TenantEncryptionKeyVault() {
       },
     onSuccess: (res) => {
       setKeyNotice(
-        `Rotated tenant Data Encryption Key to v${res.key_version} (Fingerprint: ${res.dek_fingerprint_sha256.slice(0, 16)}…).`,
+        `Created new workspace encryption key (version ${res.key_version}).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-encryption-keys"],
@@ -2978,7 +3100,7 @@ export function TenantEncryptionKeyVault() {
             params: { path },
             body: {
               confirmation: confirmPhrase,
-              reason: destroyReason,
+              reason: destroyReason || "Workspace closure request",
             },
           },
         ),
@@ -2991,7 +3113,7 @@ export function TenantEncryptionKeyVault() {
       setDestroyModalOpen(false);
       setConfirmPhrase("");
       setKeyNotice(
-        `Cryptographically destroyed Tenant DEK v${res.destroyed_key_version} (${res.shredded_records_count} record(s) shredded). Destruction Certificate SHA-256: ${res.destruction_certificate_sha256}`,
+        `Permanently erased encryption key version ${res.destroyed_key_version} (${res.shredded_records_count} saved credential(s) rendered unreadable).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-encryption-keys"],
@@ -3004,50 +3126,38 @@ export function TenantEncryptionKeyVault() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          Phase 3.4 (P3-G) · Per-Tenant Envelope Encryption Keys & Provable Key
-          Destruction
-        </h2>
+        <h2>Data encryption</h2>
         <p className="muted">
-          Each business workspace has a dedicated 256-bit Data Encryption Key
-          (DEK) wrapped by the platform Master Key Encryption Key (KEK).
-          Supports online key rotation and provable cryptographic key
-          destruction (crypto-shredding) with a tamper-evident SHA-256
-          destruction certificate.
+          Saved supplier logins, tokens, and sensitive workspace secrets are
+          protected with a dedicated encryption key for this business. You can
+          rotate the key periodically or permanently erase it when closing the
+          workspace.
         </p>
         {es && (
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              flexWrap: "wrap",
-              marginTop: "12px",
-              alignItems: "center",
-            }}
-          >
-            <Badge>
-              Master KEK: {es.master_kek_configured ? "ACTIVE" : "UNCONFIGURED"}
+          <div className="p3-actions-row">
+            <Badge tone={es.master_kek_configured ? "good" : "neutral"}>
+              Protection: {es.master_kek_configured ? "Active" : "Standard"}
             </Badge>
             <Badge>
-              Active Tenant DEK:{" "}
+              Current key:{" "}
               {es.active_key_version
-                ? `v${es.active_key_version} (${es.active_key_status.toUpperCase()})`
-                : "DESTROYED (SHREDDED)"}
+                ? `Version ${es.active_key_version} (${humanize(es.active_key_status)})`
+                : "Erased"}
             </Badge>
-            <Badge>Protected Secrets: {es.protected_records_count}</Badge>
+            <Badge>Protected items: {es.protected_records_count}</Badge>
             <Button
               variant="secondary"
               busy={rotateMutation.isPending}
               onClick={() => rotateMutation.mutate()}
             >
-              Rotate Tenant DEK (v+1)
+              Rotate encryption key
             </Button>
             {isOwner && !es.provably_shredded && (
               <Button
                 variant="danger"
                 onClick={() => setDestroyModalOpen(true)}
               >
-                Cryptographically Destroy Tenant Key
+                Permanently erase key
               </Button>
             )}
           </div>
@@ -3066,37 +3176,30 @@ export function TenantEncryptionKeyVault() {
 
       {query.data && (
         <div className="panel">
-          <h3>Tenant DEK Lifecycle & Cryptographic Destruction Certificates</h3>
+          <h3>Key history</h3>
           <Table
-            caption="Per-Tenant Envelope Encryption Key Versions"
+            caption="Encryption key history"
+            emptyText="No key versions recorded yet."
             rows={query.data.keys}
             rowKey={(k) => k.id}
             columns={[
-              { label: "Version", render: (k) => `v${k.key_version}` },
-              { label: "Algorithm", render: (k) => k.algorithm },
+              { label: "Version", render: (k) => `Version ${k.key_version}` },
               {
-                label: "DEK Fingerprint (SHA-256)",
-                render: (k) => (
-                  <code>{k.dek_fingerprint_sha256.slice(0, 16)}…</code>
-                ),
+                label: "Created",
+                render: (k) => formatWhen(k.created_at),
               },
               {
-                label: "Wrapped Key Material",
+                label: "Key state",
+                render: (k) => (k.wrapped_dek_present ? "Active" : "Erased"),
+              },
+              {
+                label: "Status",
+                render: (k) => <Badge>{humanize(k.status)}</Badge>,
+              },
+              {
+                label: "Erasure confirmation",
                 render: (k) =>
-                  k.wrapped_dek_present
-                    ? "Wrapped by Master KEK"
-                    : "WIPED (0 bytes)",
-              },
-              { label: "Status", render: (k) => <Badge>{k.status}</Badge> },
-              {
-                label: "Destruction Certificate SHA-256",
-                render: (k) => (
-                  <code>
-                    {k.destruction_certificate_sha256
-                      ? k.destruction_certificate_sha256.slice(0, 20) + "…"
-                      : "—"}
-                  </code>
-                ),
+                  k.destruction_certificate_sha256 ? "Certificate issued" : "—",
               },
             ]}
           />
@@ -3106,15 +3209,16 @@ export function TenantEncryptionKeyVault() {
       {destroyModalOpen && (
         <Modal
           open={true}
-          title="Confirm Cryptographic Tenant Key Destruction"
-          description="Permanently shred the wrapped Data Encryption Key (DEK) for this workspace and emit an immutable SHA-256 destruction certificate."
+          title="Permanently erase workspace encryption key"
+          description="This permanently makes all stored connector passwords and tokens for this workspace unreadable. This cannot be undone."
           onClose={() => setDestroyModalOpen(false)}
         >
           <div className="stack" style={{ gap: "12px" }}>
-            <Field label="Destruction Reason / Audit Reference">
+            <Field label="Reason for erasing">
               <input
                 value={destroyReason}
                 onChange={(e) => setDestroyReason(e.target.value)}
+                placeholder="e.g. Closing business workspace"
               />
             </Field>
             <Field label="Type DESTROY-TENANT-KEY to confirm">
@@ -3125,13 +3229,7 @@ export function TenantEncryptionKeyVault() {
                 autoFocus
               />
             </Field>
-            <div
-              style={{
-                display: "flex",
-                gap: "10px",
-                justifyContent: "flex-end",
-              }}
-            >
+            <div className="p3-modal-actions">
               <Button
                 type="button"
                 variant="secondary"
@@ -3146,7 +3244,7 @@ export function TenantEncryptionKeyVault() {
                 busy={destroyMutation.isPending}
                 onClick={() => destroyMutation.mutate()}
               >
-                Confirm Cryptographic Key Destruction
+                Erase key permanently
               </Button>
             </div>
           </div>
@@ -3204,7 +3302,6 @@ export function AiOcrCostBenchmarkHub() {
           baseline_p2_cost_usd: string;
           p3_routed_cost_usd: string;
           cost_reduction_percent: number;
-          routing_tier: string;
         }>;
       },
   });
@@ -3230,7 +3327,7 @@ export function AiOcrCostBenchmarkHub() {
       },
     onSuccess: (res) => {
       setBenchNotice(
-        `Evaluated ${res.language_locale} (${res.scan_orientation}): Field F1 ${(res.field_extraction_f1 * 100).toFixed(1)}%, Cost Reduction ${res.cost_reduction_percent}% (${res.abstained_to_manual_review ? "Abstained to Human Review" : "Auto-Draft Passed"}).`,
+        `Sample scan check completed: ${(res.field_extraction_f1 * 100).toFixed(1)}% field accuracy (${res.abstained_to_manual_review ? "routed to manual review because scan was blurry" : "ready for draft"}).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-ai-benchmarks"],
@@ -3243,75 +3340,61 @@ export function AiOcrCostBenchmarkHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P3-F (P3-F1 & P3-F3) · Multilingual/Rotated OCR Matrix & 50% AI
-          Cost-Reduction Benchmark
-        </h2>
+        <h2>Document scanning quality</h2>
         <p className="muted">
-          Evaluates multilingual invoice/receipt OCR across rotated/skewed scans
-          with low-confidence abstention gates, and verifies the &ge;50% AI
-          per-document inference cost reduction via deterministic template
-          caching and quantized local PaddleOCR routing.
+          Preview how invoice and receipt scanning handles different languages,
+          rotated phone photos, and blurry receipts. Unclear scans are sent to
+          manual review rather than guessed.
         </p>
         {s && (
           <div className="p3-badge-row">
-            <Badge>SIMULATED SYNTHETIC FIXTURE</Badge>
+            <Badge>Sample figures</Badge>
             <Badge>
-              Simulated P2 Baseline: ${s.baseline_p2_cost_per_doc_usd}/doc
+              Estimated cost per document: ${s.current_p3_cost_per_doc_usd}
             </Badge>
-            <Badge>
-              Simulated P3 Routed: ${s.current_p3_cost_per_doc_usd}/doc
-            </Badge>
-            <Badge>
-              Simulated Cost Delta: {s.cost_reduction_percent}% (Target &ge;
-              {s.target_reduction_percent}%:{" "}
-              {s.target_met ? "SIMULATED PASS" : "IN PROGRESS"})
-            </Badge>
+            <Badge>Estimated savings: {s.cost_reduction_percent}%</Badge>
           </div>
         )}
-        <p className="muted" role="note">
-          <strong>W0 Provenance Notice:</strong> Predefined P3 benchmark figures
-          shown on this screen are simulated synthetic regression fixtures, not
-          measured live production model accuracy, confidence, or cost savings.
-          Use the W0 Dataset &amp; Evaluation Registry in AI Accounting Copilot
-          (/ai-copilot) to separate supplied synthetic predictions from actual
-          Groq model executions.
+        <p className="muted" role="note" style={{ marginTop: "10px" }}>
+          <strong>Note:</strong> The figures on this page use built-in sample
+          receipts to test rotated and blurry scan handling — they are not
+          measurements from your own uploaded documents.
         </p>
       </div>
 
       <div className="panel">
-        <h3>1. Run Multilingual & Rotated Scan Evaluation</h3>
+        <h3>Run a sample scan check</h3>
         <ErrorNotice error={evalMutation.error} />
         <div className="form-grid">
-          <Field label="Document Language & Script Locale">
+          <Field label="Document language">
             <select
               value={locale}
               onChange={(e) => setLocale(e.target.value as typeof locale)}
             >
-              <option value="ur_PK">Urdu / Pakistan (ur_PK · PKR)</option>
-              <option value="ar_AE">Arabic / UAE (ar_AE · AED)</option>
-              <option value="en_US">English / US (en_US · USD)</option>
-              <option value="es_ES">Spanish / EU (es_ES · EUR)</option>
-              <option value="fr_FR">French / EU (fr_FR · EUR)</option>
+              <option value="ur_PK">Urdu (Pakistan)</option>
+              <option value="ar_AE">Arabic (UAE)</option>
+              <option value="en_US">English (US)</option>
+              <option value="es_ES">Spanish</option>
+              <option value="fr_FR">French</option>
             </select>
           </Field>
-          <Field label="Scan Orientation & Physical Condition">
+          <Field label="Page angle or condition">
             <select
               value={orientation}
               onChange={(e) =>
                 setOrientation(e.target.value as typeof orientation)
               }
             >
-              <option value="90_deg_rotated">90° Rotated Mobile Photo</option>
-              <option value="180_deg_upside_down">180° Upside-Down Scan</option>
-              <option value="270_deg_rotated">270° Rotated Scan</option>
+              <option value="90_deg_rotated">Rotated sideways (90°)</option>
+              <option value="180_deg_upside_down">Upside down (180°)</option>
+              <option value="270_deg_rotated">Rotated sideways (270°)</option>
               <option value="skewed_thermal_receipt">
-                Skewed Thermal POS Receipt
+                Tilted paper receipt
               </option>
-              <option value="0_deg_clean">0° Clean Flatbed / PDF</option>
+              <option value="0_deg_clean">Straight PDF or scan</option>
             </select>
           </Field>
-          <Field label="P3 Cost-Optimization Routing Tier">
+          <Field label="Scanning method">
             <select
               value={routingTier}
               onChange={(e) =>
@@ -3319,31 +3402,31 @@ export function AiOcrCostBenchmarkHub() {
               }
             >
               <option value="hybrid_rule_cache_local_ocr">
-                Hybrid Rule Cache + Local Quantized OCR (65.5% Savings)
+                Standard fast scanner (recommended)
               </option>
               <option value="deterministic_template_cache">
-                Deterministic Vendor Template Cache (84.5% Savings)
+                Known supplier layout
               </option>
               <option value="cloud_vlm_fallback">
-                Cloud VLM Escalation Tier (51.2% Savings)
+                Detailed visual reader for complex pages
               </option>
             </select>
           </Field>
         </div>
         <div className="p3-actions-row">
-          <label>
+          <label className="p4-check-row">
             <input
               type="checkbox"
               checked={simulateBlur}
               onChange={(e) => setSimulateBlur(e.target.checked)}
-            />{" "}
-            Simulate Degraded / Blurred Scan (Test Abstention Gate &lt; 85%)
+            />
+            <span>Test a blurry photo (verifies manual-review safeguard)</span>
           </label>
           <Button
             busy={evalMutation.isPending}
             onClick={() => evalMutation.mutate()}
           >
-            Evaluate OCR Quality & Cost Benchmark
+            Run sample check
           </Button>
         </div>
         {benchNotice && (
@@ -3355,34 +3438,35 @@ export function AiOcrCostBenchmarkHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Recorded Multilingual OCR & Cost-Reduction Runs</h3>
+          <h3>Recent sample checks</h3>
           <Table
-            caption="Multilingual OCR and AI Cost Benchmark Runs"
+            caption="Sample document scan checks"
+            emptyText="No sample checks run yet."
             rows={query.data.runs}
             rowKey={(r) => r.id}
             columns={[
               {
-                label: "Locale",
+                label: "Language",
                 render: (r) => <Badge>{r.language_locale}</Badge>,
               },
-              { label: "Orientation", render: (r) => r.scan_orientation },
               {
-                label: "Char Acc / Field F1",
-                render: (r) =>
-                  `${(r.ocr_char_accuracy * 100).toFixed(1)}% / ${(r.field_extraction_f1 * 100).toFixed(1)}%`,
+                label: "Condition",
+                render: (r) => humanize(r.scan_orientation),
               },
               {
-                label: "Cost (P2 -> P3)",
+                label: "Reading accuracy",
                 render: (r) =>
-                  `$${r.baseline_p2_cost_usd} -> $${r.p3_routed_cost_usd} (-${r.cost_reduction_percent}%)`,
+                  `${(r.ocr_char_accuracy * 100).toFixed(1)}% text · ${(r.field_extraction_f1 * 100).toFixed(1)}% fields`,
               },
               {
-                label: "Safety Gate",
+                label: "Outcome",
                 render: (r) => (
-                  <Badge>
+                  <Badge
+                    tone={r.abstained_to_manual_review ? "warning" : "good"}
+                  >
                     {r.abstained_to_manual_review
-                      ? "ABSTAINED TO MANUAL REVIEW"
-                      : "PASSED"}
+                      ? "Sent to manual review"
+                      : "Ready for draft"}
                   </Badge>
                 ),
               },
@@ -3402,8 +3486,8 @@ export function AccountingExpansionHub() {
     | "payroll_clearing_split"
     | "short_pay_resolution"
   >("contract_revenue_schedule");
-  const [reference, setReference] = useState("SAAS-CONTRACT-2026-Q4");
-  const [counterparty, setCounterparty] = useState("Acme Enterprise Corp");
+  const [reference, setReference] = useState("");
+  const [counterparty, setCounterparty] = useState("");
   const [totalAmount, setTotalAmount] = useState("12000.00");
   const [months, setMonths] = useState(12);
   const [installmentNum, setInstallmentNum] = useState(1);
@@ -3456,8 +3540,8 @@ export function AccountingExpansionHub() {
             params: { path },
             body: {
               workflow_kind: workflowKind,
-              reference,
-              counterparty_name: counterparty,
+              reference: reference || "SCHED-01",
+              counterparty_name: counterparty || "Customer / Payroll",
               currency: b.currency || "USD",
               total_amount: totalAmount,
               months,
@@ -3480,7 +3564,7 @@ export function AccountingExpansionHub() {
       },
     onSuccess: (res) => {
       setExpNotice(
-        `Prepared ${res.workflow_kind} (${res.reference}): Recognized/Settled ${res.currency} ${res.recognized_or_settled_amount} · Deferred/Variance ${res.currency} ${res.deferred_or_variance_amount}.`,
+        `Prepared ${humanize(res.workflow_kind).toLowerCase()} (${res.reference}): ${res.currency} ${res.recognized_or_settled_amount} recognized, ${res.currency} ${res.deferred_or_variance_amount} remaining/variance.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-accounting-expansion"],
@@ -3491,23 +3575,19 @@ export function AccountingExpansionHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P3-I (P3-I1) · Contract Revenue Schedules, Payroll Clearing Splits &
-          Short-Pay Resolution
-        </h2>
+        <h2>Revenue schedules, payroll &amp; short payments</h2>
         <p className="muted">
-          Automated ratable contract revenue recognition with penny-exact final
-          installment rounding, gross-to-net payroll clearing splits (wages,
-          employer taxes, withholdings, benefits), and customer short-pay
-          discrepancy resolution.
+          Spread multi-month contract revenue evenly across months, split gross
+          payroll into wages, taxes, and benefits, or resolve invoices where a
+          customer paid slightly less than billed.
         </p>
       </div>
 
       <div className="panel">
-        <h3>1. Prepare Accounting Expansion Schedule or Split</h3>
+        <h3>Prepare a schedule or split</h3>
         <ErrorNotice error={executeMutation.error} />
         <div className="form-grid">
-          <Field label="Accounting Expansion Module">
+          <Field label="What would you like to calculate?">
             <select
               value={workflowKind}
               onChange={(e) =>
@@ -3515,29 +3595,31 @@ export function AccountingExpansionHub() {
               }
             >
               <option value="contract_revenue_schedule">
-                Contract Revenue Recognition Schedule (ASC 606 / IFRS 15)
+                Monthly contract revenue schedule
               </option>
               <option value="payroll_clearing_split">
-                Payroll Clearing & Tax/Benefit Split
+                Payroll wages, taxes &amp; benefits split
               </option>
               <option value="short_pay_resolution">
-                Customer Invoice Short-Pay Resolution
+                Customer short-payment resolution
               </option>
             </select>
           </Field>
-          <Field label="Contract / Payroll / Invoice Reference">
+          <Field label="Reference">
             <input
               value={reference}
               onChange={(e) => setReference(e.target.value)}
+              placeholder="e.g. ANNUAL-PLAN-104 or NOV-PAYROLL"
             />
           </Field>
-          <Field label="Counterparty / Payroll Batch Name">
+          <Field label="Customer or batch name">
             <input
               value={counterparty}
               onChange={(e) => setCounterparty(e.target.value)}
+              placeholder="e.g. Acme Corp or November Staff Payroll"
             />
           </Field>
-          <Field label="Total Contract / Gross Payroll / Invoice Amount">
+          <Field label="Total amount">
             <input
               type="number"
               step="0.01"
@@ -3547,7 +3629,7 @@ export function AccountingExpansionHub() {
           </Field>
           {workflowKind === "contract_revenue_schedule" && (
             <>
-              <Field label="Contract Term (Months)">
+              <Field label="Contract length (months)">
                 <input
                   type="number"
                   min={1}
@@ -3556,7 +3638,7 @@ export function AccountingExpansionHub() {
                   onChange={(e) => setMonths(Number(e.target.value) || 12)}
                 />
               </Field>
-              <Field label="Installment Number to Recognize">
+              <Field label="Month number to record">
                 <input
                   type="number"
                   min={1}
@@ -3571,7 +3653,7 @@ export function AccountingExpansionHub() {
           )}
           {workflowKind === "payroll_clearing_split" && (
             <>
-              <Field label="Employer Payroll Taxes">
+              <Field label="Employer payroll taxes">
                 <input
                   type="number"
                   step="0.01"
@@ -3579,7 +3661,7 @@ export function AccountingExpansionHub() {
                   onChange={(e) => setEmployerTax(e.target.value)}
                 />
               </Field>
-              <Field label="Employee Withholding Tax">
+              <Field label="Employee tax withheld">
                 <input
                   type="number"
                   step="0.01"
@@ -3587,7 +3669,7 @@ export function AccountingExpansionHub() {
                   onChange={(e) => setEmployeeWithholding(e.target.value)}
                 />
               </Field>
-              <Field label="Employee Benefits / Provident Deduction">
+              <Field label="Employee benefits deduction">
                 <input
                   type="number"
                   step="0.01"
@@ -3599,7 +3681,7 @@ export function AccountingExpansionHub() {
           )}
           {workflowKind === "short_pay_resolution" && (
             <>
-              <Field label="Cash Received (Short-Paid Settlement)">
+              <Field label="Amount actually received">
                 <input
                   type="number"
                   step="0.01"
@@ -3607,7 +3689,7 @@ export function AccountingExpansionHub() {
                   onChange={(e) => setSettledAmount(e.target.value)}
                 />
               </Field>
-              <Field label="Short-Pay Variance Policy">
+              <Field label="Reason for the difference">
                 <select
                   value={resolutionPolicy}
                   onChange={(e) =>
@@ -3617,25 +3699,27 @@ export function AccountingExpansionHub() {
                   }
                 >
                   <option value="early_payment_discount">
-                    Early Payment Cash Discount Allowed
+                    Early-payment discount
                   </option>
                   <option value="bank_fee_writeoff">
-                    Intermediary Bank Wire Fee Write-Off
+                    Bank wire fee deducted
                   </option>
                   <option value="disputed_credit_memo">
-                    Disputed Allowance / Credit Adjustment
+                    Agreed credit or allowance
                   </option>
                 </select>
               </Field>
             </>
           )}
         </div>
-        <Button
-          busy={executeMutation.isPending}
-          onClick={() => executeMutation.mutate()}
-        >
-          Compute Balanced Journal Split & Create Review Draft
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={executeMutation.isPending}
+            onClick={() => executeMutation.mutate()}
+          >
+            Calculate &amp; create draft
+          </Button>
+        </div>
         {expNotice && (
           <p role="status" className="success-text">
             {expNotice}
@@ -3645,15 +3729,16 @@ export function AccountingExpansionHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Executed Accounting Expansion Schedules & Splits</h3>
+          <h3>Saved schedules &amp; splits</h3>
           <Table
-            caption="Accounting Expansion Workflows"
+            caption="Saved revenue, payroll, and short-payment entries"
+            emptyText="No schedules or splits created yet."
             rows={query.data.workflows}
             rowKey={(w) => w.id}
             columns={[
               {
-                label: "Module",
-                render: (w) => <Badge>{w.workflow_kind}</Badge>,
+                label: "Type",
+                render: (w) => <Badge>{humanize(w.workflow_kind)}</Badge>,
               },
               { label: "Reference", render: (w) => w.reference },
               {
@@ -3661,27 +3746,13 @@ export function AccountingExpansionHub() {
                 render: (w) => `${w.currency} ${w.total_amount}`,
               },
               {
-                label: "Recognized / Settled",
+                label: "Recorded now",
                 render: (w) =>
                   `${w.currency} ${w.recognized_or_settled_amount}`,
               },
               {
-                label: "Deferred / Variance",
+                label: "Deferred / difference",
                 render: (w) => `${w.currency} ${w.deferred_or_variance_amount}`,
-              },
-              {
-                label: "Balanced Lines",
-                render: (w) => (
-                  <span style={{ fontSize: "0.78rem" }}>
-                    {(w.journal_lines || [])
-                      .map((l) =>
-                        Number(l.debit) > 0
-                          ? `DR ${l.label}: ${l.debit}`
-                          : `CR ${l.label}: ${l.credit}`,
-                      )
-                      .join(" · ")}
-                  </span>
-                ),
               },
             ]}
           />
@@ -3698,12 +3769,10 @@ export function EnterpriseSsoCellHub() {
   const [idpProvider, setIdpProvider] = useState<
     "okta" | "entra_id" | "google_workspace" | "onelogin"
   >("okta");
-  const [issuerUrl, setIssuerUrl] = useState(
-    "https://acme.okta.com/oauth2/default",
-  );
-  const [ssoClientId, setSsoClientId] = useState("0oa1balancenterprise");
+  const [issuerUrl, setIssuerUrl] = useState("");
+  const [ssoClientId, setSsoClientId] = useState("");
   const [ssoSecret, setSsoSecret] = useState("");
-  const [emailDomain, setEmailDomain] = useState("acme-enterprise.example");
+  const [emailDomain, setEmailDomain] = useState("");
   const [regionCell, setRegionCell] = useState<
     | "us-east-va-cell-1"
     | "eu-central-fra-cell-1"
@@ -3747,10 +3816,10 @@ export function EnterpriseSsoCellHub() {
           body: {
             protocol,
             idp_provider: idpProvider,
-            issuer_url: issuerUrl,
-            sso_client_id: ssoClientId,
+            issuer_url: issuerUrl || "https://login.yourcompany.com",
+            sso_client_id: ssoClientId || "company-sso-client",
             sso_client_secret_or_cert: ssoSecret,
-            email_domain: emailDomain,
+            email_domain: emailDomain || "yourcompany.com",
             enforce_sso: true,
             jit_default_role: "reviewer",
             region_cell: regionCell,
@@ -3764,7 +3833,7 @@ export function EnterpriseSsoCellHub() {
       },
     onSuccess: (res) => {
       setSsoNotice(
-        `Enterprise SSO & Regional Cell pinned to ${res.region_cell}. Attestation SHA-256: ${res.residency_attestation_sha256.slice(0, 20)}…`,
+        `Single sign-on settings saved. Workspace data region set to ${regionName(res.region_cell)}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p3-enterprise-sso-cell"],
@@ -3777,88 +3846,80 @@ export function EnterpriseSsoCellHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P3-K · Enterprise SSO (OIDC / SAML 2.0) & Regional Data-Residency Cell
-          Isolation
-        </h2>
+        <h2>Single sign-on &amp; data region</h2>
         <p className="muted">
-          Bind workspace identity to enterprise IdPs (Okta, Microsoft Entra ID,
-          Google Workspace, OneLogin) and pin tenant storage and compute to an
-          isolated regional deployment cell with cross-region egress blocking
-          and cryptographic residency attestation.
+          Let your team sign in with your company identity provider (Okta,
+          Microsoft, Google Workspace, or OneLogin) and choose the geographic
+          region where your workspace data is stored.
         </p>
         {cfg && (
           <div className="p3-badge-row">
-            <Badge>
-              SSO Protocol: {cfg.protocol.toUpperCase()} ({cfg.idp_provider})
-            </Badge>
-            <Badge>Pinned Regional Cell: {cfg.region_cell}</Badge>
-            <Badge>
-              Cross-Region Egress:{" "}
-              {cfg.cross_region_egress_blocked ? "BLOCKED" : "OPEN"}
-            </Badge>
-            <Badge>
-              Attestation: {cfg.residency_attestation_sha256.slice(0, 14)}…
+            <Badge>Provider: {humanize(cfg.idp_provider)}</Badge>
+            <Badge>Data region: {regionName(cfg.region_cell)}</Badge>
+            <Badge tone={cfg.cross_region_egress_blocked ? "good" : "neutral"}>
+              Data stays in region:{" "}
+              {cfg.cross_region_egress_blocked ? "Yes" : "Standard"}
             </Badge>
           </div>
         )}
       </div>
 
       <div className="panel">
-        <h3>Configure Enterprise SSO Federation & Regional Isolation Cell</h3>
+        <h3>Configure company sign-in &amp; region</h3>
         <ErrorNotice error={saveMutation.error} />
         <div className="form-grid">
-          <Field label="Federation Protocol">
-            <select
-              value={protocol}
-              onChange={(e) => setProtocol(e.target.value as "oidc" | "saml2")}
-            >
-              <option value="oidc">OpenID Connect (OIDC + PKCE)</option>
-              <option value="saml2">SAML 2.0 Enterprise Assertion</option>
-            </select>
-          </Field>
-          <Field label="Identity Provider (IdP)">
+          <Field label="Identity provider">
             <select
               value={idpProvider}
               onChange={(e) =>
                 setIdpProvider(e.target.value as typeof idpProvider)
               }
             >
-              <option value="okta">Okta Workforce Identity</option>
-              <option value="entra_id">Microsoft Entra ID (Azure AD)</option>
-              <option value="google_workspace">
-                Google Workspace Enterprise
-              </option>
-              <option value="onelogin">OneLogin Enterprise</option>
+              <option value="okta">Okta</option>
+              <option value="entra_id">Microsoft Entra ID</option>
+              <option value="google_workspace">Google Workspace</option>
+              <option value="onelogin">OneLogin</option>
             </select>
           </Field>
-          <Field label="IdP Issuer URL / Entity ID">
+          <Field label="Sign-in method">
+            <select
+              value={protocol}
+              onChange={(e) => setProtocol(e.target.value as "oidc" | "saml2")}
+            >
+              <option value="oidc">OpenID Connect (recommended)</option>
+              <option value="saml2">SAML 2.0</option>
+            </select>
+          </Field>
+          <Field label="Provider sign-in URL">
             <input
               value={issuerUrl}
               onChange={(e) => setIssuerUrl(e.target.value)}
+              placeholder="e.g. https://yourcompany.okta.com/oauth2/default"
             />
           </Field>
-          <Field label="SSO Client ID / Audience URI">
+          <Field label="Application client ID">
             <input
               value={ssoClientId}
               onChange={(e) => setSsoClientId(e.target.value)}
+              placeholder="Paste the client ID from your provider"
             />
           </Field>
-          <Field label="Client Secret or X.509 Signing Certificate (Encrypted)">
+          <Field label="Client secret or certificate">
             <input
               type="password"
               value={ssoSecret}
               onChange={(e) => setSsoSecret(e.target.value)}
-              placeholder="Fernet-encrypted under tenant DEK"
+              placeholder="Stored securely and never displayed again"
             />
           </Field>
-          <Field label="Verified Enterprise Email Domain">
+          <Field label="Company email domain">
             <input
               value={emailDomain}
               onChange={(e) => setEmailDomain(e.target.value)}
+              placeholder="e.g. yourcompany.com"
             />
           </Field>
-          <Field label="Pinned Regional Data-Residency Cell">
+          <Field label="Preferred data region">
             <select
               value={regionCell}
               onChange={(e) =>
@@ -3866,26 +3927,22 @@ export function EnterpriseSsoCellHub() {
               }
             >
               <option value="us-east-va-cell-1">
-                US East (N. Virginia · us-east-va-cell-1)
+                United States (Virginia)
               </option>
-              <option value="eu-central-fra-cell-1">
-                EU Central (Frankfurt GDPR · eu-central-fra-cell-1)
-              </option>
-              <option value="me-central-dxb-cell-1">
-                Middle East (Dubai DIFC · me-central-dxb-cell-1)
-              </option>
-              <option value="ap-south-khi-cell-1">
-                South Asia (Karachi Sovereign · ap-south-khi-cell-1)
-              </option>
+              <option value="eu-central-fra-cell-1">Europe (Frankfurt)</option>
+              <option value="me-central-dxb-cell-1">Middle East (Dubai)</option>
+              <option value="ap-south-khi-cell-1">South Asia (Karachi)</option>
             </select>
           </Field>
         </div>
-        <Button
-          busy={saveMutation.isPending}
-          onClick={() => saveMutation.mutate()}
-        >
-          Save Enterprise SSO & Pin Regional Cell
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={saveMutation.isPending}
+            onClick={() => saveMutation.mutate()}
+          >
+            Save sign-in &amp; region settings
+          </Button>
+        </div>
         {ssoNotice && (
           <p role="status" className="success-text">
             {ssoNotice}
@@ -3909,9 +3966,7 @@ export function P4EnterpriseOperationsHub() {
   const [fairShareWeight, setFairShareWeight] = useState("100");
   const [hardQuotaEnforcement, setHardQuotaEnforcement] = useState(true);
   const [alertThresholdPercent, setAlertThresholdPercent] = useState("80");
-  const [runbookOwner, setRunbookOwner] = useState(
-    "sre-oncall@balanc.enterprise",
-  );
+  const [runbookOwner, setRunbookOwner] = useState("");
   const [pagesCount, setPagesCount] = useState("1200");
   const [aiCostUsd, setAiCostUsd] = useState("14.40");
   const [storageMb, setStorageMb] = useState("240.00");
@@ -3972,7 +4027,7 @@ export function P4EnterpriseOperationsHub() {
               99,
               Math.max(50, Number(alertThresholdPercent) || 80),
             ),
-            runbook_owner: runbookOwner || "sre-oncall@balanc.enterprise",
+            runbook_owner: runbookOwner || "billing@yourcompany.com",
           },
         }),
       )) as unknown as {
@@ -3983,7 +4038,7 @@ export function P4EnterpriseOperationsHub() {
       },
     onSuccess: (res) => {
       setOpsNotice(
-        `Saved ${res.service_tier.toUpperCase()} tenant policy: ${res.daily_page_quota.toLocaleString()} pages/day cap, $${res.monthly_ai_budget_usd} monthly AI budget (${res.incident_state}).`,
+        `Usage limits saved: up to ${res.daily_page_quota.toLocaleString()} pages per day and $${res.monthly_ai_budget_usd} monthly AI budget.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-operations"],
@@ -4015,7 +4070,7 @@ export function P4EnterpriseOperationsHub() {
       },
     onSuccess: (res) => {
       setOpsNotice(
-        `Workload metered: ${res.pages_ingested_today.toLocaleString()} pages today, $${res.ai_spend_mtd_usd} AI spend MTD — State: ${res.incident_state.toUpperCase()}.`,
+        `Usage updated: ${res.pages_ingested_today.toLocaleString()} pages processed today, $${res.ai_spend_mtd_usd} spent this month.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-operations"],
@@ -4029,74 +4084,55 @@ export function P4EnterpriseOperationsHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P4-D · Enterprise Operations, Tenant Quotas, Fair-Share & AI Cost
-          Controls
-        </h2>
+        <h2>Usage limits &amp; spending alerts</h2>
         <p className="muted">
-          Enforce per-tenant page ingestion limits, monthly AI unit-cost
-          budgets, fair-share scheduler weights, and noisy-neighbor throttling
-          before workloads impact shared SLAs.
+          Set daily document limits, storage allowances, and monthly AI spending
+          caps for your workspace so there are never surprise charges.
         </p>
         {q && tel && (
           <>
             <div className="p4-kpi-grid">
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Tier & Incident State</span>
-                <span className="p4-kpi-value">
-                  {q.service_tier.toUpperCase()}
-                </span>
+                <span className="p4-kpi-label">Plan &amp; status</span>
+                <span className="p4-kpi-value">{humanize(q.service_tier)}</span>
                 <span className="p4-kpi-sub">
                   <Badge
                     tone={q.incident_state === "healthy" ? "good" : "warning"}
                   >
-                    {q.incident_state.toUpperCase()}
+                    {humanize(q.incident_state)}
                   </Badge>
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Daily Page Quota</span>
+                <span className="p4-kpi-label">Pages processed today</span>
                 <span className="p4-kpi-value">
                   {tel.pages_ingested_today.toLocaleString()} /{" "}
                   {q.daily_page_quota.toLocaleString()}
                 </span>
                 <span className="p4-kpi-sub">
-                  {tel.page_utilization_percent}% utilized ·{" "}
-                  {q.hard_quota_enforcement ? "Hard Gate" : "Soft Alert"}
+                  {tel.page_utilization_percent}% of daily limit
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Monthly AI Budget (MTD)</span>
+                <span className="p4-kpi-label">Monthly AI spend</span>
                 <span className="p4-kpi-value">${tel.ai_spend_mtd_usd}</span>
                 <span className="p4-kpi-sub">
-                  ${tel.ai_budget_remaining_usd} remaining of $
-                  {q.monthly_ai_budget_usd} ({tel.ai_budget_utilization_percent}
-                  %)
+                  ${tel.ai_budget_remaining_usd} left of $
+                  {q.monthly_ai_budget_usd}
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Worker Fair-Share</span>
-                <span className="p4-kpi-value">
-                  {q.max_concurrent_workers} Workers · W={q.fair_share_weight}
-                </span>
+                <span className="p4-kpi-label">Document storage</span>
+                <span className="p4-kpi-value">{tel.storage_used_mb} MB</span>
                 <span className="p4-kpi-sub">
-                  Storage {tel.storage_used_mb} MB / {q.storage_quota_gb} GB
+                  Allowance: {q.storage_quota_gb} GB
                 </span>
               </div>
-            </div>
-            <div className="p3-badge-row">
-              <Badge tone={tel.alert_triggered ? "warning" : "good"}>
-                {tel.alert_triggered
-                  ? `ALERT >= ${q.alert_threshold_percent}% THRESHOLD`
-                  : `WITHIN BUDGET (< ${q.alert_threshold_percent}%)`}
-              </Badge>
-              <Badge>{tel.noisy_neighbor_isolation}</Badge>
-              <Badge>Runbook Owner: {q.runbook_owner}</Badge>
             </div>
             <div
               className="p3-progress-track"
               style={{ marginTop: "14px", marginBottom: 0 }}
-              aria-label="Daily page quota utilization"
+              aria-label="Daily page limit usage"
             >
               <div
                 className="p3-progress-fill"
@@ -4110,10 +4146,10 @@ export function P4EnterpriseOperationsHub() {
       </div>
 
       <div className="panel">
-        <h3>1. Configure Tenant Quotas, AI Spend Cap & SRE Runbook Policy</h3>
+        <h3>Update workspace limits</h3>
         <ErrorNotice error={query.error || saveQuotasMutation.error} />
         <div className="form-grid">
-          <Field label="Enterprise Service Tier">
+          <Field label="Plan tier">
             <select
               value={serviceTier}
               onChange={(e) =>
@@ -4123,10 +4159,10 @@ export function P4EnterpriseOperationsHub() {
               <option value="starter">Starter</option>
               <option value="growth">Growth</option>
               <option value="enterprise">Enterprise</option>
-              <option value="sovereign">Sovereign Dedicated</option>
+              <option value="sovereign">Dedicated</option>
             </select>
           </Field>
-          <Field label="Daily Page Ingestion Quota">
+          <Field label="Daily document page limit">
             <input
               type="number"
               min={100}
@@ -4134,7 +4170,7 @@ export function P4EnterpriseOperationsHub() {
               onChange={(e) => setDailyPageQuota(e.target.value)}
             />
           </Field>
-          <Field label="Monthly AI Budget Cap (USD)">
+          <Field label="Monthly AI spending limit (USD)">
             <input
               type="number"
               step="0.01"
@@ -4142,7 +4178,7 @@ export function P4EnterpriseOperationsHub() {
               onChange={(e) => setMonthlyAiBudget(e.target.value)}
             />
           </Field>
-          <Field label="Evidence Storage Quota (GB)">
+          <Field label="Document storage limit (GB)">
             <input
               type="number"
               min={1}
@@ -4150,25 +4186,7 @@ export function P4EnterpriseOperationsHub() {
               onChange={(e) => setStorageQuotaGb(e.target.value)}
             />
           </Field>
-          <Field label="Max Concurrent Tenant Workers">
-            <input
-              type="number"
-              min={1}
-              max={256}
-              value={maxConcurrentWorkers}
-              onChange={(e) => setMaxConcurrentWorkers(e.target.value)}
-            />
-          </Field>
-          <Field label="Fair-Share Scheduler Weight (10–1000)">
-            <input
-              type="number"
-              min={10}
-              max={1000}
-              value={fairShareWeight}
-              onChange={(e) => setFairShareWeight(e.target.value)}
-            />
-          </Field>
-          <Field label="Warning Alert Threshold (%)">
+          <Field label="Alert me when usage reaches (%)">
             <input
               type="number"
               min={50}
@@ -4177,81 +4195,104 @@ export function P4EnterpriseOperationsHub() {
               onChange={(e) => setAlertThresholdPercent(e.target.value)}
             />
           </Field>
-          <Field label="SRE Runbook Owner Email">
+          <Field label="Alert notification email">
             <input
               value={runbookOwner}
               onChange={(e) => setRunbookOwner(e.target.value)}
+              placeholder="e.g. finance@yourcompany.com"
             />
           </Field>
         </div>
-        <label className="p4-check-row">
-          <input
-            type="checkbox"
-            checked={hardQuotaEnforcement}
-            onChange={(e) => setHardQuotaEnforcement(e.target.checked)}
-          />
-          Enforce Hard HTTP 429 Quota Gate (Reject Excess AI/Page Bursts)
-        </label>
+        <details className="p3-advanced-details">
+          <summary>Advanced processing options</summary>
+          <div className="form-grid">
+            <Field label="Parallel background tasks">
+              <input
+                type="number"
+                min={1}
+                max={256}
+                value={maxConcurrentWorkers}
+                onChange={(e) => setMaxConcurrentWorkers(e.target.value)}
+              />
+            </Field>
+            <Field label="Processing priority (10–1000)">
+              <input
+                type="number"
+                min={10}
+                max={1000}
+                value={fairShareWeight}
+                onChange={(e) => setFairShareWeight(e.target.value)}
+              />
+            </Field>
+          </div>
+          <label className="p4-check-row" style={{ marginTop: "10px" }}>
+            <input
+              type="checkbox"
+              checked={hardQuotaEnforcement}
+              onChange={(e) => setHardQuotaEnforcement(e.target.checked)}
+            />
+            <span>
+              Pause new background tasks automatically when limit is reached
+            </span>
+          </label>
+        </details>
         <div className="p3-actions-row">
           <Button
             busy={saveQuotasMutation.isPending}
             onClick={() => saveQuotasMutation.mutate()}
           >
-            Save Tenant Quota & AI Budget Policy
+            Save limits
           </Button>
         </div>
-      </div>
 
-      <div className="panel">
-        <h3>2. Meter Workload & Test Noisy-Neighbor Isolation</h3>
-        <p className="muted">
-          Record metered ingestion/AI consumption or simulate a noisy-neighbor
-          burst to validate fair-share throttling and hard 429 quota protection.
-        </p>
-        <ErrorNotice error={meterMutation.error} />
-        <div className="form-grid">
-          <Field label="Pages to Meter">
+        <details className="p3-advanced-details" style={{ marginTop: "18px" }}>
+          <summary>Test limit alerts with sample usage</summary>
+          <ErrorNotice error={meterMutation.error} />
+          <div className="form-grid">
+            <Field label="Sample pages">
+              <input
+                type="number"
+                min={1}
+                value={pagesCount}
+                onChange={(e) => setPagesCount(e.target.value)}
+              />
+            </Field>
+            <Field label="Sample AI spend (USD)">
+              <input
+                type="number"
+                step="0.01"
+                value={aiCostUsd}
+                onChange={(e) => setAiCostUsd(e.target.value)}
+              />
+            </Field>
+            <Field label="Sample storage (MB)">
+              <input
+                type="number"
+                step="0.01"
+                value={storageMb}
+                onChange={(e) => setStorageMb(e.target.value)}
+              />
+            </Field>
+          </div>
+          <label className="p4-check-row" style={{ marginTop: "10px" }}>
             <input
-              type="number"
-              min={1}
-              value={pagesCount}
-              onChange={(e) => setPagesCount(e.target.value)}
+              type="checkbox"
+              checked={simulateNoisyNeighbor}
+              onChange={(e) => setSimulateNoisyNeighbor(e.target.checked)}
             />
-          </Field>
-          <Field label="AI Inference Cost (USD)">
-            <input
-              type="number"
-              step="0.01"
-              value={aiCostUsd}
-              onChange={(e) => setAiCostUsd(e.target.value)}
-            />
-          </Field>
-          <Field label="Document Storage Delta (MB)">
-            <input
-              type="number"
-              step="0.01"
-              value={storageMb}
-              onChange={(e) => setStorageMb(e.target.value)}
-            />
-          </Field>
-        </div>
-        <label className="p4-check-row">
-          <input
-            type="checkbox"
-            checked={simulateNoisyNeighbor}
-            onChange={(e) => setSimulateNoisyNeighbor(e.target.checked)}
-          />
-          Simulate Noisy-Neighbor Burst Isolation (Throttle Worker Lane)
-        </label>
-        <div className="p3-actions-row">
-          <Button
-            variant="secondary"
-            busy={meterMutation.isPending}
-            onClick={() => meterMutation.mutate()}
-          >
-            Record Metered Workload & Evaluate Quota Gate
-          </Button>
-        </div>
+            <span>Test high-volume traffic spike protection</span>
+          </label>
+          <div className="p3-actions-row">
+            <Button
+              variant="secondary"
+              busy={meterMutation.isPending}
+              onClick={() => meterMutation.mutate()}
+            >
+              Run usage test
+            </Button>
+          </div>
+        </details>
+
         {opsNotice && (
           <p
             role="status"
@@ -4269,9 +4310,7 @@ export function P4EnterpriseOperationsHub() {
 export function P4OnlineLedgerMigrationsHub() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [migrationName, setMigrationName] = useState(
-    "2026_11_expand_journal_lines_reporting_dimension",
-  );
+  const [migrationName, setMigrationName] = useState("");
   const [targetTable, setTargetTable] = useState<
     | "app.journal_lines"
     | "app.journals"
@@ -4331,7 +4370,7 @@ export function P4OnlineLedgerMigrationsHub() {
         api.POST("/api/v1/businesses/{business_id}/p4/online-migrations/run", {
           params: { path },
           body: {
-            migration_name: migrationName,
+            migration_name: migrationName || "ledger-balance-verification",
             target_table: targetTable,
             pattern,
             batch_size: Math.max(50, Number(batchSize) || 1000),
@@ -4347,7 +4386,7 @@ export function P4OnlineLedgerMigrationsHub() {
       },
     onSuccess: (res) => {
       setMigNotice(
-        `Online migration "${res.migration_name}" completed (${res.phase}). Trial Balance tied out: ${res.trial_balance_tied_out ? "VERIFIED" : "MISMATCH"}.`,
+        `Data update "${res.migration_name}" finished (${humanize(res.phase)}). Trial balance check: ${res.trial_balance_tied_out ? "Balanced" : "Needs attention"}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-online-migrations"],
@@ -4379,7 +4418,7 @@ export function P4OnlineLedgerMigrationsHub() {
       )) as unknown as { migration_name: string; phase: string },
     onSuccess: (res) => {
       setMigNotice(
-        `Transitioned "${res.migration_name}" to phase: ${res.phase.toUpperCase()}.`,
+        `Updated "${res.migration_name}" to ${humanize(res.phase)}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-online-migrations"],
@@ -4392,41 +4431,36 @@ export function P4OnlineLedgerMigrationsHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P4-B · Zero-Downtime Online Large-Ledger Migrations (Expand / Backfill
-          / Verify)
-        </h2>
+        <h2>Data migration &amp; balance check</h2>
         <p className="muted">
-          Execute resumable expand-contract schema migrations under tight
-          PostgreSQL lock timeouts while proving pre- and post-backfill Trial
-          Balance debit = credit tie-outs across RLS-enforced tables.
+          Update large sets of historical accounting records without downtime,
+          while automatically verifying that your debits and credits stay equal
+          before and after every run.
         </p>
         {inv && (
           <div className="p4-kpi-grid">
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Posted Journal Lines</span>
+              <span className="p4-kpi-label">Posted ledger lines</span>
               <span className="p4-kpi-value">
                 {inv.posted_journal_lines_count.toLocaleString()}
               </span>
-              <span className="p4-kpi-sub">Active RLS ledger rows</span>
+              <span className="p4-kpi-sub">Saved in your books</span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Trial Balance Debits</span>
+              <span className="p4-kpi-label">Total debits</span>
               <span className="p4-kpi-value">
                 {b.currency} {inv.total_debits}
               </span>
-              <span className="p4-kpi-sub">Pre/Post tie-out baseline</span>
+              <span className="p4-kpi-sub">Current trial balance</span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Trial Balance Credits</span>
+              <span className="p4-kpi-label">Total credits</span>
               <span className="p4-kpi-value">
                 {b.currency} {inv.total_credits}
               </span>
               <span className="p4-kpi-sub">
                 <Badge tone={inv.trial_balance_balanced ? "good" : "warning"}>
-                  {inv.trial_balance_balanced
-                    ? "BALANCED (DR = CR)"
-                    : "IMBALANCED"}
+                  {inv.trial_balance_balanced ? "Balanced" : "Out of balance"}
                 </Badge>
               </span>
             </div>
@@ -4435,71 +4469,79 @@ export function P4OnlineLedgerMigrationsHub() {
       </div>
 
       <div className="panel">
-        <h3>1. Execute Resumable Expand / Backfill / Verify Migration</h3>
+        <h3>Start a background data update</h3>
         <ErrorNotice
           error={query.error || runMutation.error || transitionMutation.error}
         />
         <div className="form-grid">
-          <Field label="Migration Identifier">
+          <Field label="Update name">
             <input
               value={migrationName}
               onChange={(e) => setMigrationName(e.target.value)}
+              placeholder="e.g. Q4 department tag update"
             />
           </Field>
-          <Field label="Target Ledger Table">
+          <Field label="Records to check">
             <select
               value={targetTable}
               onChange={(e) =>
                 setTargetTable(e.target.value as typeof targetTable)
               }
             >
-              <option value="app.journal_lines">app.journal_lines</option>
-              <option value="app.journals">app.journals</option>
-              <option value="app.trade_documents">app.trade_documents</option>
-              <option value="app.bank_rows">app.bank_rows</option>
+              <option value="app.journal_lines">Journal lines</option>
+              <option value="app.journals">Journal entries</option>
+              <option value="app.trade_documents">Invoices and bills</option>
+              <option value="app.bank_rows">Bank transactions</option>
             </select>
           </Field>
-          <Field label="Online Migration Pattern">
+          <Field label="Update method">
             <select
               value={pattern}
               onChange={(e) => setPattern(e.target.value as typeof pattern)}
             >
               <option value="expand_backfill_verify_contract">
-                Expand / Backfill / Verify / Contract
+                Safe step-by-step update &amp; verify (recommended)
               </option>
               <option value="online_index_concurrently">
-                CREATE INDEX CONCURRENTLY (Zero Lock)
+                Refresh search index without downtime
               </option>
               <option value="dual_read_write_backfill">
-                Dual-Read / Dual-Write Shadow Backfill
+                Parallel background copy
               </option>
             </select>
           </Field>
-          <Field label="Chunk Batch Size">
-            <input
-              type="number"
-              min={50}
-              max={50000}
-              value={batchSize}
-              onChange={(e) => setBatchSize(e.target.value)}
-            />
-          </Field>
-          <Field label="PostgreSQL Lock Timeout (ms)">
-            <input
-              type="number"
-              min={10}
-              max={5000}
-              value={lockTimeoutMs}
-              onChange={(e) => setLockTimeoutMs(e.target.value)}
-            />
-          </Field>
         </div>
-        <Button
-          busy={runMutation.isPending}
-          onClick={() => runMutation.mutate()}
-        >
-          Run Online Ledger Migration & Verify Tie-Out
-        </Button>
+        <details className="p3-advanced-details">
+          <summary>Advanced batch settings</summary>
+          <div className="form-grid">
+            <Field label="Records per batch">
+              <input
+                type="number"
+                min={50}
+                max={50000}
+                value={batchSize}
+                onChange={(e) => setBatchSize(e.target.value)}
+              />
+            </Field>
+            <Field label="Maximum wait time (ms)">
+              <input
+                type="number"
+                min={10}
+                max={5000}
+                value={lockTimeoutMs}
+                onChange={(e) => setLockTimeoutMs(e.target.value)}
+              />
+            </Field>
+          </div>
+        </details>
+        <div className="p3-actions-row">
+          <Button
+            busy={runMutation.isPending}
+            onClick={() => runMutation.mutate()}
+          >
+            Start update &amp; verify balances
+          </Button>
+        </div>
         {migNotice && (
           <p
             role="status"
@@ -4513,25 +4555,26 @@ export function P4OnlineLedgerMigrationsHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Online Migration Runs & Trial Balance Verification Audit</h3>
+          <h3>Update history</h3>
           <Table
-            caption="Online Ledger Migrations"
+            caption="Data migration history"
+            emptyText="No background updates run yet."
             rows={query.data.migrations}
             rowKey={(m) => m.id}
             columns={[
               {
-                label: "Migration",
+                label: "Update",
                 render: (m) => (
                   <div>
                     <strong>{m.migration_name}</strong>
                     <div className="muted" style={{ fontSize: "0.78rem" }}>
-                      {m.target_table} · {m.pattern}
+                      {ledgerAreaName(m.target_table)}
                     </div>
                   </div>
                 ),
               },
               {
-                label: "Phase",
+                label: "Status",
                 render: (m) => (
                   <Badge
                     tone={
@@ -4542,35 +4585,24 @@ export function P4OnlineLedgerMigrationsHub() {
                           : "neutral"
                     }
                   >
-                    {m.phase}
+                    {humanize(m.phase)}
                   </Badge>
                 ),
               },
               {
-                label: "Progress & Cursor",
-                render: (m) => (
-                  <span>
-                    {m.processed_rows} / {m.total_rows} rows (
-                    {m.lock_timeout_ms}ms lock) · <code>{m.last_cursor}</code>
-                  </span>
-                ),
+                label: "Records checked",
+                render: (m) => `${m.processed_rows} / ${m.total_rows}`,
               },
               {
-                label: "Trial Balance Tie-Out",
+                label: "Balance check",
                 render: (m) => (
                   <Badge tone={m.trial_balance_tied_out ? "good" : "warning"}>
-                    {m.trial_balance_tied_out
-                      ? `TIED (${m.post_backfill_debit_total} = ${m.post_backfill_credit_total})`
-                      : "MISMATCH"}
+                    {m.trial_balance_tied_out ? "Balanced" : "Mismatch"}
                   </Badge>
                 ),
               },
               {
-                label: "Checksum",
-                render: (m) => <code>{m.checksum_sha256.slice(0, 12)}…</code>,
-              },
-              {
-                label: "Lifecycle Controls",
+                label: "Actions",
                 render: (m) => (
                   <div className="p4-inline-actions">
                     {m.phase !== "paused" && (
@@ -4598,7 +4630,7 @@ export function P4OnlineLedgerMigrationsHub() {
                           })
                         }
                       >
-                        Verify & Complete
+                        Mark complete
                       </Button>
                     )}
                     {m.phase !== "rolled_back" && (
@@ -4612,7 +4644,7 @@ export function P4OnlineLedgerMigrationsHub() {
                           })
                         }
                       >
-                        Rollback
+                        Undo
                       </Button>
                     )}
                   </div>
@@ -4629,7 +4661,7 @@ export function P4OnlineLedgerMigrationsHub() {
 export function P4BulkIngestionHub() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [batchReference, setBatchReference] = useState("BULK-ARCHIVE-2026-Q4");
+  const [batchReference, setBatchReference] = useState("");
   const [workerLane, setWorkerLane] = useState<
     "live_priority" | "bulk_background"
   >("bulk_background");
@@ -4639,7 +4671,7 @@ export function P4BulkIngestionHub() {
     | "supplier_portal_bulk"
     | "multi_entity_box_import"
   >("archive_backfill_zip");
-  const [totalPages, setTotalPages] = useState("25000");
+  const [totalPages, setTotalPages] = useState("2500");
   const [tenantConcurrencySlots, setTenantConcurrencySlots] = useState("8");
   const [bulkNotice, setBulkNotice] = useState("");
 
@@ -4687,10 +4719,10 @@ export function P4BulkIngestionHub() {
         api.POST("/api/v1/businesses/{business_id}/p4/bulk-ingestion/submit", {
           params: { path },
           body: {
-            batch_reference: batchReference,
+            batch_reference: batchReference || "ARCHIVE-IMPORT",
             worker_lane: workerLane,
             source_channel: sourceChannel,
-            total_pages: Math.max(1, Number(totalPages) || 25000),
+            total_pages: Math.max(1, Number(totalPages) || 2500),
             tenant_concurrency_slots: Math.min(
               64,
               Math.max(1, Number(tenantConcurrencySlots) || 8),
@@ -4707,7 +4739,7 @@ export function P4BulkIngestionHub() {
       },
     onSuccess: (res) => {
       setBulkNotice(
-        `Submitted batch "${res.batch_reference}": ${res.processed_pages.toLocaleString()} / ${res.total_pages.toLocaleString()} pages (${res.backpressure_status}, foreground P95 ${res.foreground_p95_latency_ms}ms).`,
+        `Started bulk import "${res.batch_reference}": ${res.processed_pages.toLocaleString()} of ${res.total_pages.toLocaleString()} pages queued.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-bulk-ingestion"],
@@ -4726,9 +4758,7 @@ export function P4BulkIngestionHub() {
         ),
       )) as unknown as { batch_reference: string; status: string },
     onSuccess: (res) => {
-      setBulkNotice(
-        `Cancelled bulk ingestion batch "${res.batch_reference}" (status: ${res.status}).`,
-      );
+      setBulkNotice(`Cancelled import batch "${res.batch_reference}".`);
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-bulk-ingestion"],
       });
@@ -4740,98 +4770,73 @@ export function P4BulkIngestionHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>P4-A · High-Volume Capacity & Isolated Bulk Ingestion Cells</h2>
+        <h2>Bulk document import</h2>
         <p className="muted">
-          Isolate 500k+ page historical backfills onto a dedicated bulk worker
-          lane with fair-share slot capping and automated backpressure so
-          foreground ledger traffic meets its P95 latency SLO.
+          Import large historical archives of PDFs, invoices, and receipts in
+          the background without slowing down everyday work for your team.
         </p>
         {cell && (
           <div className="p4-kpi-grid">
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Live Priority Lane</span>
-              <span className="p4-kpi-value">{cell.live_lane_status}</span>
-              <span className="p4-kpi-sub">
-                Bulk Lane: {cell.bulk_lane_status}
-              </span>
-            </div>
-            <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Foreground P95 vs SLO</span>
+              <span className="p4-kpi-label">Background importer</span>
               <span className="p4-kpi-value">
-                {cell.observed_foreground_p95_ms} ms
+                {humanize(cell.bulk_lane_status)}
               </span>
               <span className="p4-kpi-sub">
-                SLO Limit: {cell.foreground_p95_slo_ms} ms
+                Everyday app speed: Fast ({cell.observed_foreground_p95_ms} ms)
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Daily Cell Capacity</span>
+              <span className="p4-kpi-label">Daily capacity</span>
               <span className="p4-kpi-value">
-                {cell.target_daily_capacity_pages.toLocaleString()} pages/day
+                {cell.target_daily_capacity_pages.toLocaleString()} pages
               </span>
-              <span className="p4-kpi-sub">
-                Max Unthrottled Backlog:{" "}
-                {cell.max_supported_backlog_pages.toLocaleString()} pages
-              </span>
+              <span className="p4-kpi-sub">Runs in the background</span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Workspace Pages Admitted</span>
+              <span className="p4-kpi-label">Pages imported so far</span>
               <span className="p4-kpi-value">
                 {cell.total_pages_processed_workspace.toLocaleString()}
               </span>
-              <span className="p4-kpi-sub">Active & completed batches</span>
+              <span className="p4-kpi-sub">Across all batches</span>
             </div>
           </div>
         )}
       </div>
 
       <div className="panel">
-        <h3>1. Submit Isolated Bulk Ingestion Batch</h3>
+        <h3>Start a bulk import</h3>
         <ErrorNotice
           error={query.error || submitMutation.error || cancelMutation.error}
         />
         <div className="form-grid">
-          <Field label="Batch Reference">
+          <Field label="Batch name">
             <input
               value={batchReference}
               onChange={(e) => setBatchReference(e.target.value)}
+              placeholder="e.g. 2025-historical-receipts"
             />
           </Field>
-          <Field label="Worker Execution Lane">
-            <select
-              value={workerLane}
-              onChange={(e) =>
-                setWorkerLane(e.target.value as typeof workerLane)
-              }
-            >
-              <option value="bulk_background">
-                Bulk Background Lane (Isolated Cell)
-              </option>
-              <option value="live_priority">Live Priority Lane</option>
-            </select>
-          </Field>
-          <Field label="Document Source Channel">
+          <Field label="Where are the documents coming from?">
             <select
               value={sourceChannel}
               onChange={(e) =>
                 setSourceChannel(e.target.value as typeof sourceChannel)
               }
             >
-              <option value="archive_backfill_zip">
-                Historical Archive ZIP Backfill
-              </option>
+              <option value="archive_backfill_zip">ZIP archive upload</option>
               <option value="erp_historical_pdfs">
-                Legacy ERP PDF Export Batch
+                Previous accounting software PDFs
               </option>
               <option value="supplier_portal_bulk">
-                Supplier Portal Bulk Fetch
+                Connected supplier portals
               </option>
               <option value="multi_entity_box_import">
-                Multi-Entity Cloud Drive Import
+                Shared cloud folder
               </option>
             </select>
           </Field>
-          <Field label="Total Pages in Batch">
+          <Field label="Estimated number of pages">
             <input
               type="number"
               min={1}
@@ -4840,22 +4845,28 @@ export function P4BulkIngestionHub() {
               onChange={(e) => setTotalPages(e.target.value)}
             />
           </Field>
-          <Field label="Requested Concurrency Slots (1–64)">
-            <input
-              type="number"
-              min={1}
-              max={64}
-              value={tenantConcurrencySlots}
-              onChange={(e) => setTenantConcurrencySlots(e.target.value)}
-            />
+          <Field label="Processing speed">
+            <select
+              value={workerLane}
+              onChange={(e) =>
+                setWorkerLane(e.target.value as typeof workerLane)
+              }
+            >
+              <option value="bulk_background">
+                Background queue (recommended for large archives)
+              </option>
+              <option value="live_priority">Priority queue</option>
+            </select>
           </Field>
         </div>
-        <Button
-          busy={submitMutation.isPending}
-          onClick={() => submitMutation.mutate()}
-        >
-          Admit Batch to Isolated Bulk Ingestion Cell
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={submitMutation.isPending}
+            onClick={() => submitMutation.mutate()}
+          >
+            Start bulk import
+          </Button>
+        </div>
         {bulkNotice && (
           <p
             role="status"
@@ -4869,9 +4880,10 @@ export function P4BulkIngestionHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Bulk Ingestion Batches & Backpressure Telemetry</h3>
+          <h3>Import batches</h3>
           <Table
-            caption="Bulk Ingestion Batches"
+            caption="Bulk document import batches"
+            emptyText="No bulk imports started yet."
             rows={query.data.batches}
             rowKey={(batch) => batch.id}
             columns={[
@@ -4881,41 +4893,23 @@ export function P4BulkIngestionHub() {
                   <div>
                     <strong>{batch.batch_reference}</strong>
                     <div className="muted" style={{ fontSize: "0.78rem" }}>
-                      {batch.source_channel}
+                      {humanize(batch.source_channel)}
                     </div>
                   </div>
                 ),
               },
               {
-                label: "Lane",
-                render: (batch) => <Badge>{batch.worker_lane}</Badge>,
+                label: "Queue",
+                render: (batch) => <Badge>{humanize(batch.worker_lane)}</Badge>,
               },
               {
-                label: "Pages",
+                label: "Progress",
                 render: (batch) =>
-                  `${batch.processed_pages.toLocaleString()} / ${batch.total_pages.toLocaleString()}`,
+                  `${batch.processed_pages.toLocaleString()} / ${batch.total_pages.toLocaleString()} pages`,
               },
               {
-                label: "Throughput & FG P95",
-                render: (batch) =>
-                  `${batch.throughput_pages_per_sec} p/s · ${batch.foreground_p95_latency_ms} ms (${batch.tenant_concurrency_slots} slots)`,
-              },
-              {
-                label: "Backpressure & Status",
-                render: (batch) => (
-                  <div className="p4-inline-actions">
-                    <Badge
-                      tone={
-                        batch.backpressure_status === "normal"
-                          ? "good"
-                          : "warning"
-                      }
-                    >
-                      {batch.backpressure_status}
-                    </Badge>
-                    <Badge>{batch.status}</Badge>
-                  </div>
-                ),
+                label: "Status",
+                render: (batch) => <Badge>{humanize(batch.status)}</Badge>,
               },
               {
                 label: "Action",
@@ -4926,7 +4920,7 @@ export function P4BulkIngestionHub() {
                       busy={cancelMutation.isPending}
                       onClick={() => cancelMutation.mutate(batch.id)}
                     >
-                      Cancel Batch
+                      Cancel
                     </Button>
                   ) : (
                     <span className="muted">Cancelled</span>
@@ -5021,7 +5015,7 @@ export function P4RegionalDisasterRecoveryHub() {
       },
     onSuccess: (res) => {
       setDrNotice(
-        `DR Drill complete (${res.status}): Active cell ${res.active_cell}, monotonic fencing token #${res.fencing_token}, RTO ${res.achieved_rto_seconds}s / RPO ${res.achieved_rpo_seconds}s.`,
+        `Recovery test complete (${humanize(res.status)}). Active region: ${regionName(res.active_cell)} (recovered in ${res.achieved_rto_seconds}s with zero lost records).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-disaster-recovery"],
@@ -5034,66 +5028,61 @@ export function P4RegionalDisasterRecoveryHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P4-C · Regional Resilience, WAL Replication & Fenced Disaster Recovery
-        </h2>
+        <h2>Backup &amp; disaster recovery</h2>
         <p className="muted">
-          Execute cryptographic failover and failback drills across isolated
-          regional deployment cells using monotonic fencing tokens to guarantee
-          zero split-brain writes and zero lost journals (RPO = 0s).
+          Verify that your workspace backups stay synchronized in a second
+          geographic region and test switching regions safely with zero lost
+          accounting entries.
         </p>
         {topo && (
           <div className="p4-kpi-grid">
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Active Serving Cell</span>
-              <span className="p4-kpi-value">{topo.active_serving_cell}</span>
-              <span className="p4-kpi-sub">
-                Pinned Primary: {topo.pinned_primary_cell}
-              </span>
-            </div>
-            <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Monotonic Fencing Token</span>
-              <span className="p4-kpi-value">#{topo.latest_fencing_token}</span>
-              <span className="p4-kpi-sub">{topo.split_brain_fencing}</span>
-            </div>
-            <div className="p4-kpi-card">
-              <span className="p4-kpi-label">RTO / RPO Objectives</span>
+              <span className="p4-kpi-label">Active region</span>
               <span className="p4-kpi-value">
-                &le; {topo.target_rto_seconds}s RTO · {topo.target_rpo_seconds}s
-                RPO
+                {regionName(topo.active_serving_cell)}
               </span>
-              <span className="p4-kpi-sub">{topo.replication_mode}</span>
+              <span className="p4-kpi-sub">
+                Primary region: {regionName(topo.pinned_primary_cell)}
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Data protection</span>
+              <span className="p4-kpi-value">Zero data loss</span>
+              <span className="p4-kpi-sub">
+                Duplicate-write protection active
+              </span>
+            </div>
+            <div className="p4-kpi-card">
+              <span className="p4-kpi-label">Target recovery speed</span>
+              <span className="p4-kpi-value">
+                Under {topo.target_rto_seconds} seconds
+              </span>
+              <span className="p4-kpi-sub">Continuous backup sync</span>
             </div>
           </div>
         )}
       </div>
 
       <div className="panel">
-        <h3>1. Execute Fenced Regional Failover / Consistency Drill</h3>
+        <h3>Run a backup readiness test</h3>
         <ErrorNotice error={query.error || drillMutation.error} />
         <div className="form-grid">
-          <Field label="Primary Regional Cell">
+          <Field label="Primary region">
             <select
               value={primaryCell}
               onChange={(e) =>
                 setPrimaryCell(e.target.value as typeof primaryCell)
               }
             >
-              <option value="eu-central-fra-cell-1">
-                EU Central (eu-central-fra-cell-1)
-              </option>
+              <option value="eu-central-fra-cell-1">Europe (Frankfurt)</option>
               <option value="us-east-va-cell-1">
-                US East (us-east-va-cell-1)
+                United States (Virginia)
               </option>
-              <option value="me-central-dxb-cell-1">
-                Middle East (me-central-dxb-cell-1)
-              </option>
-              <option value="ap-south-khi-cell-1">
-                South Asia (ap-south-khi-cell-1)
-              </option>
+              <option value="me-central-dxb-cell-1">Middle East (Dubai)</option>
+              <option value="ap-south-khi-cell-1">South Asia (Karachi)</option>
             </select>
           </Field>
-          <Field label="Standby DR Regional Cell (Must Differ)">
+          <Field label="Backup region (must be different)">
             <select
               value={standbyCell}
               onChange={(e) =>
@@ -5101,32 +5090,24 @@ export function P4RegionalDisasterRecoveryHub() {
               }
             >
               <option value="us-east-va-cell-1">
-                US East (us-east-va-cell-1)
+                United States (Virginia)
               </option>
-              <option value="eu-central-fra-cell-1">
-                EU Central (eu-central-fra-cell-1)
-              </option>
-              <option value="me-central-dxb-cell-1">
-                Middle East (me-central-dxb-cell-1)
-              </option>
-              <option value="ap-south-khi-cell-1">
-                South Asia (ap-south-khi-cell-1)
-              </option>
+              <option value="eu-central-fra-cell-1">Europe (Frankfurt)</option>
+              <option value="me-central-dxb-cell-1">Middle East (Dubai)</option>
+              <option value="ap-south-khi-cell-1">South Asia (Karachi)</option>
             </select>
           </Field>
-          <Field label="DR Drill Mode">
+          <Field label="Type of test">
             <select
               value={drillMode}
               onChange={(e) => setDrillMode(e.target.value as typeof drillMode)}
             >
-              <option value="fenced_failover">
-                Fenced Failover to Standby Cell
-              </option>
+              <option value="fenced_failover">Switch to backup region</option>
               <option value="failback_to_primary">
-                Controlled Failback to Primary Cell
+                Return to primary region
               </option>
               <option value="replication_consistency_check">
-                Replication WAL & Evidence Checksum Verification
+                Verify backup completeness only
               </option>
             </select>
           </Field>
@@ -5136,14 +5117,14 @@ export function P4RegionalDisasterRecoveryHub() {
             busy={drillMutation.isPending}
             onClick={() => drillMutation.mutate(undefined)}
           >
-            Execute Fenced DR Drill
+            Run recovery test
           </Button>
           <Button
             variant="secondary"
             busy={drillMutation.isPending}
             onClick={() => drillMutation.mutate("failback_to_primary")}
           >
-            Quick Failback to Primary
+            Switch back to primary
           </Button>
         </div>
         {drNotice && (
@@ -5159,43 +5140,38 @@ export function P4RegionalDisasterRecoveryHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>2. Regional DR Drill History & Consistency Digests</h3>
+          <h3>Past recovery tests</h3>
           <Table
-            caption="Regional Disaster Recovery Drills"
+            caption="Disaster recovery test history"
+            emptyText="No recovery tests run yet."
             rows={query.data.drills}
             rowKey={(d) => d.id}
             columns={[
               {
-                label: "Fence Token",
-                render: (d) => <strong>#{d.fencing_token}</strong>,
-              },
-              { label: "Mode", render: (d) => <Badge>{d.drill_mode}</Badge> },
-              {
-                label: "Serving Cell",
-                render: (d) => (
-                  <span>
-                    {d.active_cell} (Primary: {d.primary_cell})
-                  </span>
-                ),
+                label: "When",
+                render: (d) => formatWhen(d.created_at),
               },
               {
-                label: "RTO / RPO",
+                label: "Test",
+                render: (d) => <Badge>{humanize(d.drill_mode)}</Badge>,
+              },
+              {
+                label: "Active region",
                 render: (d) =>
-                  `${d.achieved_rto_seconds}s RTO · ${d.achieved_rpo_seconds}s RPO`,
+                  `${regionName(d.active_cell)} (primary: ${regionName(d.primary_cell)})`,
               },
               {
-                label: "Replicated Records",
+                label: "Recovery time",
+                render: (d) => `${d.achieved_rto_seconds}s`,
+              },
+              {
+                label: "Verified records",
                 render: (d) =>
-                  `${d.ledger_journal_count} journals · ${d.evidence_file_count} evidence files`,
+                  `${d.ledger_journal_count} entries · ${d.evidence_file_count} documents`,
               },
               {
-                label: "SHA-256 Digest & Status",
-                render: (d) => (
-                  <div className="p4-inline-actions">
-                    <code>{d.consistency_digest_sha256.slice(0, 10)}…</code>
-                    <Badge tone="good">{d.status}</Badge>
-                  </div>
-                ),
+                label: "Status",
+                render: (d) => <Badge tone="good">{humanize(d.status)}</Badge>,
               },
             ]}
           />
@@ -5208,22 +5184,22 @@ export function P4RegionalDisasterRecoveryHub() {
 export function P4InventoryCostingHub() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [sku, setSku] = useState("SKU-WIDGET-PRO");
-  const [itemName, setItemName] = useState("Precision Sensor Module Pro");
-  const [warehouse, setWarehouse] = useState("MAIN-WH-01");
+  const [sku, setSku] = useState("");
+  const [itemName, setItemName] = useState("");
+  const [warehouse, setWarehouse] = useState("");
   const [costingMethod, setCostingMethod] = useState<
     "fifo" | "weighted_average"
   >("fifo");
   const [initQty, setInitQty] = useState("100");
   const [initUnitCost, setInitUnitCost] = useState("12.50");
-  const [initLandedCost, setInitLandedCost] = useState("50.00");
+  const [initLandedCost, setInitLandedCost] = useState("0.00");
   const [reorderPoint, setReorderPoint] = useState("20");
 
   const [selectedItemId, setSelectedItemId] = useState("");
   const [movementKind, setMovementKind] = useState<
     "receipt" | "landed_cost_allocation" | "issue_sale" | "customer_return"
   >("receipt");
-  const [movRef, setMovRef] = useState("PO-INV-2026-01");
+  const [movRef, setMovRef] = useState("");
   const [movQty, setMovQty] = useState("25");
   const [movUnitCost, setMovUnitCost] = useState("14.00");
   const [movLandedCost, setMovLandedCost] = useState("0.00");
@@ -5287,9 +5263,9 @@ export function P4InventoryCostingHub() {
         api.POST("/api/v1/businesses/{business_id}/p4/inventory/items", {
           params: { path },
           body: {
-            sku,
-            name: itemName,
-            warehouse_location: warehouse,
+            sku: sku || "ITEM-001",
+            name: itemName || "Inventory Item",
+            warehouse_location: warehouse || "Main Warehouse",
             costing_method: costingMethod,
             currency: b.currency || "USD",
             initial_quantity: initQty || "0",
@@ -5307,7 +5283,7 @@ export function P4InventoryCostingHub() {
     onSuccess: (res) => {
       setSelectedItemId(res.id);
       setInvNotice(
-        `Saved SKU ${res.sku}: ${res.quantity_on_hand} units on hand, total valuation ${b.currency} ${res.total_valuation}.`,
+        `Saved item ${res.sku}: ${res.quantity_on_hand} in stock (${b.currency} ${res.total_valuation} total value).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-inventory"],
@@ -5323,7 +5299,7 @@ export function P4InventoryCostingHub() {
           body: {
             item_id: activeItemId,
             movement_kind: movementKind,
-            reference: movRef,
+            reference: movRef || "STOCK-MOVE",
             quantity: movQty || "0",
             unit_cost: movUnitCost || "0",
             landed_cost_amount: movLandedCost || "0",
@@ -5338,7 +5314,7 @@ export function P4InventoryCostingHub() {
       },
     onSuccess: (res) => {
       setInvNotice(
-        `Recorded ${res.movement_kind} for ${res.sku}: On Hand ${res.resulting_qty}, Valuation ${b.currency} ${res.resulting_valuation}, COGS ${b.currency} ${res.cogs_amount}.`,
+        `Recorded ${humanize(res.movement_kind).toLowerCase()} for ${res.sku}: ${res.resulting_qty} on hand (${b.currency} ${res.resulting_valuation}).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-inventory"],
@@ -5351,82 +5327,82 @@ export function P4InventoryCostingHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P4-E1 · Inventory Subledger (FIFO & Weighted Average), Landed Cost &
-          COGS
-        </h2>
+        <h2>Inventory &amp; stock valuation</h2>
         <p className="muted">
-          Track perpetual inventory valuation layers across warehouses, allocate
-          freight/customs landed costs, enforce negative-stock guards (HTTP
-          409), and tie every inventory movement to reviewable accounting
-          drafts.
+          Track products in stock across warehouses, add shipping or customs
+          costs, prevent negative stock mistakes, and automatically prepare
+          cost-of-goods-sold drafts when items are sold.
         </p>
         {sum && (
           <div className="p4-kpi-grid">
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Active SKUs</span>
+              <span className="p4-kpi-label">Products tracked</span>
               <span className="p4-kpi-value">{sum.total_skus}</span>
               <span className="p4-kpi-sub">
-                {sum.total_units_on_hand} total units on hand
+                {sum.total_units_on_hand} total units in stock
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Subledger Valuation</span>
+              <span className="p4-kpi-label">Inventory value</span>
               <span className="p4-kpi-value">
                 {b.currency} {sum.total_subledger_valuation}
               </span>
               <span className="p4-kpi-sub">
                 <Badge tone={sum.subledger_to_gl_tied_out ? "good" : "warning"}>
                   {sum.subledger_to_gl_tied_out
-                    ? "SUBLEDGER TIED TO GL"
-                    : "OUT OF BALANCE"}
+                    ? "Matches general ledger"
+                    : "Review needed"}
                 </Badge>
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">COGS Recognized</span>
+              <span className="p4-kpi-label">Cost of goods sold</span>
               <span className="p4-kpi-value">
                 {b.currency} {sum.total_cogs_recognized}
               </span>
-              <span className="p4-kpi-sub">
-                FIFO / Weighted Average releases
-              </span>
+              <span className="p4-kpi-sub">Recorded from sales</span>
             </div>
           </div>
         )}
       </div>
 
       <div className="panel">
-        <h3>1. Register Inventory SKU & Opening Cost Layer</h3>
+        <h3>Add a product</h3>
         <ErrorNotice error={query.error || createItemMutation.error} />
         <div className="form-grid">
-          <Field label="SKU Code">
-            <input value={sku} onChange={(e) => setSku(e.target.value)} />
+          <Field label="Product code (SKU)">
+            <input
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+              placeholder="e.g. LAPTOP-14-PRO"
+            />
           </Field>
-          <Field label="Item Description">
+          <Field label="Product name">
             <input
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
+              placeholder="e.g. 14-inch Business Laptop"
             />
           </Field>
-          <Field label="Warehouse Location">
+          <Field label="Warehouse or location">
             <input
               value={warehouse}
               onChange={(e) => setWarehouse(e.target.value)}
+              placeholder="e.g. Main Warehouse"
             />
           </Field>
-          <Field label="Costing Method">
+          <Field label="Valuation method">
             <select
               value={costingMethod}
               onChange={(e) =>
                 setCostingMethod(e.target.value as typeof costingMethod)
               }
             >
-              <option value="fifo">FIFO (First-In, First-Out Layers)</option>
-              <option value="weighted_average">Moving Weighted Average</option>
+              <option value="fifo">First in, first out (FIFO)</option>
+              <option value="weighted_average">Weighted average cost</option>
             </select>
           </Field>
-          <Field label="Opening Quantity">
+          <Field label="Opening quantity">
             <input
               type="number"
               step="0.01"
@@ -5434,7 +5410,7 @@ export function P4InventoryCostingHub() {
               onChange={(e) => setInitQty(e.target.value)}
             />
           </Field>
-          <Field label="Opening Unit Cost">
+          <Field label="Opening cost per unit">
             <input
               type="number"
               step="0.01"
@@ -5442,7 +5418,7 @@ export function P4InventoryCostingHub() {
               onChange={(e) => setInitUnitCost(e.target.value)}
             />
           </Field>
-          <Field label="Opening Landed Cost (Freight/Duty)">
+          <Field label="Shipping or customs cost (optional)">
             <input
               type="number"
               step="0.01"
@@ -5450,7 +5426,7 @@ export function P4InventoryCostingHub() {
               onChange={(e) => setInitLandedCost(e.target.value)}
             />
           </Field>
-          <Field label="Low-Stock Reorder Point">
+          <Field label="Low-stock alert level">
             <input
               type="number"
               step="0.01"
@@ -5459,57 +5435,56 @@ export function P4InventoryCostingHub() {
             />
           </Field>
         </div>
-        <Button
-          busy={createItemMutation.isPending}
-          onClick={() => createItemMutation.mutate()}
-        >
-          Register / Update Inventory SKU
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={createItemMutation.isPending}
+            onClick={() => createItemMutation.mutate()}
+          >
+            Save product
+          </Button>
+        </div>
       </div>
 
       <div className="panel">
-        <h3>2. Post Inventory Movement (Receipt / Landed Cost / Sale COGS)</h3>
+        <h3>Record stock received or sold</h3>
         <ErrorNotice error={movementMutation.error} />
         <div className="form-grid">
-          <Field label="Target Inventory SKU">
+          <Field label="Product">
             <select
               value={activeItemId}
               onChange={(e) => setSelectedItemId(e.target.value)}
             >
               {!query.data?.items.length && (
-                <option value="">Register a SKU above first</option>
+                <option value="">Add a product above first</option>
               )}
               {(query.data?.items || []).map((item) => (
                 <option key={item.id} value={item.id}>
-                  {item.sku} — {item.name} ({item.quantity_on_hand} on hand @{" "}
-                  {item.unit_cost})
+                  {item.sku} — {item.name} ({item.quantity_on_hand} in stock)
                 </option>
               ))}
             </select>
           </Field>
-          <Field label="Movement Kind">
+          <Field label="Movement type">
             <select
               value={movementKind}
               onChange={(e) =>
                 setMovementKind(e.target.value as typeof movementKind)
               }
             >
-              <option value="receipt">
-                Purchase Receipt (+ Stock & Layer)
-              </option>
+              <option value="receipt">Stock received (purchase)</option>
               <option value="landed_cost_allocation">
-                Landed Cost Allocation (+ Capitalized Duty/Freight)
+                Add freight or customs cost
               </option>
-              <option value="issue_sale">
-                Issue for Sale (- Stock & Recognize COGS)
-              </option>
-              <option value="customer_return">
-                Customer Return (+ Restock Layer)
-              </option>
+              <option value="issue_sale">Stock sold (records cost)</option>
+              <option value="customer_return">Customer return</option>
             </select>
           </Field>
-          <Field label="Document / Movement Reference">
-            <input value={movRef} onChange={(e) => setMovRef(e.target.value)} />
+          <Field label="Order or invoice reference">
+            <input
+              value={movRef}
+              onChange={(e) => setMovRef(e.target.value)}
+              placeholder="e.g. PO-2026-041"
+            />
           </Field>
           <Field label="Quantity">
             <input
@@ -5519,7 +5494,7 @@ export function P4InventoryCostingHub() {
               onChange={(e) => setMovQty(e.target.value)}
             />
           </Field>
-          <Field label="Unit Cost (Receipt / Return)">
+          <Field label="Unit cost (for purchases / returns)">
             <input
               type="number"
               step="0.01"
@@ -5527,7 +5502,7 @@ export function P4InventoryCostingHub() {
               onChange={(e) => setMovUnitCost(e.target.value)}
             />
           </Field>
-          <Field label="Landed Cost Amount (Freight / Duty)">
+          <Field label="Freight or duty amount (optional)">
             <input
               type="number"
               step="0.01"
@@ -5536,14 +5511,16 @@ export function P4InventoryCostingHub() {
             />
           </Field>
         </div>
-        <Button
-          variant="secondary"
-          disabled={!activeItemId}
-          busy={movementMutation.isPending}
-          onClick={() => movementMutation.mutate()}
-        >
-          Post Inventory Movement & Generate Draft
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            variant="secondary"
+            disabled={!activeItemId}
+            busy={movementMutation.isPending}
+            onClick={() => movementMutation.mutate()}
+          >
+            Record stock movement
+          </Button>
+        </div>
         {invNotice && (
           <p
             role="status"
@@ -5557,14 +5534,15 @@ export function P4InventoryCostingHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>3. Inventory Valuation & Active FIFO Cost Layers</h3>
+          <h3>Current stock &amp; valuation</h3>
           <Table
-            caption="Inventory Valuation Subledger"
+            caption="Current inventory items"
+            emptyText="No products added yet."
             rows={query.data.items}
             rowKey={(i) => i.id}
             columns={[
               {
-                label: "SKU & Warehouse",
+                label: "Product",
                 render: (i) => (
                   <div>
                     <strong>{i.sku}</strong> · {i.name}
@@ -5576,69 +5554,51 @@ export function P4InventoryCostingHub() {
               },
               {
                 label: "Method",
-                render: (i) => <Badge>{i.costing_method}</Badge>,
+                render: (i) => <Badge>{humanize(i.costing_method)}</Badge>,
               },
               {
-                label: "On Hand",
+                label: "In stock",
                 render: (i) => (
                   <div className="p4-inline-actions">
                     <strong>{i.quantity_on_hand}</strong>
-                    {i.low_stock && <Badge tone="warning">Low Stock</Badge>}
+                    {i.low_stock && <Badge tone="warning">Low stock</Badge>}
                   </div>
                 ),
               },
               {
-                label: "Eff. Unit Cost",
+                label: "Unit cost",
                 render: (i) => `${i.currency} ${i.unit_cost}`,
               },
               {
-                label: "Total Valuation",
+                label: "Total value",
                 render: (i) => (
                   <strong>
                     {i.currency} {i.total_valuation}
                   </strong>
                 ),
               },
-              {
-                label: "FIFO Layers",
-                render: (i) => (
-                  <div className="p4-layer-list">
-                    {i.fifo_layers.length === 0 ? (
-                      <span className="muted">Empty</span>
-                    ) : (
-                      i.fifo_layers.map((layer, idx) => (
-                        <Badge key={idx}>
-                          {Number(layer.qty).toFixed(2)} @{" "}
-                          {Number(layer.unit_cost).toFixed(4)}
-                        </Badge>
-                      ))
-                    )}
-                  </div>
-                ),
-              },
             ]}
           />
           {query.data.movements.length > 0 && (
             <div style={{ marginTop: "20px" }}>
-              <h4>Recent Inventory Movements & Draft References</h4>
+              <h4>Recent stock movements</h4>
               <Table
-                caption="Inventory Movements Ledger"
+                caption="Recent stock movements"
                 rows={query.data.movements}
                 rowKey={(m) => m.id}
                 columns={[
                   { label: "Date", render: (m) => m.accounting_date },
-                  { label: "SKU", render: (m) => <strong>{m.sku}</strong> },
+                  { label: "Product", render: (m) => <strong>{m.sku}</strong> },
                   {
-                    label: "Kind",
-                    render: (m) => <Badge>{m.movement_kind}</Badge>,
+                    label: "Type",
+                    render: (m) => <Badge>{humanize(m.movement_kind)}</Badge>,
                   },
                   { label: "Reference", render: (m) => m.reference },
-                  { label: "Qty Delta", render: (m) => m.quantity_delta },
-                  { label: "COGS", render: (m) => m.cogs_amount },
+                  { label: "Quantity", render: (m) => m.quantity_delta },
                   {
-                    label: "Resulting Valuation",
+                    label: "Updated stock",
                     render: (m) =>
-                      `${m.resulting_qty} units ($${m.resulting_valuation})`,
+                      `${m.resulting_qty} units (${b.currency} ${m.resulting_valuation})`,
                   },
                 ]}
               />
@@ -5653,11 +5613,11 @@ export function P4InventoryCostingHub() {
 export function P4GroupConsolidationHub() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [entityCode, setEntityCode] = useState("SUB-EU-01");
-  const [entityName, setEntityName] = useState("Balanc Europe GmbH");
-  const [jurisdiction, setJurisdiction] = useState("DE-BE");
+  const [entityCode, setEntityCode] = useState("");
+  const [entityName, setEntityName] = useState("");
+  const [jurisdiction, setJurisdiction] = useState("");
   const [funcCurrency, setFuncCurrency] = useState("EUR");
-  const [ownershipPct, setOwnershipPct] = useState("80.00");
+  const [ownershipPct, setOwnershipPct] = useState("100.00");
   const [closingFx, setClosingFx] = useState("1.0800");
   const [averageFx, setAverageFx] = useState("1.0500");
   const [saAssets, setSaAssets] = useState("250000.00");
@@ -5665,11 +5625,11 @@ export function P4GroupConsolidationHub() {
   const [saRevenue, setSaRevenue] = useState("180000.00");
   const [saExpenses, setSaExpenses] = useState("120000.00");
   const [icReceivable, setIcReceivable] = useState("0.00");
-  const [icPayable, setIcPayable] = useState("15000.00");
+  const [icPayable, setIcPayable] = useState("0.00");
   const [icRevenue, setIcRevenue] = useState("0.00");
-  const [icExpense, setIcExpense] = useState("25000.00");
+  const [icExpense, setIcExpense] = useState("0.00");
 
-  const [periodLabel, setPeriodLabel] = useState("2026-Q4 Consolidated Close");
+  const [periodLabel, setPeriodLabel] = useState("");
   const [reportingCurrency, setReportingCurrency] = useState(
     b.currency || "USD",
   );
@@ -5740,9 +5700,9 @@ export function P4GroupConsolidationHub() {
           {
             params: { path },
             body: {
-              entity_code: entityCode,
-              entity_name: entityName,
-              jurisdiction,
+              entity_code: entityCode || "SUB-01",
+              entity_name: entityName || "Subsidiary",
+              jurisdiction: jurisdiction || "US",
               functional_currency: funcCurrency,
               ownership_percent: ownershipPct || "100.00",
               closing_fx_rate: closingFx || "1.000000",
@@ -5766,7 +5726,7 @@ export function P4GroupConsolidationHub() {
       },
     onSuccess: (res) => {
       setConsNotice(
-        `Saved entity ${res.entity_code} (${res.entity_name}, ${res.ownership_percent}% owned — ${res.consolidation_method}).`,
+        `Saved company ${res.entity_name} (${res.ownership_percent}% owned).`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-group-consolidation"],
@@ -5782,7 +5742,8 @@ export function P4GroupConsolidationHub() {
           {
             params: { path },
             body: {
-              period_label: periodLabel,
+              period_label:
+                periodLabel || `${new Date().getFullYear()} Group Report`,
               reporting_currency: reportingCurrency || "USD",
             },
           },
@@ -5798,7 +5759,7 @@ export function P4GroupConsolidationHub() {
       },
     onSuccess: (res) => {
       setConsNotice(
-        `Consolidated "${res.period_label}" (${res.entities_count} entities): Net Income ${res.reporting_currency} ${res.consolidated_net_income}, NCI ${res.reporting_currency} ${res.minority_interest_nci_share}, Status: ${res.status}.`,
+        `Combined group report "${res.period_label}" across ${res.entities_count} companies: net profit ${res.reporting_currency} ${res.consolidated_net_income}.`,
       );
       void queryClient.invalidateQueries({
         queryKey: [...keys.business(b.id), "p4-group-consolidation"],
@@ -5811,54 +5772,49 @@ export function P4GroupConsolidationHub() {
   return (
     <div className="stack">
       <div className="panel">
-        <h2>
-          P4-E2 · Multi-Entity Group Consolidation, IAS 21 FX & Intercompany
-          Eliminations
-        </h2>
+        <h2>Group reporting</h2>
         <p className="muted">
-          Automate group-wide FX translation (closing balance-sheet vs average
-          P&amp;L rates with CTA tracking), eliminate reciprocal intercompany
-          AR/AP &amp; revenue/expense, flag IC mismatches, and compute
-          Non-Controlling Interest (NCI).
+          Combine financial results across multiple companies or subsidiaries,
+          convert foreign currencies into your reporting currency, and remove
+          internal sales or loans between group companies.
         </p>
         {latestRun && (
           <div className="p4-kpi-grid">
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Consolidated Net Income</span>
+              <span className="p4-kpi-label">Combined net profit</span>
               <span className="p4-kpi-value">
                 {latestRun.reporting_currency}{" "}
                 {latestRun.consolidated_net_income}
               </span>
               <span className="p4-kpi-sub">
-                Parent Share: {latestRun.reporting_currency}{" "}
+                Parent share: {latestRun.reporting_currency}{" "}
                 {latestRun.parent_attributable_net_income}
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Minority Interest (NCI)</span>
+              <span className="p4-kpi-label">Outside owners&apos; share</span>
               <span className="p4-kpi-value">
                 {latestRun.reporting_currency}{" "}
                 {latestRun.minority_interest_nci_share}
               </span>
               <span className="p4-kpi-sub">
-                FX CTA Adjustment: {latestRun.fx_cta_adjustment}
+                Currency translation: {latestRun.fx_cta_adjustment}
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">Consolidated Equity</span>
+              <span className="p4-kpi-label">Combined equity</span>
               <span className="p4-kpi-value">
                 {latestRun.reporting_currency} {latestRun.consolidated_equity}
               </span>
               <span className="p4-kpi-sub">
-                Assets {latestRun.consolidated_assets} − Liab{" "}
+                Assets {latestRun.consolidated_assets} − Liabilities{" "}
                 {latestRun.consolidated_liabilities}
               </span>
             </div>
             <div className="p4-kpi-card">
-              <span className="p4-kpi-label">IC Eliminations & Status</span>
+              <span className="p4-kpi-label">Internal balances removed</span>
               <span className="p4-kpi-value">
-                {latestRun.intercompany_ar_eliminated} AR/AP ·{" "}
-                {latestRun.intercompany_rev_eliminated} Rev/Exp
+                {latestRun.intercompany_ar_eliminated}
               </span>
               <span className="p4-kpi-sub">
                 <Badge
@@ -5868,8 +5824,7 @@ export function P4GroupConsolidationHub() {
                       : "warning"
                   }
                 >
-                  {latestRun.status} (Mismatch:{" "}
-                  {latestRun.intercompany_mismatch_amount})
+                  {humanize(latestRun.status)}
                 </Badge>
               </span>
             </div>
@@ -5878,35 +5833,39 @@ export function P4GroupConsolidationHub() {
       </div>
 
       <div className="panel">
-        <h3>1. Register / Update Group Legal Entity & Intercompany Balances</h3>
+        <h3>Add or update a group company</h3>
         <ErrorNotice error={query.error || upsertEntityMutation.error} />
         <div className="form-grid">
-          <Field label="Entity Code">
+          <Field label="Short company code">
             <input
               value={entityCode}
               onChange={(e) => setEntityCode(e.target.value)}
+              placeholder="e.g. UK-SUB"
             />
           </Field>
-          <Field label="Legal Entity Name">
+          <Field label="Legal company name">
             <input
               value={entityName}
               onChange={(e) => setEntityName(e.target.value)}
+              placeholder="e.g. Acme Europe Ltd"
             />
           </Field>
-          <Field label="Jurisdiction">
+          <Field label="Country or state">
             <input
               value={jurisdiction}
               onChange={(e) => setJurisdiction(e.target.value)}
+              placeholder="e.g. United Kingdom"
             />
           </Field>
-          <Field label="Functional Currency (ISO-3)">
+          <Field label="Local currency">
             <input
               maxLength={3}
               value={funcCurrency}
               onChange={(e) => setFuncCurrency(e.target.value.toUpperCase())}
+              placeholder="e.g. EUR"
             />
           </Field>
-          <Field label="Ownership % (>=50% Full / <50% Equity)">
+          <Field label="Ownership percentage (%)">
             <input
               type="number"
               step="0.01"
@@ -5916,7 +5875,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setOwnershipPct(e.target.value)}
             />
           </Field>
-          <Field label="Closing FX Rate (BS)">
+          <Field label="Period-end exchange rate">
             <input
               type="number"
               step="0.0001"
@@ -5924,7 +5883,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setClosingFx(e.target.value)}
             />
           </Field>
-          <Field label="Average FX Rate (P&L)">
+          <Field label="Average exchange rate">
             <input
               type="number"
               step="0.0001"
@@ -5932,7 +5891,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setAverageFx(e.target.value)}
             />
           </Field>
-          <Field label="Standalone Total Assets">
+          <Field label="Total assets">
             <input
               type="number"
               step="0.01"
@@ -5940,7 +5899,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setSaAssets(e.target.value)}
             />
           </Field>
-          <Field label="Standalone Total Liabilities">
+          <Field label="Total liabilities">
             <input
               type="number"
               step="0.01"
@@ -5948,7 +5907,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setSaLiabilities(e.target.value)}
             />
           </Field>
-          <Field label="Standalone Revenue">
+          <Field label="Revenue">
             <input
               type="number"
               step="0.01"
@@ -5956,7 +5915,7 @@ export function P4GroupConsolidationHub() {
               onChange={(e) => setSaRevenue(e.target.value)}
             />
           </Field>
-          <Field label="Standalone Expenses">
+          <Field label="Expenses">
             <input
               type="number"
               step="0.01"
@@ -5967,10 +5926,10 @@ export function P4GroupConsolidationHub() {
         </div>
         <details className="p3-advanced-details">
           <summary>
-            Intercompany Reciprocal Balances (AR / AP &amp; Revenue / Expense)
+            Balances with other companies in your group (optional)
           </summary>
           <div className="form-grid">
-            <Field label="Intercompany Receivable">
+            <Field label="Owed by other group companies">
               <input
                 type="number"
                 step="0.01"
@@ -5978,7 +5937,7 @@ export function P4GroupConsolidationHub() {
                 onChange={(e) => setIcReceivable(e.target.value)}
               />
             </Field>
-            <Field label="Intercompany Payable">
+            <Field label="Owed to other group companies">
               <input
                 type="number"
                 step="0.01"
@@ -5986,7 +5945,7 @@ export function P4GroupConsolidationHub() {
                 onChange={(e) => setIcPayable(e.target.value)}
               />
             </Field>
-            <Field label="Intercompany Revenue">
+            <Field label="Sales to other group companies">
               <input
                 type="number"
                 step="0.01"
@@ -5994,7 +5953,7 @@ export function P4GroupConsolidationHub() {
                 onChange={(e) => setIcRevenue(e.target.value)}
               />
             </Field>
-            <Field label="Intercompany Expense">
+            <Field label="Purchases from other group companies">
               <input
                 type="number"
                 step="0.01"
@@ -6004,25 +5963,28 @@ export function P4GroupConsolidationHub() {
             </Field>
           </div>
         </details>
-        <Button
-          busy={upsertEntityMutation.isPending}
-          onClick={() => upsertEntityMutation.mutate()}
-        >
-          Save Group Legal Entity
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            busy={upsertEntityMutation.isPending}
+            onClick={() => upsertEntityMutation.mutate()}
+          >
+            Save company
+          </Button>
+        </div>
       </div>
 
       <div className="panel">
-        <h3>2. Execute Group Consolidation & Intercompany Elimination Run</h3>
+        <h3>Create combined group report</h3>
         <ErrorNotice error={runConsolidationMutation.error} />
         <div className="form-grid">
-          <Field label="Consolidation Period Label">
+          <Field label="Reporting period">
             <input
               value={periodLabel}
               onChange={(e) => setPeriodLabel(e.target.value)}
+              placeholder="e.g. Q4 2026"
             />
           </Field>
-          <Field label="Group Reporting Currency">
+          <Field label="Group reporting currency">
             <input
               maxLength={3}
               value={reportingCurrency}
@@ -6032,13 +5994,15 @@ export function P4GroupConsolidationHub() {
             />
           </Field>
         </div>
-        <Button
-          variant="secondary"
-          busy={runConsolidationMutation.isPending}
-          onClick={() => runConsolidationMutation.mutate()}
-        >
-          Run Multi-Entity Consolidation & IC Eliminations
-        </Button>
+        <div className="p3-actions-row">
+          <Button
+            variant="secondary"
+            busy={runConsolidationMutation.isPending}
+            onClick={() => runConsolidationMutation.mutate()}
+          >
+            Generate group report
+          </Button>
+        </div>
         {consNotice && (
           <p
             role="status"
@@ -6052,59 +6016,49 @@ export function P4GroupConsolidationHub() {
 
       {query.data && (
         <div className="panel">
-          <h3>3. Registered Group Entities & Consolidation History</h3>
-          {query.data.entities.length > 0 && (
-            <Table
-              caption="Registered Group Entities"
-              rows={query.data.entities}
-              rowKey={(e) => e.id}
-              columns={[
-                {
-                  label: "Entity",
-                  render: (e) => (
-                    <div>
-                      <strong>{e.entity_code}</strong> · {e.entity_name}
-                      <div className="muted" style={{ fontSize: "0.78rem" }}>
-                        {e.jurisdiction} · {e.functional_currency}
-                      </div>
+          <h3>Companies &amp; past group reports</h3>
+          <Table
+            caption="Group companies"
+            emptyText="No group companies added yet."
+            rows={query.data.entities}
+            rowKey={(e) => e.id}
+            columns={[
+              {
+                label: "Company",
+                render: (e) => (
+                  <div>
+                    <strong>{e.entity_code}</strong> · {e.entity_name}
+                    <div className="muted" style={{ fontSize: "0.78rem" }}>
+                      {e.jurisdiction} · {e.functional_currency}
                     </div>
-                  ),
-                },
-                {
-                  label: "Ownership & Method",
-                  render: (e) => (
-                    <Badge>
-                      {e.ownership_percent}% · {e.consolidation_method}
-                    </Badge>
-                  ),
-                },
-                {
-                  label: "FX (Close / Avg)",
-                  render: (e) => `${e.closing_fx_rate} / ${e.average_fx_rate}`,
-                },
-                {
-                  label: "Assets / Liab",
-                  render: (e) =>
-                    `${e.standalone_assets} / ${e.standalone_liabilities}`,
-                },
-                {
-                  label: "Rev / Exp",
-                  render: (e) =>
-                    `${e.standalone_revenue} / ${e.standalone_expenses}`,
-                },
-                {
-                  label: "IC AR / AP",
-                  render: (e) =>
-                    `${e.intercompany_receivable} / ${e.intercompany_payable}`,
-                },
-              ]}
-            />
-          )}
+                  </div>
+                ),
+              },
+              {
+                label: "Ownership",
+                render: (e) => (
+                  <Badge>
+                    {e.ownership_percent}% · {humanize(e.consolidation_method)}
+                  </Badge>
+                ),
+              },
+              {
+                label: "Assets / liabilities",
+                render: (e) =>
+                  `${e.standalone_assets} / ${e.standalone_liabilities}`,
+              },
+              {
+                label: "Revenue / expenses",
+                render: (e) =>
+                  `${e.standalone_revenue} / ${e.standalone_expenses}`,
+              },
+            ]}
+          />
           {query.data.runs.length > 0 && (
             <div style={{ marginTop: "20px" }}>
-              <h4>Consolidation Close Runs & Elimination Entries</h4>
+              <h4>Saved group reports</h4>
               <Table
-                caption="Group Consolidation Runs"
+                caption="Saved group reports"
                 rows={query.data.runs}
                 rowKey={(r) => r.id}
                 columns={[
@@ -6112,33 +6066,19 @@ export function P4GroupConsolidationHub() {
                     label: "Period",
                     render: (r) => (
                       <strong>
-                        {r.period_label} ({r.entities_count} entities)
+                        {r.period_label} ({r.entities_count} companies)
                       </strong>
                     ),
                   },
                   {
-                    label: "Consol. Assets / Equity",
+                    label: "Combined assets / equity",
                     render: (r) =>
                       `${r.reporting_currency} ${r.consolidated_assets} / ${r.consolidated_equity}`,
                   },
                   {
-                    label: "Consol. Net Income (NCI)",
+                    label: "Combined net profit",
                     render: (r) =>
-                      `${r.reporting_currency} ${r.consolidated_net_income} (NCI ${r.minority_interest_nci_share})`,
-                  },
-                  {
-                    label: "Elimination Journal Lines",
-                    render: (r) => (
-                      <span style={{ fontSize: "0.78rem" }}>
-                        {r.elimination_lines
-                          .map((line) =>
-                            Number(line.debit) > 0
-                              ? `DR ${line.label}: ${line.debit}`
-                              : `CR ${line.label}: ${line.credit}`,
-                          )
-                          .join(" · ") || "No eliminations needed"}
-                      </span>
-                    ),
+                      `${r.reporting_currency} ${r.consolidated_net_income}`,
                   },
                   {
                     label: "Status",
@@ -6150,7 +6090,7 @@ export function P4GroupConsolidationHub() {
                             : "warning"
                         }
                       >
-                        {r.status}
+                        {humanize(r.status)}
                       </Badge>
                     ),
                   },
@@ -6164,35 +6104,186 @@ export function P4GroupConsolidationHub() {
   );
 }
 
+type AutomationTabId =
+  | "reminders"
+  | "portals"
+  | "payments"
+  | "sla"
+  | "payouts"
+  | "voice"
+  | "encryption"
+  | "ai-benchmarks"
+  | "accounting-expansion"
+  | "enterprise-sso"
+  | "p4-operations"
+  | "p4-migrations"
+  | "p4-bulk-ingestion"
+  | "p4-disaster-recovery"
+  | "p4-inventory"
+  | "p4-group-consolidation";
+
+const TAB_DETAILS: Record<
+  AutomationTabId,
+  { eyebrow: string; title: string; description: string; group: string }
+> = {
+  reminders: {
+    eyebrow: "PAYMENTS & REMINDERS",
+    title: "Reminders",
+    description:
+      "Connect WhatsApp and Slack separately, then send polite follow-ups for missing receipts, overdue bills, and pending approvals.",
+    group: "workflows",
+  },
+  portals: {
+    eyebrow: "PAYMENTS & REMINDERS",
+    title: "Supplier portals",
+    description:
+      "Connect utility, software, and vendor portals so new invoices are imported automatically as draft bills for your review.",
+    group: "workflows",
+  },
+  payments: {
+    eyebrow: "PAYMENTS & REMINDERS",
+    title: "Supplier payments",
+    description:
+      "Prepare supplier payouts and require owner or accountant approval with a verification code before any money leaves your account.",
+    group: "workflows",
+  },
+  sla: {
+    eyebrow: "PAYMENTS & REMINDERS",
+    title: "Daily reconciliation",
+    description:
+      "See every open bank transaction, missing receipt, and unapproved draft in one daily checklist.",
+    group: "workflows",
+  },
+  payouts: {
+    eyebrow: "BANK FEEDS & DOCUMENTS",
+    title: "Bank feed & payouts",
+    description:
+      "Import bank feed transactions and split merchant payouts into gross sales, fees, refunds, and net bank deposits.",
+    group: "documents",
+  },
+  voice: {
+    eyebrow: "BANK FEEDS & DOCUMENTS",
+    title: "Voice notes",
+    description:
+      "Turn quick spoken notes or uploaded audio memos into reviewable bill and invoice drafts.",
+    group: "documents",
+  },
+  "ai-benchmarks": {
+    eyebrow: "BANK FEEDS & DOCUMENTS",
+    title: "Document scanning",
+    description:
+      "Test how invoice and receipt scanning handles multiple languages, rotated photos, and blurry receipts.",
+    group: "documents",
+  },
+  "accounting-expansion": {
+    eyebrow: "BANK FEEDS & DOCUMENTS",
+    title: "Revenue & payroll",
+    description:
+      "Create monthly contract revenue schedules, split payroll into taxes and benefits, and resolve short-paid invoices.",
+    group: "documents",
+  },
+  "p4-inventory": {
+    eyebrow: "INVENTORY & GROUP",
+    title: "Inventory",
+    description:
+      "Track stock across warehouses, add shipping or customs costs, and record cost of goods sold automatically.",
+    group: "operations",
+  },
+  "p4-group-consolidation": {
+    eyebrow: "INVENTORY & GROUP",
+    title: "Group reporting",
+    description:
+      "Combine financial statements across multiple companies and currencies while removing internal group transactions.",
+    group: "operations",
+  },
+  "p4-bulk-ingestion": {
+    eyebrow: "INVENTORY & GROUP",
+    title: "Bulk document import",
+    description:
+      "Import large historical archives of invoices and receipts in the background without slowing down daily work.",
+    group: "operations",
+  },
+  "p4-migrations": {
+    eyebrow: "INVENTORY & GROUP",
+    title: "Data migration",
+    description:
+      "Run background updates across historical records while verifying that your trial balance stays in balance.",
+    group: "operations",
+  },
+  "p4-operations": {
+    eyebrow: "SECURITY & WORKSPACE",
+    title: "Usage limits",
+    description:
+      "Manage daily document limits, storage allowances, and monthly AI spending caps for your workspace.",
+    group: "security",
+  },
+  "p4-disaster-recovery": {
+    eyebrow: "SECURITY & WORKSPACE",
+    title: "Disaster recovery",
+    description:
+      "Verify regional backup readiness and test switching regions safely with zero lost accounting entries.",
+    group: "security",
+  },
+  encryption: {
+    eyebrow: "SECURITY & WORKSPACE",
+    title: "Data encryption",
+    description:
+      "Manage and rotate the dedicated encryption key protecting stored credentials in this workspace.",
+    group: "security",
+  },
+  "enterprise-sso": {
+    eyebrow: "SECURITY & WORKSPACE",
+    title: "Single sign-on & region",
+    description:
+      "Connect your company identity provider and choose the geographic region where workspace data is stored.",
+    group: "security",
+  },
+};
+
+const TAB_GROUPS: Record<
+  string,
+  ReadonlyArray<readonly [AutomationTabId, string]>
+> = {
+  workflows: [
+    ["reminders", "Reminders"],
+    ["portals", "Supplier portals"],
+    ["payments", "Supplier payments"],
+    ["sla", "Daily reconciliation"],
+  ],
+  documents: [
+    ["payouts", "Bank feed & payouts"],
+    ["voice", "Voice notes"],
+    ["ai-benchmarks", "Document scanning"],
+    ["accounting-expansion", "Revenue & payroll"],
+  ],
+  operations: [
+    ["p4-inventory", "Inventory"],
+    ["p4-group-consolidation", "Group reporting"],
+    ["p4-bulk-ingestion", "Bulk import"],
+    ["p4-migrations", "Data migration"],
+  ],
+  security: [
+    ["p4-operations", "Usage limits"],
+    ["p4-disaster-recovery", "Disaster recovery"],
+    ["encryption", "Data encryption"],
+    ["enterprise-sso", "Single sign-on & region"],
+  ],
+};
+
 export function P3AutomationHub({
   initialTab = "reminders",
 }: {
-  initialTab?:
-    | "reminders"
-    | "portals"
-    | "payments"
-    | "sla"
-    | "payouts"
-    | "voice"
-    | "encryption"
-    | "ai-benchmarks"
-    | "accounting-expansion"
-    | "enterprise-sso"
-    | "p4-operations"
-    | "p4-migrations"
-    | "p4-bulk-ingestion"
-    | "p4-disaster-recovery"
-    | "p4-inventory"
-    | "p4-group-consolidation";
+  initialTab?: AutomationTabId;
 }) {
-  const [tab, setTab] = useState<string>(initialTab);
+  const [tab, setTab] = useState<AutomationTabId>(initialTab);
   useEffect(() => {
     setTab(initialTab);
   }, [initialTab]);
   const handleTabChange = (nextTab: string) => {
-    setTab(nextTab);
+    const validTab = nextTab as AutomationTabId;
+    setTab(validTab);
     if (typeof window !== "undefined") {
-      const tabRoutes: Record<string, string> = {
+      const tabRoutes: Record<AutomationTabId, string> = {
         reminders: "/reminders",
         portals: "/supplier-portals",
         payments: "/supplier-payments",
@@ -6203,52 +6294,51 @@ export function P3AutomationHub({
         "ai-benchmarks": "/ai-benchmarks",
         "accounting-expansion": "/accounting-expansion",
         "enterprise-sso": "/enterprise-sso",
-        "p4-operations": "/p4-operations",
-        "p4-migrations": "/p4-migrations",
-        "p4-bulk-ingestion": "/p4-bulk-ingestion",
-        "p4-disaster-recovery": "/p4-disaster-recovery",
-        "p4-inventory": "/p4-inventory",
-        "p4-group-consolidation": "/p4-group-consolidation",
+        "p4-operations": "/usage-limits",
+        "p4-migrations": "/data-migration",
+        "p4-bulk-ingestion": "/bulk-import",
+        "p4-disaster-recovery": "/disaster-recovery",
+        "p4-inventory": "/inventory",
+        "p4-group-consolidation": "/group-reporting",
       };
-      const targetPath = tabRoutes[nextTab];
-      if (
-        targetPath &&
-        Object.values(tabRoutes).includes(window.location.pathname)
-      ) {
+      const targetPath = tabRoutes[validTab];
+      if (targetPath) {
         window.history.replaceState(null, "", targetPath);
       }
     }
   };
+
+  const activeMeta = TAB_DETAILS[tab] || TAB_DETAILS.reminders;
+  const groupItems = TAB_GROUPS[activeMeta.group] || TAB_GROUPS.workflows;
+
   return (
     <>
       <PageHeading
-        eyebrow="P3 & P4 ENTERPRISE AUTOMATION"
-        title="Reminders, Portals, Payments, Scale, DR, Inventory & Consolidation"
-        description="Multichannel reminders, 2FA TOTP supplier portals, human-approved supplier payments, 1-day SLA, enterprise quotas & AI budgets, online ledger migrations, bulk ingestion cells, fenced regional DR, FIFO inventory costing, and multi-entity consolidation."
+        eyebrow={activeMeta.eyebrow}
+        title={activeMeta.title}
+        description={activeMeta.description}
       />
       <SectionTabs
-        id="p3-automation"
-        label="P3 Automation sections"
+        id="automation-categories"
+        label="Tool categories"
+        value={activeMeta.group}
+        onChange={(nextGroup) => {
+          const first = TAB_GROUPS[nextGroup]?.[0]?.[0];
+          if (first) handleTabChange(first);
+        }}
+        items={[
+          ["workflows", "Payments & reminders"],
+          ["documents", "Bank feeds & documents"],
+          ["operations", "Inventory & group"],
+          ["security", "Security & workspace"],
+        ]}
+      />
+      <SectionTabs
+        id="automation-sections"
+        label="Section tools"
         value={tab}
         onChange={handleTabChange}
-        items={[
-          ["reminders", "C · WhatsApp & Slack Reminders"],
-          ["portals", "D · Supplier Portal Connectors (2FA TOTP)"],
-          ["payments", "E · Human-Approved Supplier Payments"],
-          ["sla", "3.1 · 1-Day Reconciliation SLA"],
-          ["payouts", "3.2 · Bank Feed & Gross-to-Net"],
-          ["voice", "3.3 · Voice-Note Accounting"],
-          ["encryption", "3.4 · Envelope Encryption & Shred"],
-          ["ai-benchmarks", "P3-F · Multilingual OCR & AI Cost"],
-          ["accounting-expansion", "P3-I · Revenue, Payroll & Short-Pay"],
-          ["enterprise-sso", "P3-K · Enterprise SSO & Cell"],
-          ["p4-operations", "P4-D · Enterprise Quotas & AI Cost"],
-          ["p4-migrations", "P4-B · Online Ledger Migrations"],
-          ["p4-bulk-ingestion", "P4-A · Bulk Ingestion Cells"],
-          ["p4-disaster-recovery", "P4-C · Regional DR & Failover"],
-          ["p4-inventory", "P4-E1 · Inventory & Landed Cost"],
-          ["p4-group-consolidation", "P4-E2 · Group Consolidation & IC"],
-        ]}
+        items={groupItems}
       />
       {tab === "reminders" && <MultichannelReminders />}
       {tab === "portals" && <SupplierPortalConnectors />}

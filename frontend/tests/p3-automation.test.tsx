@@ -333,125 +333,125 @@ it("renders P3 automation tabs, workspace channel connector, and empty step-up 2
       </QueryClientProvider>,
     );
 
-    await screen.findByText(/Connect Your Workspace WhatsApp & Slack Accounts/);
+    await screen.findByRole("heading", { name: "Connect WhatsApp" });
+    await screen.findByRole("heading", { name: "Connect Slack" });
     expect(
       screen.getByRole("button", {
-        name: "Save Workspace WhatsApp & Slack Connection",
+        name: "Save WhatsApp connection",
+      }),
+    ).toBeEnabled();
+    expect(
+      screen.getByRole("button", {
+        name: "Save Slack connection",
       }),
     ).toBeEnabled();
 
-    fireEvent.click(
-      screen.getByRole("tab", { name: /Human-Approved Supplier Payments/ }),
+    fireEvent.click(screen.getByRole("tab", { name: "Supplier payments" }));
+    const stepUpInput = await screen.findByLabelText(
+      /Approval code \(from your authenticator app\)/,
     );
-    const stepUpInput = await screen.findByLabelText(/Step-Up 2FA Code/);
     expect((stepUpInput as HTMLInputElement).value).toBe("");
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Approve & Release Payment" }),
+      await screen.findByRole("button", { name: "Approve and pay" }),
     );
     expect(
       await screen.findByRole("dialog", {
-        name: "Confirm Supplier Payment Settlement",
+        name: "Approve supplier payment",
       }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "Confirm & Execute Settlement" }),
+      screen.getByRole("button", { name: "Approve payment" }),
     ).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
 
-    fireEvent.click(
-      screen.getByRole("tab", { name: /3\.1 · 1-Day Reconciliation SLA/ }),
-    );
+    fireEvent.click(screen.getByRole("tab", { name: "Daily reconciliation" }));
     expect(
-      await screen.findByText(/One-Day Reconciliation SLA Tracker/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /3\.2 · Bank Feed & Gross-to-Net/ }),
-    );
-    expect(
-      await screen.findByText(/Reconcile Gross-to-Net Merchant Payout Split/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /3\.3 · Voice-Note Accounting/ }),
-    );
-    expect(
-      await screen.findByText(/Voice-Note Accounting Instruction Review/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /3\.4 · Envelope Encryption & Shred/ }),
-    );
-    expect(
-      await screen.findByText(/Per-Tenant Envelope Encryption Keys/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P3-F · Multilingual OCR & AI Cost/ }),
-    );
-    expect(
-      await screen.findByText(/50% AI Cost-Reduction Benchmark/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", {
-        name: /P3-I · Revenue, Payroll & Short-Pay/,
+      await screen.findByRole("heading", {
+        name: "Daily reconciliation",
+        level: 2,
       }),
-    );
-    expect(
-      await screen.findByText(/Contract Revenue Schedules/),
     ).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("tab", { name: /P3-K · Enterprise SSO & Cell/ }),
+      screen.getByRole("tab", { name: "Bank feeds & documents" }),
     );
     expect(
-      await screen.findByText(/Regional Data-Residency Cell Isolation/),
+      await screen.findByRole("heading", {
+        name: /Bank feed & merchant payouts/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Voice notes" }));
+    expect(
+      await screen.findByRole("heading", { name: "Voice notes", level: 2 }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Document scanning" }));
+    expect(
+      await screen.findByRole("heading", { name: /Document scanning quality/ }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Revenue & payroll" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Revenue schedules, payroll & short payments/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Inventory & group" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Inventory & stock valuation/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Group reporting" }));
+    expect(
+      await screen.findByRole("heading", { name: "Group reporting", level: 2 }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Bulk import" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: "Bulk document import",
+        level: 2,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Data migration" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Data migration & balance check/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Security & workspace" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Usage limits & spending alerts/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Disaster recovery" }));
+    expect(
+      await screen.findByRole("heading", {
+        name: /Backup & disaster recovery/,
+      }),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Data encryption" }));
+    expect(
+      await screen.findByRole("heading", { name: "Data encryption", level: 2 }),
     ).toBeInTheDocument();
 
     fireEvent.click(
-      screen.getByRole("tab", { name: /P4-D · Enterprise Quotas & AI Cost/ }),
+      screen.getByRole("tab", { name: "Single sign-on & region" }),
     );
     expect(
-      await screen.findByText(/Enterprise Operations, Tenant Quotas/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P4-B · Online Ledger Migrations/ }),
-    );
-    expect(
-      await screen.findByText(/Zero-Downtime Online Large-Ledger Migrations/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P4-A · Bulk Ingestion Cells/ }),
-    );
-    expect(
-      await screen.findByText(/High-Volume Capacity & Isolated Bulk Ingestion/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P4-C · Regional DR & Failover/ }),
-    );
-    expect(
-      await screen.findByText(/Regional Resilience, WAL Replication/),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P4-E1 · Inventory & Landed Cost/ }),
-    );
-    expect(
-      await screen.findByText(
-        /Inventory Subledger \(FIFO & Weighted Average\)/,
-      ),
-    ).toBeInTheDocument();
-
-    fireEvent.click(
-      screen.getByRole("tab", { name: /P4-E2 · Group Consolidation & IC/ }),
-    );
-    expect(
-      await screen.findByText(/Multi-Entity Group Consolidation, IAS 21 FX/),
+      await screen.findByRole("heading", {
+        name: /Single sign-on & data region/,
+      }),
     ).toBeInTheDocument();
   } finally {
     client.clear();

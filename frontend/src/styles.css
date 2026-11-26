@@ -448,6 +448,13 @@ td {
   max-width: 420px;
   overflow-wrap: anywhere;
 }
+.table-empty-cell {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.84rem;
+  padding: 28px 20px;
+  max-width: none;
+}
 tr:last-child td {
   border-bottom: 0;
 }
@@ -2764,6 +2771,21 @@ details.panel > p {
   grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
   gap: 14px;
   margin-top: 16px;
+  margin-bottom: 22px;
+}
+.settings-section > .table-scroll {
+  margin: 20px -28px -28px;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 680px) {
+  .stack > .panel,
+  .settings-section {
+    padding: 18px 16px;
+  }
+  .stack > .panel > .table-scroll,
+  .settings-section > .table-scroll {
+    margin-inline: -16px;
+  }
 }
 .p4-kpi-card {
   display: flex;

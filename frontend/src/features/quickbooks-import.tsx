@@ -176,7 +176,7 @@ export function QuickBooksImport() {
       };
       setQbStatusNotice(
         data.connection_mode === "sandbox_demo"
-          ? "Switched to Built-in Intuit QuickBooks Sandbox Demo dataset."
+          ? "Switched to the built-in sample QuickBooks data."
           : `Connected QuickBooks Online company: ${data.company_name || "Custom"} (Realm ID: ${data.realm_id || ""}).`,
       );
       void queryClient.invalidateQueries({
@@ -213,9 +213,7 @@ export function QuickBooksImport() {
             Realm {previewMeta.realm_id})
           </Badge>
         ) : (
-          <Badge>
-            BUILT-IN SANDBOX DATASET READY (No Live Intuit QBO Connected)
-          </Badge>
+          <Badge>SAMPLE DATA READY (QuickBooks not connected)</Badge>
         )}
       </div>
 
@@ -224,7 +222,7 @@ export function QuickBooksImport() {
         <p className="muted">
           Authorize your live QuickBooks Online company via Intuit OAuth 2.0 or
           encrypted Realm ID &amp; OAuth credentials, or proceed directly to
-          Step 2 below to evaluate migration using the built-in Intuit Sandbox
+          Step 2 below to evaluate migration using the built-in sample data
           company dataset.
         </p>
         <form
@@ -271,13 +269,13 @@ export function QuickBooksImport() {
               <input
                 name="access_token"
                 type="password"
-                placeholder="eyJ... (Fernet-encrypted at rest)"
+                placeholder="Paste your access token (stored securely)"
                 required
               />
             </Field>
             <Field label="QuickBooks Environment">
               <select name="environment" defaultValue="sandbox">
-                <option value="sandbox">Intuit Sandbox API</option>
+                <option value="sandbox">QuickBooks test environment</option>
                 <option value="production">Intuit Production API</option>
               </select>
             </Field>
@@ -302,7 +300,7 @@ export function QuickBooksImport() {
               busy={connectQuickBooks.isPending}
               onClick={() => connectQuickBooks.mutate({ mode: "sandbox_demo" })}
             >
-              Use Built-in Sandbox Demo Dataset
+              Try with sample data
             </Button>
           </div>
           {qbStatusNotice && (

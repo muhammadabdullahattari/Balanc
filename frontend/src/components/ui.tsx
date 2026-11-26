@@ -273,6 +273,22 @@ export function Modal({
     </Dialog.Root>
   );
 }
+/** Turns raw codes such as "awaiting_confirmation" into "Awaiting confirmation". */
+export function humanize(value: string): string {
+  if (!value) return value;
+  const spaced = value.replace(/[_-]+/g, " ").trim().toLowerCase();
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1);
+}
+/** Formats an ISO timestamp for people, e.g. "Nov 26, 2026, 4:42 PM". */
+export function formatWhen(iso?: string | null): string {
+  if (!iso) return "—";
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
 export function Badge({
   children,
   tone = "neutral",
@@ -280,7 +296,12 @@ export function Badge({
   children: ReactNode;
   tone?: "neutral" | "good" | "warning";
 }) {
-  return <span className={`badge ${tone}`}>{children}</span>;
+  const shown =
+    typeof children === "string" &&
+    /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/.test(children)
+      ? humanize(children)
+      : children;
+  return <span className={`badge ${tone}`}>{shown}</span>;
 }
 export function SectionTabs({
   id,
@@ -345,11 +366,13 @@ export function Table<T>({
   columns,
   rowKey,
   caption,
+  emptyText = "No records yet.",
 }: {
   rows: T[];
   columns: { label: string; render: (row: T) => ReactNode }[];
   rowKey: (row: T, index: number) => string;
   caption: string;
+  emptyText?: string;
 }) {
   return (
     <div
@@ -370,13 +393,21 @@ export function Table<T>({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, index) => (
-            <tr key={rowKey(row, index)}>
-              {columns.map((c) => (
-                <td key={c.label}>{c.render(row)}</td>
-              ))}
+          {rows.length === 0 ? (
+            <tr className="table-empty-row">
+              <td colSpan={columns.length} className="table-empty-cell">
+                {emptyText}
+              </td>
             </tr>
-          ))}
+          ) : (
+            rows.map((row, index) => (
+              <tr key={rowKey(row, index)}>
+                {columns.map((c) => (
+                  <td key={c.label}>{c.render(row)}</td>
+                ))}
+              </tr>
+            ))
+          )}
         </tbody>
       </table>
     </div>

@@ -153,7 +153,8 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
           ["permissions", "Permissions"],
           ["billing", "Billing"],
           ["integrations", "Integrations"],
-          ["reminders", "WhatsApp & Slack"],
+          ["whatsapp", "WhatsApp"],
+          ["slack", "Slack"],
           ["portals", "Supplier Portals"],
           ["payments", "Supplier Payments"],
           ["security", "Security"],
@@ -281,7 +282,10 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
         {section === "billing" && <BillingSettings />}
         {section === "permissions" && <RolePermissions />}
         {section === "integrations" && <QuickBooksImport />}
-        {section === "reminders" && <MultichannelReminders />}
+        {(section === "whatsapp" || section === "reminders") && (
+          <MultichannelReminders channelFilter="whatsapp" />
+        )}
+        {section === "slack" && <MultichannelReminders channelFilter="slack" />}
         {section === "portals" && <SupplierPortalConnectors />}
         {section === "payments" && <HumanApprovedSupplierPayments />}
         {section === "security" && (

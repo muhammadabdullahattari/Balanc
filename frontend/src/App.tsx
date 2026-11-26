@@ -10,6 +10,7 @@ import {
 import { SpeedInsights } from "@vercel/speed-insights/react";
 import {
   BrowserRouter,
+  Navigate,
   NavLink,
   Route,
   Routes,
@@ -135,7 +136,7 @@ const AICopilotHub = lazy(() =>
   })),
 );
 const navigation = [
-  { to: "/ai-copilot", label: "AI accounting copilot", icon: CheckSquare },
+  { to: "/ai-assistant", label: "AI assistant", icon: CheckSquare },
   { to: "/drafts", label: "Draft review", icon: FileText },
   { to: "/refunds", label: "Payments & refunds", icon: ArrowLeftRight },
   { to: "/advances", label: "Advances", icon: Landmark },
@@ -143,15 +144,15 @@ const navigation = [
   { to: "/openings", label: "Opening balances", icon: BookOpen },
   { to: "/activity", label: "Activity", icon: CheckSquare },
   { to: "/search", label: "Search", icon: SearchIcon },
-  { to: "/reminders", label: "WhatsApp & Slack", icon: CheckSquare },
+  { to: "/reminders", label: "Reminders", icon: CheckSquare },
   { to: "/supplier-portals", label: "Supplier portals", icon: FolderOpen },
   { to: "/supplier-payments", label: "Supplier payments", icon: Landmark },
-  { to: "/p4-operations", label: "Enterprise quotas", icon: SettingsIcon },
-  { to: "/p4-migrations", label: "Online migrations", icon: BookOpen },
-  { to: "/p4-bulk-ingestion", label: "Bulk ingestion", icon: FolderOpen },
-  { to: "/p4-disaster-recovery", label: "Regional DR", icon: Landmark },
-  { to: "/p4-inventory", label: "Inventory costing", icon: BarChart3 },
-  { to: "/p4-group-consolidation", label: "Group consolidation", icon: Users },
+  { to: "/usage-limits", label: "Usage limits", icon: SettingsIcon },
+  { to: "/data-migration", label: "Data migration", icon: BookOpen },
+  { to: "/bulk-import", label: "Bulk import", icon: FolderOpen },
+  { to: "/disaster-recovery", label: "Disaster recovery", icon: Landmark },
+  { to: "/inventory", label: "Inventory", icon: BarChart3 },
+  { to: "/group-reporting", label: "Group reporting", icon: Users },
   { to: "/reconciliation", label: "Reconciliation", icon: CheckSquare },
   { to: "/ledger", label: "General ledger", icon: BookOpen },
   { to: "/", label: "Overview", icon: LayoutDashboard },
@@ -576,7 +577,7 @@ function Workspace() {
                 {
                   title: "Manage",
                   paths: [
-                    "/ai-copilot",
+                    "/ai-assistant",
                     "/rules",
                     "/openings",
                     "/reminders",
@@ -587,14 +588,14 @@ function Workspace() {
                   ],
                 },
                 {
-                  title: "Enterprise (P4)",
+                  title: "Advanced",
                   paths: [
-                    "/p4-operations",
-                    "/p4-migrations",
-                    "/p4-bulk-ingestion",
-                    "/p4-disaster-recovery",
-                    "/p4-inventory",
-                    "/p4-group-consolidation",
+                    "/usage-limits",
+                    "/data-migration",
+                    "/bulk-import",
+                    "/disaster-recovery",
+                    "/inventory",
+                    "/group-reporting",
                   ],
                 },
               ].map((group) => (
@@ -747,7 +748,36 @@ function Workspace() {
                   <Route path="/prepaids" element={<Prepaids />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
-                  <Route path="/ai-copilot" element={<AICopilotHub />} />
+                  <Route path="/ai-assistant" element={<AICopilotHub />} />
+                  {/* legacy-redirects */}
+                  <Route
+                    path="/p4-operations"
+                    element={<Navigate to="/usage-limits" replace />}
+                  />
+                  <Route
+                    path="/p4-migrations"
+                    element={<Navigate to="/data-migration" replace />}
+                  />
+                  <Route
+                    path="/p4-bulk-ingestion"
+                    element={<Navigate to="/bulk-import" replace />}
+                  />
+                  <Route
+                    path="/p4-disaster-recovery"
+                    element={<Navigate to="/disaster-recovery" replace />}
+                  />
+                  <Route
+                    path="/p4-inventory"
+                    element={<Navigate to="/inventory" replace />}
+                  />
+                  <Route
+                    path="/p4-group-consolidation"
+                    element={<Navigate to="/group-reporting" replace />}
+                  />
+                  <Route
+                    path="/ai-copilot"
+                    element={<Navigate to="/ai-assistant" replace />}
+                  />
                   <Route
                     path="/reminders"
                     element={<P3AutomationHub initialTab="reminders" />}
@@ -791,29 +821,29 @@ function Workspace() {
                     element={<P3AutomationHub initialTab="enterprise-sso" />}
                   />
                   <Route
-                    path="/p4-operations"
+                    path="/usage-limits"
                     element={<P3AutomationHub initialTab="p4-operations" />}
                   />
                   <Route
-                    path="/p4-migrations"
+                    path="/data-migration"
                     element={<P3AutomationHub initialTab="p4-migrations" />}
                   />
                   <Route
-                    path="/p4-bulk-ingestion"
+                    path="/bulk-import"
                     element={<P3AutomationHub initialTab="p4-bulk-ingestion" />}
                   />
                   <Route
-                    path="/p4-disaster-recovery"
+                    path="/disaster-recovery"
                     element={
                       <P3AutomationHub initialTab="p4-disaster-recovery" />
                     }
                   />
                   <Route
-                    path="/p4-inventory"
+                    path="/inventory"
                     element={<P3AutomationHub initialTab="p4-inventory" />}
                   />
                   <Route
-                    path="/p4-group-consolidation"
+                    path="/group-reporting"
                     element={
                       <P3AutomationHub initialTab="p4-group-consolidation" />
                     }
@@ -854,132 +884,127 @@ function Workspace() {
                       .map((item) => ({
                         id: item.to,
                         label: item.label,
-                        hint: item.to,
+                        hint: "Page",
                         run: () => navigate(item.to),
                       })),
                     {
                       id: "quick-new-invoice",
-                      label: "Action · Create New Sales Invoice",
-                      hint: "/sales",
+                      label: "Create a sales invoice",
+                      hint: "Page",
                       run: () => navigate("/sales"),
                     },
                     {
                       id: "quick-new-bill",
-                      label: "Action · Record New Supplier Bill",
-                      hint: "/purchases",
+                      label: "Record a supplier bill",
+                      hint: "Page",
                       run: () => navigate("/purchases"),
                     },
                     {
                       id: "quick-new-journal",
-                      label: "Action · Post General Ledger Journal Entry",
-                      hint: "/ledger",
+                      label: "Post a journal entry",
+                      hint: "Page",
                       run: () => navigate("/ledger"),
                     },
                     {
                       id: "quick-ask-books",
-                      label: "Action · Ask Book Question & Financial Reports",
-                      hint: "/reports",
+                      label: "View financial reports",
+                      hint: "Page",
                       run: () => navigate("/reports"),
                     },
                     {
                       id: "quick-dispatch-reminder",
-                      label: "Action · Dispatch WhatsApp / Slack Reminder",
-                      hint: "/reminders",
+                      label: "Send a WhatsApp or Slack reminder",
+                      hint: "Page",
                       run: () => navigate("/reminders"),
                     },
                     {
                       id: "/reconciliation-sla",
-                      label: "3.1 · One-Day Reconciliation SLA & Auto-Chasing",
-                      hint: "/reconciliation-sla",
+                      label: "Daily reconciliation",
+                      hint: "Page",
                       run: () => navigate("/reconciliation-sla"),
                     },
                     {
                       id: "/payout-reconciliation",
-                      label: "3.2 · Live Bank Feed & Gross-to-Net Payout Split",
-                      hint: "/payout-reconciliation",
+                      label: "Bank feed and payouts",
+                      hint: "Page",
                       run: () => navigate("/payout-reconciliation"),
                     },
                     {
                       id: "/voice-instructions",
-                      label: "3.3 · Voice-Note Accounting Instruction Review",
-                      hint: "/voice-instructions",
+                      label: "Voice notes",
+                      hint: "Page",
                       run: () => navigate("/voice-instructions"),
                     },
                     {
                       id: "/encryption-keys",
-                      label: "3.4 · Per-Tenant Envelope Encryption & Key Shred",
-                      hint: "/encryption-keys",
+                      label: "Data encryption",
+                      hint: "Page",
                       run: () => navigate("/encryption-keys"),
                     },
                     {
                       id: "/ai-benchmarks",
-                      label: "P3-F · Multilingual OCR & 50% AI Cost Benchmark",
-                      hint: "/ai-benchmarks",
+                      label: "Document scanning",
+                      hint: "Page",
                       run: () => navigate("/ai-benchmarks"),
                     },
                     {
                       id: "/accounting-expansion",
-                      label:
-                        "P3-I · Contract Revenue, Payroll Split & Short-Pay",
-                      hint: "/accounting-expansion",
+                      label: "Revenue and payroll",
+                      hint: "Page",
                       run: () => navigate("/accounting-expansion"),
                     },
                     {
                       id: "/enterprise-sso",
-                      label: "P3-K · Enterprise SSO & Regional Cell Isolation",
-                      hint: "/enterprise-sso",
+                      label: "Single sign-on and data region",
+                      hint: "Page",
                       run: () => navigate("/enterprise-sso"),
                     },
                     {
-                      id: "/p4-operations",
-                      label:
-                        "P4-D · Enterprise Quotas, Fair-Share & AI Cost Caps",
-                      hint: "/p4-operations",
-                      run: () => navigate("/p4-operations"),
+                      id: "/usage-limits",
+                      label: "Usage limits",
+                      hint: "Page",
+                      run: () => navigate("/usage-limits"),
                     },
                     {
-                      id: "/p4-migrations",
-                      label: "P4-B · Online Large-Ledger Migrations & Tie-Out",
-                      hint: "/p4-migrations",
-                      run: () => navigate("/p4-migrations"),
+                      id: "/data-migration",
+                      label: "Data migration",
+                      hint: "Page",
+                      run: () => navigate("/data-migration"),
                     },
                     {
-                      id: "/p4-bulk-ingestion",
-                      label:
-                        "P4-A · Isolated Bulk Ingestion Cells & Backpressure",
-                      hint: "/p4-bulk-ingestion",
-                      run: () => navigate("/p4-bulk-ingestion"),
+                      id: "/bulk-import",
+                      label: "Bulk document import",
+                      hint: "Page",
+                      run: () => navigate("/bulk-import"),
                     },
                     {
-                      id: "/p4-disaster-recovery",
-                      label: "P4-C · Regional DR Failover & Monotonic Fencing",
-                      hint: "/p4-disaster-recovery",
-                      run: () => navigate("/p4-disaster-recovery"),
+                      id: "/disaster-recovery",
+                      label: "Disaster recovery",
+                      hint: "Page",
+                      run: () => navigate("/disaster-recovery"),
                     },
                     {
-                      id: "/p4-inventory",
-                      label:
-                        "P4-E1 · Inventory FIFO / Weighted Cost & Landed Cost",
-                      hint: "/p4-inventory",
-                      run: () => navigate("/p4-inventory"),
+                      id: "/inventory",
+                      label: "Inventory",
+                      hint: "Page",
+                      run: () => navigate("/inventory"),
                     },
                     {
-                      id: "/p4-group-consolidation",
-                      label:
-                        "P4-E2 · Multi-Entity Consolidation & IC Eliminations",
-                      hint: "/p4-group-consolidation",
-                      run: () => navigate("/p4-group-consolidation"),
+                      id: "/group-reporting",
+                      label: "Group reporting",
+                      hint: "Page",
+                      run: () => navigate("/group-reporting"),
                     },
                     {
                       id: "/settings",
-                      label: "Settings & Integrations",
-                      hint: "/settings",
+                      label: "Settings and integrations",
+                      hint: "Page",
                       run: () => navigate("/settings"),
                     },
                     {
                       id: "/settings/billing",
-                      label: "Billing & Subscription",
-                      hint: "/settings/billing",
+                      label: "Billing and subscription",
+                      hint: "Page",
                       run: () => navigate("/settings/billing"),
                     },
                     {
@@ -993,7 +1018,7 @@ function Workspace() {
                     },
                     {
                       id: "action-switch-business",
-                      label: "Switch Business Workspace",
+                      label: "Switch workspace",
                       hint: business.data.name,
                       run: () => setBusinessId(undefined),
                     },

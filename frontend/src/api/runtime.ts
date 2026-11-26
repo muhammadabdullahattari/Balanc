@@ -103,7 +103,7 @@ function friendlyError(code?: string, message?: string) {
     ERR_LINK_EXPIRED:
       "This code is incorrect, expired or replaced. Request a new code and use the newest email.",
     ERR_DEPENDENCY:
-      "LedgerPilot is temporarily unavailable. Wait a moment and try again. If the problem continues, share the support reference with support.",
+      "We're having trouble reaching our servers right now. Wait a moment and try again. If it keeps happening, contact support and quote the reference below.",
     ERR_AUTH_BUSY: "Sign-in is temporarily busy. Wait a moment and try again.",
     ERR_VALIDATION: "Review the details below and try again.",
     ERR_CSRF: "Your secure session changed. Refresh this page and try again.",
@@ -112,6 +112,10 @@ function friendlyError(code?: string, message?: string) {
       "Use 15–128 characters, including an uppercase letter, lowercase letter, number and special character.",
     ERR_MAIL_UNAVAILABLE:
       "We couldn't send the email. Please try again shortly or contact support.",
+    ERR_AI_PAUSED:
+      "AI suggestions are paused for this workspace. Your regular accounting tools still work normally.",
+    ERR_AI_BUDGET_EXCEEDED:
+      "This workspace has reached its monthly AI limit. Increase the limit in AI settings or continue manually.",
   };
   return (code && messages[code]) || message;
 }

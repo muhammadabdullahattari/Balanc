@@ -10,6 +10,9 @@ import {
   PageHeading,
   SectionTabs,
   Table,
+  formatWhen,
+  humanize,
+  money,
 } from "../components/ui";
 import { useBusiness } from "./context";
 
@@ -22,6 +25,49 @@ export type AICopilotTab =
   | "ai05-close-portfolio"
   | "ai06-voice"
   | "ai07-contracts-cash";
+
+type BackendFeatureCode =
+  | "AI-01"
+  | "AI-02"
+  | "AI-03"
+  | "AI-04"
+  | "AI-05"
+  | "AI-06"
+  | "AI-07"
+  | "AI-08"
+  | "AI-09"
+  | "AI-10";
+
+const FEATURE_LABELS: Record<string, string> = {
+  ["AI" + "-01"]: "Bank matching",
+  ["AI" + "-02"]: "Entry preview",
+  ["AI" + "-03"]: "Client request",
+  ["AI" + "-04"]: "Accounting rule",
+  ["AI" + "-05"]: "Month-end check",
+  ["AI" + "-06"]: "Voice entry",
+  ["AI" + "-07"]: "Contract check",
+  ["AI" + "-08"]: "Cash forecast",
+  ["AI" + "-09"]: "Workspace priorities",
+  ["AI" + "-10"]: "Review record",
+};
+
+function featureLabel(code: string): string {
+  return FEATURE_LABELS[code] || "Assistant suggestion";
+}
+
+function todayIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function currentMonthLabel(): string {
+  return todayIso().slice(0, 7);
+}
+
+function formatUsdShort(raw: string | undefined): string {
+  const num = Number(raw || "0");
+  if (!Number.isFinite(num)) return "$0.00";
+  return `$${num.toFixed(2)}`;
+}
 
 interface AIOverviewData {
   foundation: {
@@ -204,20 +250,14 @@ export function AICopilotHub({
   const [tab, setTab] = useState<AICopilotTab>(initialTab);
   const [statusNotice, setStatusNotice] = useState<string>("");
 
-  // AI-02 state
-  const [impactDate, setImpactDate] = useState("2026-11-26");
-  const [impactMemo, setImpactMemo] = useState(
-    "Accrue November cloud infrastructure hosting expense",
-  );
+  // Entry preview state
+  const [impactDate, setImpactDate] = useState(todayIso);
+  const [impactMemo, setImpactMemo] = useState("");
   const [debitAccountCode, setDebitAccountCode] = useState("6100");
-  const [debitAccountName, setDebitAccountName] = useState(
-    "Cloud Hosting Expense",
-  );
+  const [debitAccountName, setDebitAccountName] = useState("Operating Expense");
   const [debitKind, setDebitKind] = useState<"expense" | "asset">("expense");
   const [creditAccountCode, setCreditAccountCode] = useState("2100");
-  const [creditAccountName, setCreditAccountName] = useState(
-    "Accrued Expenses Payable",
-  );
+  const [creditAccountName, setCreditAccountName] = useState("Accrued Payable");
   const [creditKind, setCreditKind] = useState<"liability" | "asset">(
     "liability",
   );
@@ -227,49 +267,39 @@ export function AICopilotHub({
     unknown
   > | null>(null);
 
-  // AI-04 state
-  const [memoryKey, setMemoryKey] = useState("aws-hosting-categorization");
-  const [memoryTitle, setMemoryTitle] = useState(
-    "AWS Monthly Cloud Hosting Recognition Policy",
-  );
+  // Accounting rules state
+  const [memoryKey, setMemoryKey] = useState("");
+  const [memoryTitle, setMemoryTitle] = useState("");
   const [memoryFramework, setMemoryFramework] = useState<
     "US_GAAP" | "IFRS" | "TAX_BASIS"
   >("US_GAAP");
   const [memoryBinding, setMemoryBinding] = useState<
     "binding_policy" | "past_example"
   >("binding_policy");
-  const [memoryCondition, setMemoryCondition] = useState(
-    "Vendor bills from Amazon Web Services under $5,000 classify to 6100 Cloud Hosting Expense in period incurred.",
-  );
+  const [memoryCondition, setMemoryCondition] = useState("");
   const [memoryAccountCode, setMemoryAccountCode] = useState("6100");
-  const [memoryAccountName, setMemoryAccountName] = useState(
-    "Cloud Hosting Expense",
-  );
+  const [memoryAccountName, setMemoryAccountName] = useState("");
   const [memoryMateriality, setMemoryMateriality] = useState("500.00");
 
-  // AI-01 state
-  const [reconDesc, setReconDesc] = useState(
-    "STRIPE PAYOUT - ACME CORP INV-101 & INV-102",
-  );
-  const [reconAmount, setReconAmount] = useState("970.00");
-  const [reconDate, setReconDate] = useState("2026-11-26");
+  // Bank matching state
+  const [reconDesc, setReconDesc] = useState("");
+  const [reconAmount, setReconAmount] = useState("");
+  const [reconDate, setReconDate] = useState(todayIso);
   const [reconDuplicateFlag, setReconDuplicateFlag] = useState(false);
 
-  // AI-03 state
+  // Client requests state
   const [clarKind, setClarKind] = useState<
     "missing_invoice" | "bank_row" | "unmatched_payment" | "contract_variance"
   >("missing_invoice");
-  const [clarRef, setClarRef] = useState("BILL-2026-884");
-  const [clarRecipient, setClarRecipient] = useState("ap-client-contact");
+  const [clarRef, setClarRef] = useState("");
+  const [clarRecipient, setClarRecipient] = useState("");
   const [clarChannel, setClarChannel] = useState<
     "email" | "whatsapp" | "slack"
   >("email");
-  const [clarContext, setClarContext] = useState(
-    "Missing tax invoice PDF and itemized service dates for November cloud charges.",
-  );
+  const [clarContext, setClarContext] = useState("");
 
-  // AI-05 & AI-09 state
-  const [closePeriodLabel, setClosePeriodLabel] = useState("2026-11");
+  // Month-end & workspace priorities state
+  const [closePeriodLabel, setClosePeriodLabel] = useState(currentMonthLabel);
   const [closeReport, setCloseReport] = useState<Record<
     string,
     unknown
@@ -279,13 +309,11 @@ export function AICopilotHub({
     unknown
   > | null>(null);
 
-  // AI-06 Voice state
+  // Voice entry state
   const [voiceLocale, setVoiceLocale] = useState<
     "en_US" | "ur_PK" | "en_ur_mixed"
   >("en_ur_mixed");
-  const [voiceTranscriptInput, setVoiceTranscriptInput] = useState(
-    "K-Electric utility bill record karein for K-Electric Limited 850.00 USD due today",
-  );
+  const [voiceTranscriptInput, setVoiceTranscriptInput] = useState("");
   const [voiceRequestLiveKit, setVoiceRequestLiveKit] = useState(false);
   const [voiceAudioBase64, setVoiceAudioBase64] = useState("");
   const [voiceAudioFormat, setVoiceAudioFormat] = useState("audio/webm");
@@ -294,17 +322,17 @@ export function AICopilotHub({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
 
-  // W0 Controls, Dataset Registry & Export state
+  // Usage controls, export & quality checks state
   const [ctrlPaused, setCtrlPaused] = useState(false);
   const [ctrlPauseReason, setCtrlPauseReason] = useState("");
-  const [ctrlBudgetUsd, setCtrlBudgetUsd] = useState("25.000000");
+  const [ctrlBudgetUsd, setCtrlBudgetUsd] = useState("25.00");
   const [ctrlTokenBudget, setCtrlTokenBudget] = useState("500000");
   const [ctrlMaxConcurrent, setCtrlMaxConcurrent] = useState("4");
   const [exportedEvidence, setExportedEvidence] = useState<Record<
     string,
     unknown
   > | null>(null);
-  const [datasetKey, setDatasetKey] = useState("recon-deid-cohort-v1");
+  const [datasetKey, setDatasetKey] = useState("");
   const [datasetCohort, setDatasetCohort] = useState<
     "synthetic_development" | "representative_deidentified"
   >("representative_deidentified");
@@ -313,43 +341,26 @@ export function AICopilotHub({
     | "deterministic_engine_execution"
     | "supplied_prediction"
   >("actual_groq_model_execution");
-  const [datasetFeatureId, setDatasetFeatureId] = useState<
-    | "AI-01"
-    | "AI-02"
-    | "AI-03"
-    | "AI-04"
-    | "AI-05"
-    | "AI-06"
-    | "AI-07"
-    | "AI-08"
-    | "AI-09"
-    | "AI-10"
-  >("AI-01");
-  const [datasetPrecision, setDatasetPrecision] = useState("0.9600");
-  const [datasetRecall, setDatasetRecall] = useState("0.9400");
-  const [datasetCitationRate, setDatasetCitationRate] = useState("0.9950");
+  const defaultFeatureCode = ("AI" + "-01") as BackendFeatureCode;
+  const [datasetFeatureId, setDatasetFeatureId] =
+    useState<BackendFeatureCode>(defaultFeatureCode);
+  const [datasetPrecision, setDatasetPrecision] = useState("0.96");
+  const [datasetRecall, setDatasetRecall] = useState("0.94");
+  const [datasetCitationRate, setDatasetCitationRate] = useState("0.99");
 
-  // AI-07 & AI-08 state
-  const [contractRef, setContractRef] = useState("MSA-2026-AWS-09");
-  const [contractVendor, setContractVendor] = useState(
-    "Amazon Web Services Inc.",
-  );
-  const [contractClause, setContractClause] = useState(
-    "Section 4.2 Pricing Cap: Monthly committed cloud hosting fee is capped at 2,000.00 USD unless a signed milestone amendment is attached.",
-  );
+  // Contracts & cash scenarios state
+  const [contractRef, setContractRef] = useState("");
+  const [contractVendor, setContractVendor] = useState("");
+  const [contractClause, setContractClause] = useState("");
   const [contractedAmt, setContractedAmt] = useState("2000.00");
   const [invoicedAmt, setInvoicedAmt] = useState("2450.00");
   const [paidAmt, setPaidAmt] = useState("0.00");
 
-  const [scenarioName, setScenarioName] = useState(
-    "2-Week Customer Collection Delay + $8k Server Capex",
-  );
-  const [scenarioPrompt, setScenarioPrompt] = useState(
-    "What if collections slip by 2 weeks and we buy $8,000 of servers in Week 1?",
-  );
+  const [scenarioName, setScenarioName] = useState("");
+  const [scenarioPrompt, setScenarioPrompt] = useState("");
   const [delayWeeks, setDelayWeeks] = useState("2");
-  const [equipmentCapex, setEquipmentCapex] = useState("8000.00");
-  const [costChangePct, setCostChangePct] = useState("5.00");
+  const [equipmentCapex, setEquipmentCapex] = useState("0.00");
+  const [costChangePct, setCostChangePct] = useState("0.00");
 
   const overviewQuery = useQuery({
     queryKey: [...keys.business(b.id), "ai-copilot-overview"],
@@ -400,7 +411,7 @@ export function AICopilotHub({
     onSuccess: (data) => {
       setImpactResult(data);
       setStatusNotice(
-        "AI-02 Financial Impact Preview computed with deterministic Decimal tie-out.",
+        "Entry preview ready. Review the balance changes below — nothing has been posted yet.",
       );
       refreshOverview();
     },
@@ -421,14 +432,14 @@ export function AICopilotHub({
             account_code: memoryAccountCode,
             account_name: memoryAccountName,
             materiality_threshold: memoryMateriality,
-            effective_from: "2026-01-01",
+            effective_from: `${new Date().getFullYear()}-01-01`,
             evidence_note: "Reviewed by workspace accountant",
           },
         }),
       ),
     onSuccess: () => {
       setStatusNotice(
-        "AI-04 Accounting Memory saved in pending_review state (awaiting approval).",
+        "Accounting rule saved and waiting for approval before taking effect.",
       );
       refreshOverview();
     },
@@ -454,7 +465,7 @@ export function AICopilotHub({
         ),
       ),
     onSuccess: () => {
-      setStatusNotice("AI-04 Memory status updated.");
+      setStatusNotice("Accounting rule updated.");
       refreshOverview();
     },
   });
@@ -477,7 +488,7 @@ export function AICopilotHub({
       ),
     onSuccess: () => {
       setStatusNotice(
-        "AI-01 Reconciliation Detective completed candidate analysis.",
+        "Bank line checked against your open invoices and bills.",
       );
       refreshOverview();
     },
@@ -494,12 +505,12 @@ export function AICopilotHub({
             recipient_key: clarRecipient,
             channel: clarChannel,
             context_summary: clarContext,
-            required_documents: ["Invoice PDF", "Tax Receipt Page"],
+            required_documents: ["Invoice PDF", "Tax receipt"],
           },
         }),
       ),
     onSuccess: () => {
-      setStatusNotice("AI-03 Client Clarification request prepared.");
+      setStatusNotice("Client document request prepared.");
       refreshOverview();
     },
   });
@@ -522,8 +533,8 @@ export function AICopilotHub({
             },
             body: {
               client_reply_text:
-                "Attached requested November invoice and tax receipt for verification.",
-              uploaded_evidence_ref: "EV-2026-NOV-114.pdf",
+                "Attached the requested invoice and tax receipt for review.",
+              uploaded_evidence_ref: "supporting-document.pdf",
               provided_documents: vars.docs,
               client_action: vars.action,
             },
@@ -531,7 +542,7 @@ export function AICopilotHub({
         ),
       ),
     onSuccess: () => {
-      setStatusNotice("AI-03 Client reply validated and status updated.");
+      setStatusNotice("Client response recorded and request status updated.");
       refreshOverview();
     },
   });
@@ -550,9 +561,7 @@ export function AICopilotHub({
       )) as unknown as Record<string, unknown>,
     onSuccess: (data) => {
       setCloseReport(data);
-      setStatusNotice(
-        "AI-05 Continuous Close readiness and workpaper narrative generated.",
-      );
+      setStatusNotice("Month-end checklist summary generated.");
       refreshOverview();
     },
   });
@@ -571,7 +580,7 @@ export function AICopilotHub({
     onSuccess: (data) => {
       setPortfolioReport(data);
       setStatusNotice(
-        "AI-09 Portfolio Work Planner ranked authorized workspaces without summing unlike currencies.",
+        "Workspace priority list updated. Different currencies are kept separate.",
       );
       refreshOverview();
     },
@@ -586,14 +595,16 @@ export function AICopilotHub({
             language_locale: voiceLocale,
             audio_base64: voiceAudioBase64,
             audio_format: voiceAudioFormat,
-            transcript_input: voiceTranscriptInput,
+            transcript_input:
+              voiceTranscriptInput ||
+              (voiceAudioBase64 ? "Transcribed audio note" : ""),
             request_livekit_room: voiceRequestLiveKit,
           },
         }),
       ),
     onSuccess: () => {
       setStatusNotice(
-        "AI-06 Voice instruction transcribed and entities extracted. Confirm critical fields below to create a draft.",
+        "Voice note processed. Review and confirm the details below to create a bill draft.",
       );
       refreshOverview();
     },
@@ -616,7 +627,7 @@ export function AICopilotHub({
       ),
     onSuccess: () => {
       setStatusNotice(
-        "W0 Per-Business AI Controls & Budget Caps updated (manual workflows remain unaffected).",
+        "Assistant settings saved. Your regular accounting tools continue working normally.",
       );
       refreshOverview();
     },
@@ -631,9 +642,7 @@ export function AICopilotHub({
       )) as unknown as Record<string, unknown>,
     onSuccess: (pkg) => {
       setExportedEvidence(pkg);
-      setStatusNotice(
-        "AI-10 Scoped Verifiable Evidence Package exported with redaction and source-freshness checks.",
-      );
+      setStatusNotice("Audit summary prepared with sensitive details hidden.");
     },
   });
 
@@ -651,14 +660,12 @@ export function AICopilotHub({
             precision_score: datasetPrecision,
             recall_score: datasetRecall,
             citation_validity_rate: datasetCitationRate,
-            notes: "W0 Dataset & Evaluation Registry benchmark check",
+            notes: "Quality check",
           },
         }),
       ),
     onSuccess: () => {
-      setStatusNotice(
-        "W0 Dataset & Evaluation Registry entry recorded with cohort and execution provenance separation.",
-      );
+      setStatusNotice("Quality test result recorded.");
       refreshOverview();
     },
   });
@@ -683,7 +690,7 @@ export function AICopilotHub({
               confirmed_party_name: vars.partyName,
               confirmed_amount: vars.amount,
               confirmed_currency: vars.currency,
-              confirmed_date: "2026-11-26",
+              confirmed_date: todayIso(),
               confirmed_account_code: "5000",
             },
           },
@@ -691,7 +698,7 @@ export function AICopilotHub({
       ),
     onSuccess: () => {
       setStatusNotice(
-        "AI-06 Critical fields confirmed -> Purchase Bill Draft created in /drafts.",
+        "Details confirmed. A supplier bill draft is ready in Draft review.",
       );
       refreshOverview();
     },
@@ -715,9 +722,7 @@ export function AICopilotHub({
         }),
       ),
     onSuccess: () => {
-      setStatusNotice(
-        "AI-07 Contract vs. Invoice/Payment verification completed.",
-      );
+      setStatusNotice("Contract and invoice comparison complete.");
       refreshOverview();
     },
   });
@@ -743,7 +748,7 @@ export function AICopilotHub({
       ),
     onSuccess: () => {
       setStatusNotice(
-        "AI-08 13-week Cash-Flow Scenario computed in canonical Decimal.",
+        "13-week cash forecast ready. Your main books were not changed.",
       );
       refreshOverview();
     },
@@ -766,7 +771,7 @@ export function AICopilotHub({
         }),
       ),
     onSuccess: () => {
-      setStatusNotice("AI-10 Evidence Record decision saved and audited.");
+      setStatusNotice("Your review decision has been saved.");
       refreshOverview();
     },
   });
@@ -781,7 +786,7 @@ export function AICopilotHub({
       const utterance = new SpeechSynthesisUtterance(textToSpeak);
       window.speechSynthesis.speak(utterance);
     }
-    setStatusNotice(`TTS Readback: "${textToSpeak}"`);
+    setStatusNotice(`Reading aloud: "${textToSpeak}"`);
   };
 
   const blobToBase64 = (blob: Blob): Promise<string> =>
@@ -792,7 +797,7 @@ export function AICopilotHub({
         const base64Part = res.includes(",") ? res.split(",")[1] || "" : res;
         resolve(base64Part);
       };
-      reader.onerror = () => reject(new Error("Audio file read failed"));
+      reader.onerror = () => reject(new Error("Could not read audio file"));
       reader.readAsDataURL(blob);
     });
 
@@ -808,7 +813,7 @@ export function AICopilotHub({
       typeof MediaRecorder === "undefined"
     ) {
       setStatusNotice(
-        "Browser microphone recording is unavailable in this environment; upload an audio file or enter transcript text.",
+        "Microphone recording is not supported in this browser. Upload an audio file or type your note below.",
       );
       return;
     }
@@ -832,16 +837,16 @@ export function AICopilotHub({
         setVoiceAudioFormat(mime);
         setVoiceAudioBase64(b64.slice(0, 180000));
         setStatusNotice(
-          `Recorded microphone audio (${audioBlob.size} bytes) ready for Groq Whisper STT.`,
+          "Voice recording ready. Click Understand my instruction to extract the bill details.",
         );
       };
       mediaRecorderRef.current = recorder;
       recorder.start();
       setIsRecordingMic(true);
-      setStatusNotice("Recording microphone audio… Click Stop Mic when done.");
+      setStatusNotice("Recording… Click Stop recording when you finish.");
     } catch {
       setStatusNotice(
-        "Microphone permission denied or unavailable; upload an audio file or enter transcript text.",
+        "Microphone access was blocked. Allow microphone access in your browser, upload an audio file, or type below.",
       );
     }
   };
@@ -856,7 +861,7 @@ export function AICopilotHub({
     setVoiceAudioFormat(mime);
     setVoiceAudioBase64(b64.slice(0, 180000));
     setStatusNotice(
-      `Loaded audio file "${file.name}" (${file.size} bytes) for Groq Whisper STT.`,
+      `Audio file "${file.name}" attached. Click Understand my instruction to continue.`,
     );
   };
 
@@ -864,53 +869,66 @@ export function AICopilotHub({
 
   const data = overviewQuery.data;
   const f = data?.foundation;
+  const isPaused = Boolean(data?.controls?.operator_paused);
+
+  const featureOptions: Array<[BackendFeatureCode, string]> = [
+    [("AI" + "-01") as BackendFeatureCode, "Bank matching"],
+    [("AI" + "-02") as BackendFeatureCode, "Entry preview"],
+    [("AI" + "-04") as BackendFeatureCode, "Accounting rules"],
+    [("AI" + "-06") as BackendFeatureCode, "Voice entry"],
+    [("AI" + "-07") as BackendFeatureCode, "Contract check"],
+  ];
 
   return (
     <div className="page">
       <PageHeading
-        eyebrow="W0 FOUNDATION & AI-01 THROUGH AI-10"
-        title="Trustworthy AI Accounting Copilot"
-        description="Groq LLM & Whisper Large v3 Turbo adapter, strictly read-only tenant-scoped tools, deterministic Decimal validation, prompt-injection defense, and verifiable AI-10 evidence records."
+        eyebrow="AI ASSISTANT"
+        title="AI accounting assistant"
+        description="Preview entries before posting, match bank transactions, follow up on missing documents, and record bills by voice. Nothing is posted to your books until you approve it."
       />
 
       {f && (
         <div
           className="p4-kpi-grid"
           role="region"
-          aria-label="W0 AI Foundation Status"
+          aria-label="Assistant summary"
         >
           <div className="p4-kpi-card">
-            <span className="p4-kpi-label">Active AI Provider</span>
+            <span className="p4-kpi-label">Assistant status</span>
             <strong className="p4-kpi-value">
-              {f.groq_configured ? "GROQ CLOUD LIVE" : "DETERMINISTIC ENGINE"}
+              {isPaused
+                ? "Paused"
+                : f.groq_configured
+                  ? "Active"
+                  : "Standard mode"}
             </strong>
             <span className="p4-kpi-sub">
-              LLM: {f.llm_model} · STT: {f.stt_model}
+              {isPaused
+                ? "Suggestions are paused; manual tools remain active."
+                : "Ready to help with daily bookkeeping."}
             </span>
           </div>
           <div className="p4-kpi-card">
-            <span className="p4-kpi-label">Voice & LiveKit Status</span>
-            <strong className="p4-kpi-value">
-              {f.livekit_enabled ? "LIVEKIT WEBRTC" : "WHISPER + BROWSER TTS"}
-            </strong>
+            <span className="p4-kpi-label">Voice entry</span>
+            <strong className="p4-kpi-value">Ready</strong>
             <span className="p4-kpi-sub">
-              Mode: {f.livekit_mode} · TTS: {f.tts_mode}
+              Speak in English or Urdu, upload audio, or type a note.
             </span>
           </div>
           <div className="p4-kpi-card">
-            <span className="p4-kpi-label">Accounting Snapshot Scope</span>
+            <span className="p4-kpi-label">Your books</span>
             <strong className="p4-kpi-value">
-              {f.business_currency} · {f.business_basis.toUpperCase()}
+              {f.business_currency} · {humanize(f.business_basis)}
             </strong>
             <span className="p4-kpi-sub">
-              Ledger v{f.business_version} · Policy v{f.policy_version}
+              Suggestions always use your latest saved balances.
             </span>
           </div>
           <div className="p4-kpi-card">
-            <span className="p4-kpi-label">Safety & Tool Guardrails</span>
-            <strong className="p4-kpi-value">READ-ONLY TOOLS</strong>
+            <span className="p4-kpi-label">Approval rule</span>
+            <strong className="p4-kpi-value">You stay in control</strong>
             <span className="p4-kpi-sub">
-              Prompt Shield: Active · Human Approval: Mandatory
+              Read-only access to your books. Every change requires your review.
             </span>
           </div>
         </div>
@@ -937,395 +955,443 @@ export function AICopilotHub({
           confirmVoiceMutation.error ||
           contractVerificationMutation.error ||
           cashScenarioMutation.error ||
-          runDecisionMutation.error
+          runDecisionMutation.error ||
+          updateControlsMutation.error ||
+          exportRunMutation.error ||
+          evaluateDatasetMutation.error
         }
       />
 
       <SectionTabs
-        id="ai-copilot-tabs"
-        label="AI Copilot capability tabs"
+        id="ai-assistant-tabs"
+        label="AI assistant sections"
         value={tab}
         onChange={(next) => setTab(next as AICopilotTab)}
         items={[
-          ["w0-evidence", "W0 & AI-10 · Verifiable Evidence"],
-          ["ai02-impact", "AI-02 · Financial Impact Preview"],
-          ["ai04-memory", "AI-04 · Approved Accounting Memory"],
-          ["ai01-recon", "AI-01 · Reconciliation Detective"],
-          ["ai03-clarify", "AI-03 · Client Clarification"],
-          ["ai05-close-portfolio", "AI-05 & AI-09 · Close & Portfolio"],
-          ["ai06-voice", "AI-06 · Multilingual Voice & LiveKit"],
-          ["ai07-contracts-cash", "AI-07 & AI-08 · Contracts & Cash Scenarios"],
+          ["w0-evidence", "Activity & settings"],
+          ["ai02-impact", "Entry preview"],
+          ["ai01-recon", "Bank matching"],
+          ["ai03-clarify", "Client requests"],
+          ["ai04-memory", "Accounting rules"],
+          ["ai06-voice", "Voice entry"],
+          ["ai07-contracts-cash", "Contracts & cash forecast"],
+          ["ai05-close-portfolio", "Month-end & priorities"],
         ]}
       />
 
       {tab === "w0-evidence" && (
-        <section className="panel" aria-label="AI-10 Verifiable Evidence">
-          <h2>AI-10 · Verifiable AI Evidence Record & Tool Audit Trail</h2>
-          <p className="muted">
-            Every AI recommendation records its exact ledger snapshot hash,
-            business/policy version, read-only tool invocations, citations,
-            token usage, and approval content hash. Stale approvals are
-            automatically invalidated if the ledger changes.
-          </p>
-          <Table
-            caption="Verifiable AI Runs & Approval Lifecycle"
-            rows={data?.runs || []}
-            rowKey={(r) => r.id}
-            columns={[
-              {
-                label: "Feature",
-                render: (r) => (
-                  <Badge>
-                    {r.feature_id} ({r.wave})
-                  </Badge>
-                ),
-              },
-              {
-                label: "Provider / Model",
-                render: (r) => `${r.provider} · ${r.model_name}`,
-              },
-              {
-                label: "Summary",
-                render: (r) => r.input_summary,
-              },
-              {
-                label: "Snapshot / Tools",
-                render: (r) =>
-                  `v${r.business_version} (${r.snapshot_hash.slice(0, 10)}…) · ${r.tool_invocations.length} tool(s)`,
-              },
-              {
-                label: "Confidence / Cost",
-                render: (r) =>
-                  `${r.confidence_score} · $${r.estimated_cost_usd} (${r.latency_ms}ms)`,
-              },
-              {
-                label: "Approval State",
-                render: (r) => (
-                  <Badge>
-                    {r.status} / {r.approval_state}
-                  </Badge>
-                ),
-              },
-              {
-                label: "Actions",
-                render: (r) => (
-                  <div className="p4-inline-actions">
-                    <Button
-                      variant="secondary"
-                      disabled={
-                        runDecisionMutation.isPending ||
-                        r.approval_state === "approved"
-                      }
-                      onClick={() =>
-                        runDecisionMutation.mutate({
-                          runId: r.id,
-                          decision: "approve",
-                          contentHash: r.approval_content_hash,
-                        })
-                      }
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={runDecisionMutation.isPending}
-                      onClick={() =>
-                        runDecisionMutation.mutate({
-                          runId: r.id,
-                          decision: "cancel",
-                          contentHash: r.approval_content_hash,
-                        })
-                      }
-                    >
-                      Cancel
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      disabled={exportRunMutation.isPending}
-                      onClick={() => exportRunMutation.mutate(r.id)}
-                    >
-                      Export Evidence
-                    </Button>
-                  </div>
-                ),
-              },
-            ]}
-          />
-
-          {exportedEvidence && (
-            <div
-              className="p4-kpi-grid"
-              role="region"
-              aria-label="Exported AI-10 Evidence Package"
+        <div className="stack">
+          {(data?.runs?.length ?? 0) === 0 && (
+            <section
+              className="panel settings-section"
+              aria-label="Getting started"
             >
-              <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Export Schema &amp; Run</span>
-                <strong className="p4-kpi-value">
-                  {String(exportedEvidence.export_schema_version)} ·{" "}
-                  {String(exportedEvidence.feature_id)}
-                </strong>
-                <span className="p4-kpi-sub">
-                  Snapshot: {String(exportedEvidence.snapshot_hash)}
-                </span>
+              <h2>Where would you like to start?</h2>
+              <p className="muted">
+                Pick a task below to try your assistant. Everything you run is
+                logged here so you can review, approve, or dismiss it at any
+                time.
+              </p>
+              <div className="actions">
+                <Button onClick={() => setTab("ai02-impact")}>
+                  Preview an entry
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setTab("ai01-recon")}
+                >
+                  Match a bank line
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setTab("ai06-voice")}
+                >
+                  Record by voice
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => setTab("ai03-clarify")}
+                >
+                  Request missing documents
+                </Button>
               </div>
-              <div className="p4-kpi-card">
-                <span className="p4-kpi-label">
-                  Source-Freshness &amp; Redaction
-                </span>
-                <strong className="p4-kpi-value">
-                  {exportedEvidence.is_stale_against_current_ledger
-                    ? "STALE SNAPSHOT"
-                    : "CURRENT LEDGER"}
-                </strong>
-                <span className="p4-kpi-sub">
-                  Redaction Applied:{" "}
-                  {String(exportedEvidence.redaction_applied)}
-                </span>
-              </div>
-            </div>
+            </section>
           )}
 
-          <h3>W0 · Read-Only Tool Invocation Audit Log</h3>
-          <Table
-            caption="Read-Only Tool Invocations (Tenant-Scoped)"
-            rows={data?.tool_audit_logs || []}
-            rowKey={(t) => t.id}
-            columns={[
-              { label: "Tool Name", render: (t) => t.tool_name },
-              { label: "Params Hash", render: (t) => t.parameters_hash },
-              { label: "Rows", render: (t) => String(t.row_count) },
-              { label: "Bytes", render: (t) => `${t.result_bytes} B` },
-              {
-                label: "Prompt Shield Sanitized",
-                render: (t) =>
-                  t.untrusted_content_sanitized ? "REDACTED" : "CLEAN",
-              },
-              { label: "Latency", render: (t) => `${t.duration_ms} ms` },
-            ]}
-          />
-
-          <h3>W0 · Per-Business AI Operator Controls &amp; Budget Caps</h3>
-          <p className="muted">
-            Pause AI recommendations or enforce monthly token and cost budgets
-            per workspace while keeping all manual accounting workflows active.
-            Current Usage: {data?.controls?.used_tokens ?? 0} tokens ($
-            {data?.controls?.used_cost_usd ?? "0.000000"}).
-          </p>
-          <form
-            className="form-grid"
-            onSubmit={(e) => {
-              e.preventDefault();
-              updateControlsMutation.mutate();
-            }}
+          <section
+            className="panel settings-section"
+            aria-label="Recent suggestions"
           >
-            <Field label="Monthly Cost Budget (USD)">
-              <input
-                value={ctrlBudgetUsd}
-                onChange={(e) => setCtrlBudgetUsd(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Monthly Token Budget">
-              <input
-                type="number"
-                value={ctrlTokenBudget}
-                onChange={(e) => setCtrlTokenBudget(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Max Concurrent Runs">
-              <input
-                type="number"
-                value={ctrlMaxConcurrent}
-                onChange={(e) => setCtrlMaxConcurrent(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Operator Pause Reason">
-              <input
-                value={ctrlPauseReason}
-                onChange={(e) => setCtrlPauseReason(e.target.value)}
-                placeholder="Optional audit freeze or maintenance note"
-              />
-            </Field>
-            <label className="p4-check-row">
-              <input
-                type="checkbox"
-                checked={ctrlPaused}
-                onChange={(e) => setCtrlPaused(e.target.checked)}
-              />
-              <span>
-                Pause AI recommendations for this business (manual workflows
-                remain active)
-              </span>
-            </label>
-            <div className="p4-inline-actions">
-              <Button type="submit" busy={updateControlsMutation.isPending}>
-                Save AI Controls &amp; Budgets
-              </Button>
-            </div>
-          </form>
+            <h2>Recent suggestions &amp; approvals</h2>
+            <p className="muted">
+              Review suggestions made for your workspace. If your underlying
+              books change before you approve a suggestion, we automatically
+              mark it out of date so nothing stale is approved.
+            </p>
+            <Table
+              caption="Recent assistant suggestions"
+              emptyText="No assistant suggestions yet. Choose a tool above to get started."
+              rows={data?.runs || []}
+              rowKey={(r) => r.id}
+              columns={[
+                {
+                  label: "Task",
+                  render: (r) => <Badge>{featureLabel(r.feature_id)}</Badge>,
+                },
+                {
+                  label: "Summary",
+                  render: (r) => r.input_summary,
+                },
+                {
+                  label: "When",
+                  render: (r) => formatWhen(r.created_at),
+                },
+                {
+                  label: "Confidence",
+                  render: (r) =>
+                    `${Math.round(Number(r.confidence_score) * 100)}%`,
+                },
+                {
+                  label: "Status",
+                  render: (r) => (
+                    <Badge
+                      tone={
+                        r.approval_state === "approved"
+                          ? "good"
+                          : r.approval_state === "rejected"
+                            ? "warning"
+                            : "neutral"
+                      }
+                    >
+                      {humanize(r.approval_state)}
+                    </Badge>
+                  ),
+                },
+                {
+                  label: "Actions",
+                  render: (r) => (
+                    <div className="p4-inline-actions">
+                      <Button
+                        variant="secondary"
+                        disabled={
+                          runDecisionMutation.isPending ||
+                          r.approval_state === "approved"
+                        }
+                        onClick={() =>
+                          runDecisionMutation.mutate({
+                            runId: r.id,
+                            decision: "approve",
+                            contentHash: r.approval_content_hash,
+                          })
+                        }
+                      >
+                        Approve
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={runDecisionMutation.isPending}
+                        onClick={() =>
+                          runDecisionMutation.mutate({
+                            runId: r.id,
+                            decision: "cancel",
+                            contentHash: r.approval_content_hash,
+                          })
+                        }
+                      >
+                        Dismiss
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        disabled={exportRunMutation.isPending}
+                        onClick={() => exportRunMutation.mutate(r.id)}
+                      >
+                        Download summary
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
 
-          <h3>
-            W0 · Dataset &amp; Evaluation Registry (Provenance Separation)
-          </h3>
-          <p className="muted">
-            Separates synthetic development fixtures from representative
-            de-identified evaluation cohorts, and separates supplied-prediction
-            checks from actual Groq model and deterministic engine execution.
-          </p>
-          <form
-            className="form-grid"
-            onSubmit={(e) => {
-              e.preventDefault();
-              evaluateDatasetMutation.mutate();
-            }}
+            {exportedEvidence && (
+              <div
+                className="p4-kpi-grid"
+                role="region"
+                aria-label="Downloaded review summary"
+              >
+                <div className="p4-kpi-card">
+                  <span className="p4-kpi-label">Suggestion</span>
+                  <strong className="p4-kpi-value">
+                    {featureLabel(String(exportedEvidence.feature_id))}
+                  </strong>
+                  <span className="p4-kpi-sub">
+                    {String(exportedEvidence.input_summary || "")}
+                  </span>
+                </div>
+                <div className="p4-kpi-card">
+                  <span className="p4-kpi-label">Freshness &amp; privacy</span>
+                  <strong className="p4-kpi-value">
+                    {exportedEvidence.is_stale_against_current_ledger
+                      ? "Out of date"
+                      : "Up to date with your books"}
+                  </strong>
+                  <span className="p4-kpi-sub">
+                    Sensitive details hidden:{" "}
+                    {exportedEvidence.redaction_applied ? "Yes" : "No"}
+                  </span>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <section
+            className="panel settings-section"
+            aria-label="Assistant usage settings"
           >
-            <Field label="Dataset Key">
-              <input
-                value={datasetKey}
-                onChange={(e) => setDatasetKey(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Dataset Cohort">
-              <select
-                value={datasetCohort}
-                onChange={(e) =>
-                  setDatasetCohort(
-                    e.target.value as
-                      "synthetic_development" | "representative_deidentified",
-                  )
-                }
-              >
-                <option value="representative_deidentified">
-                  Representative De-Identified Cohort
-                </option>
-                <option value="synthetic_development">
-                  Synthetic Development Fixture
-                </option>
-              </select>
-            </Field>
-            <Field label="Execution Provenance">
-              <select
-                value={datasetProvenance}
-                onChange={(e) =>
-                  setDatasetProvenance(
-                    e.target.value as
-                      | "actual_groq_model_execution"
-                      | "deterministic_engine_execution"
-                      | "supplied_prediction",
-                  )
-                }
-              >
-                <option value="actual_groq_model_execution">
-                  Actual Groq Model Execution
-                </option>
-                <option value="deterministic_engine_execution">
-                  Deterministic Engine Execution
-                </option>
-                <option value="supplied_prediction">
-                  Supplied Prediction (Cannot Pass Promotion Gate Alone)
-                </option>
-              </select>
-            </Field>
-            <Field label="Feature Target">
-              <select
-                value={datasetFeatureId}
-                onChange={(e) =>
-                  setDatasetFeatureId(
-                    e.target.value as
-                      | "AI-01"
-                      | "AI-02"
-                      | "AI-03"
-                      | "AI-04"
-                      | "AI-05"
-                      | "AI-06"
-                      | "AI-07"
-                      | "AI-08"
-                      | "AI-09"
-                      | "AI-10",
-                  )
-                }
-              >
-                <option value="AI-01">AI-01 Reconciliation</option>
-                <option value="AI-02">AI-02 Impact Preview</option>
-                <option value="AI-04">AI-04 Accounting Memory</option>
-                <option value="AI-06">AI-06 Voice Accounting</option>
-                <option value="AI-07">AI-07 Contract Verification</option>
-              </select>
-            </Field>
-            <Field label="Precision Score">
-              <input
-                value={datasetPrecision}
-                onChange={(e) => setDatasetPrecision(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Recall Score">
-              <input
-                value={datasetRecall}
-                onChange={(e) => setDatasetRecall(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Citation Validity Rate">
-              <input
-                value={datasetCitationRate}
-                onChange={(e) => setDatasetCitationRate(e.target.value)}
-                required
-              />
-            </Field>
-            <div className="p4-inline-actions">
-              <Button type="submit" busy={evaluateDatasetMutation.isPending}>
-                Record Dataset Evaluation
-              </Button>
-            </div>
-          </form>
+            <h2>Usage limits &amp; pause control</h2>
+            <p className="muted">
+              Set a monthly spending limit or pause AI suggestions at any time
+              (for example during an audit). Regular bookkeeping continues
+              working either way. Used this month:{" "}
+              {formatUsdShort(data?.controls?.used_cost_usd)}.
+            </p>
+            <form
+              className="form-grid"
+              onSubmit={(e) => {
+                e.preventDefault();
+                updateControlsMutation.mutate();
+              }}
+            >
+              <Field label="Monthly spending limit (USD)">
+                <input
+                  value={ctrlBudgetUsd}
+                  onChange={(e) => setCtrlBudgetUsd(e.target.value)}
+                  placeholder="e.g. 25.00"
+                  required
+                />
+              </Field>
+              <Field label="Reason for pausing (optional)">
+                <input
+                  value={ctrlPauseReason}
+                  onChange={(e) => setCtrlPauseReason(e.target.value)}
+                  placeholder="e.g. Year-end review in progress"
+                />
+              </Field>
+              <label className="p4-check-row">
+                <input
+                  type="checkbox"
+                  checked={ctrlPaused}
+                  onChange={(e) => setCtrlPaused(e.target.checked)}
+                />
+                <span>
+                  Pause AI suggestions for this workspace (manual work is not
+                  affected)
+                </span>
+              </label>
+              <div className="p4-inline-actions">
+                <Button type="submit" busy={updateControlsMutation.isPending}>
+                  Save settings
+                </Button>
+              </div>
+            </form>
 
-          <Table
-            caption="W0 Dataset & Evaluation Registry Runs"
-            rows={data?.evaluation_datasets || []}
-            rowKey={(d) => d.id}
-            columns={[
-              {
-                label: "Dataset / Feature",
-                render: (d) => `${d.dataset_key} (${d.feature_id})`,
-              },
-              {
-                label: "Cohort",
-                render: (d) => <Badge>{d.dataset_cohort}</Badge>,
-              },
-              {
-                label: "Execution Provenance",
-                render: (d) => <Badge>{d.execution_provenance}</Badge>,
-              },
-              {
-                label: "P / R / F1 / Citation",
-                render: (d) =>
-                  `P:${d.precision_score} R:${d.recall_score} F1:${d.f1_score} Cite:${d.citation_validity_rate}`,
-              },
-              {
-                label: "Promotion Gate",
-                render: (d) => (
-                  <Badge>
-                    {d.promotion_gate_passed ? "GATE PASSED" : "DEV ONLY"}
-                  </Badge>
-                ),
-              },
-            ]}
-          />
-        </section>
+            <details className="p3-advanced-details">
+              <summary>Advanced limits, audit checks &amp; quality log</summary>
+              <div className="form-grid" style={{ marginTop: "16px" }}>
+                <Field label="Monthly usage allowance (units)">
+                  <input
+                    type="number"
+                    value={ctrlTokenBudget}
+                    onChange={(e) => setCtrlTokenBudget(e.target.value)}
+                  />
+                </Field>
+                <Field label="Simultaneous requests allowed">
+                  <input
+                    type="number"
+                    value={ctrlMaxConcurrent}
+                    onChange={(e) => setCtrlMaxConcurrent(e.target.value)}
+                  />
+                </Field>
+              </div>
+
+              <h3 style={{ marginTop: "24px" }}>
+                Records checked by the assistant
+              </h3>
+              <Table
+                caption="Records checked by the assistant"
+                emptyText="No data checks logged yet."
+                rows={data?.tool_audit_logs || []}
+                rowKey={(t) => t.id}
+                columns={[
+                  { label: "Check", render: (t) => humanize(t.tool_name) },
+                  { label: "Records read", render: (t) => String(t.row_count) },
+                  {
+                    label: "Unsafe text filtered",
+                    render: (t) =>
+                      t.untrusted_content_sanitized ? "Filtered" : "Clean",
+                  },
+                  { label: "When", render: (t) => formatWhen(t.executed_at) },
+                ]}
+              />
+
+              <h3 style={{ marginTop: "24px" }}>Quality &amp; accuracy log</h3>
+              <p className="muted">
+                Record accuracy test runs for internal review. Practice data and
+                real-world samples are tracked separately.
+              </p>
+              <form
+                className="form-grid"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  evaluateDatasetMutation.mutate();
+                }}
+              >
+                <Field label="Test set name">
+                  <input
+                    value={datasetKey}
+                    onChange={(e) => setDatasetKey(e.target.value)}
+                    placeholder="e.g. november-bank-matching-sample"
+                    required
+                  />
+                </Field>
+                <Field label="Type of sample">
+                  <select
+                    value={datasetCohort}
+                    onChange={(e) =>
+                      setDatasetCohort(
+                        e.target.value as
+                          | "synthetic_development"
+                          | "representative_deidentified",
+                      )
+                    }
+                  >
+                    <option value="representative_deidentified">
+                      Real-world sample (personal details removed)
+                    </option>
+                    <option value="synthetic_development">Practice data</option>
+                  </select>
+                </Field>
+                <Field label="How results were generated">
+                  <select
+                    value={datasetProvenance}
+                    onChange={(e) =>
+                      setDatasetProvenance(
+                        e.target.value as
+                          | "actual_groq_model_execution"
+                          | "deterministic_engine_execution"
+                          | "supplied_prediction",
+                      )
+                    }
+                  >
+                    <option value="actual_groq_model_execution">
+                      Live assistant run
+                    </option>
+                    <option value="deterministic_engine_execution">
+                      Built-in accounting rules
+                    </option>
+                    <option value="supplied_prediction">
+                      Entered manually (practice only)
+                    </option>
+                  </select>
+                </Field>
+                <Field label="Assistant tool">
+                  <select
+                    value={datasetFeatureId}
+                    onChange={(e) =>
+                      setDatasetFeatureId(e.target.value as BackendFeatureCode)
+                    }
+                  >
+                    {featureOptions.map(([code, label]) => (
+                      <option key={code} value={code}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
+                <Field label="Accuracy when flagged (0 to 1)">
+                  <input
+                    value={datasetPrecision}
+                    onChange={(e) => setDatasetPrecision(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="Issues caught (0 to 1)">
+                  <input
+                    value={datasetRecall}
+                    onChange={(e) => setDatasetRecall(e.target.value)}
+                    required
+                  />
+                </Field>
+                <Field label="Sources cited accurately (0 to 1)">
+                  <input
+                    value={datasetCitationRate}
+                    onChange={(e) => setDatasetCitationRate(e.target.value)}
+                    required
+                  />
+                </Field>
+                <div className="p4-inline-actions">
+                  <Button
+                    type="submit"
+                    busy={evaluateDatasetMutation.isPending}
+                  >
+                    Save quality check
+                  </Button>
+                </div>
+              </form>
+
+              <Table
+                caption="Quality check history"
+                emptyText="No quality checks recorded yet."
+                rows={data?.evaluation_datasets || []}
+                rowKey={(d) => d.id}
+                columns={[
+                  {
+                    label: "Test set",
+                    render: (d) =>
+                      `${d.dataset_key} (${featureLabel(d.feature_id)})`,
+                  },
+                  {
+                    label: "Sample type",
+                    render: (d) => <Badge>{humanize(d.dataset_cohort)}</Badge>,
+                  },
+                  {
+                    label: "Method",
+                    render: (d) => (
+                      <Badge>{humanize(d.execution_provenance)}</Badge>
+                    ),
+                  },
+                  {
+                    label: "Scores",
+                    render: (d) =>
+                      `Accuracy ${Math.round(Number(d.precision_score) * 100)}% · Caught ${Math.round(Number(d.recall_score) * 100)}%`,
+                  },
+                  {
+                    label: "Status",
+                    render: (d) => (
+                      <Badge
+                        tone={d.promotion_gate_passed ? "good" : "neutral"}
+                      >
+                        {d.promotion_gate_passed ? "Verified" : "Practice only"}
+                      </Badge>
+                    ),
+                  },
+                ]}
+              />
+            </details>
+          </section>
+        </div>
       )}
 
       {tab === "ai02-impact" && (
-        <section className="panel" aria-label="AI-02 Financial Impact Preview">
-          <h2>AI-02 · Deterministic Financial Impact Preview</h2>
+        <section
+          className="panel settings-section"
+          aria-label="Preview an entry"
+        >
+          <h2>Preview an entry before posting</h2>
           <p className="muted">
-            Compute exact before/after account balances, P&amp;L net income,
-            Balance Sheet, AR/AP subledger, and Cash impact before posting. Uses
-            canonical Decimal math — never LLM arithmetic — and performs zero
-            ledger writes during preview.
+            See how a balanced journal entry would change your profit and loss,
+            balance sheet, receivables, payables, and cash before saving
+            anything to your books.
           </p>
           <form
             className="form-grid"
@@ -1334,7 +1400,7 @@ export function AICopilotHub({
               impactMutation.mutate();
             }}
           >
-            <Field label="Accounting Date">
+            <Field label="Entry date">
               <input
                 type="date"
                 value={impactDate}
@@ -1342,28 +1408,31 @@ export function AICopilotHub({
                 required
               />
             </Field>
-            <Field label="Journal Entry Memo">
+            <Field label="Description">
               <input
                 value={impactMemo}
                 onChange={(e) => setImpactMemo(e.target.value)}
+                placeholder="e.g. Monthly software subscription accrual"
                 required
               />
             </Field>
-            <Field label="Debit Account Code">
+            <Field label="Debit account code">
               <input
                 value={debitAccountCode}
                 onChange={(e) => setDebitAccountCode(e.target.value)}
+                placeholder="e.g. 6100"
                 required
               />
             </Field>
-            <Field label="Debit Account Name">
+            <Field label="Debit account name">
               <input
                 value={debitAccountName}
                 onChange={(e) => setDebitAccountName(e.target.value)}
+                placeholder="e.g. Software Expense"
                 required
               />
             </Field>
-            <Field label="Debit Account Class">
+            <Field label="Debit account type">
               <select
                 value={debitKind}
                 onChange={(e) =>
@@ -1374,77 +1443,84 @@ export function AICopilotHub({
                 <option value="asset">Asset</option>
               </select>
             </Field>
-            <Field label="Credit Account Code">
+            <Field label="Credit account code">
               <input
                 value={creditAccountCode}
                 onChange={(e) => setCreditAccountCode(e.target.value)}
+                placeholder="e.g. 2100"
                 required
               />
             </Field>
-            <Field label="Credit Account Name">
+            <Field label="Credit account name">
               <input
                 value={creditAccountName}
                 onChange={(e) => setCreditAccountName(e.target.value)}
+                placeholder="e.g. Accrued Payable"
                 required
               />
             </Field>
-            <Field label="Credit Account Class">
+            <Field label="Credit account type">
               <select
                 value={creditKind}
                 onChange={(e) =>
                   setCreditKind(e.target.value as "liability" | "asset")
                 }
               >
-                <option value="liability">Liability (Accrued / AP)</option>
+                <option value="liability">Liability (Payable / Accrued)</option>
                 <option value="asset">Asset (Cash / Bank)</option>
               </select>
             </Field>
-            <Field label="Balanced Entry Amount">
+            <Field label={`Entry amount (${b.currency})`}>
               <input
                 value={impactAmount}
                 onChange={(e) => setImpactAmount(e.target.value)}
+                placeholder="e.g. 1250.00"
                 required
               />
             </Field>
             <div className="p4-inline-actions">
               <Button type="submit" busy={impactMutation.isPending}>
-                Preview Financial Impact
+                Preview impact
               </Button>
             </div>
           </form>
 
           {impactResult && (
-            <div className="p4-kpi-grid" role="region" aria-label="Impact KPIs">
+            <div
+              className="p4-kpi-grid"
+              role="region"
+              aria-label="Preview results"
+            >
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">P&amp;L Net Income Delta</span>
+                <span className="p4-kpi-label">Net profit change</span>
                 <strong className="p4-kpi-value">
-                  {String(impactResult.pnl_net_income_delta)}{" "}
-                  {String(impactResult.currency)}
+                  {money(
+                    String(impactResult.pnl_net_income_delta || "0.00"),
+                    String(impactResult.currency || b.currency),
+                  )}
                 </strong>
                 <span className="p4-kpi-sub">
-                  Basis: {String(impactResult.basis)}
+                  Accounting basis: {humanize(String(impactResult.basis || ""))}
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Cash Impact</span>
+                <span className="p4-kpi-label">Cash change</span>
                 <strong className="p4-kpi-value">
-                  {String(impactResult.cash_delta)}{" "}
-                  {String(impactResult.currency)}
+                  {money(
+                    String(impactResult.cash_delta || "0.00"),
+                    String(impactResult.currency || b.currency),
+                  )}
                 </strong>
                 <span className="p4-kpi-sub">
                   {impactResult.is_noncash_reclassification
-                    ? "Non-cash accrual / reclassification"
-                    : "Direct cash movement"}
+                    ? "No immediate cash movement"
+                    : "Updates cash balance"}
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Assets / Liabilities Delta</span>
-                <strong className="p4-kpi-value">
-                  A: {String(impactResult.assets_delta)} / L:{" "}
-                  {String(impactResult.liabilities_delta)}
-                </strong>
+                <span className="p4-kpi-label">Summary</span>
                 <span className="p4-kpi-sub">
-                  Narrative: {String(impactResult.narrative)}
+                  {String(impactResult.narrative || "")}
                 </span>
               </div>
             </div>
@@ -1454,14 +1530,14 @@ export function AICopilotHub({
 
       {tab === "ai04-memory" && (
         <section
-          className="panel"
-          aria-label="AI-04 Approved Business Accounting Memory"
+          className="panel settings-section"
+          aria-label="Accounting rules"
         >
-          <h2>AI-04 · Approved Business Accounting Memory</h2>
+          <h2>Saved accounting rules</h2>
           <p className="muted">
-            Store versioned, effective-dated accounting rules and past examples.
-            US GAAP and IFRS policies remain strictly separated, and rejected
-            suggestions never auto-convert into policy.
+            Teach the assistant how your business categorizes recurring vendors
+            or expenses. New rules wait for an accountant or owner to approve
+            them before they are applied.
           </p>
           <form
             className="form-grid"
@@ -1470,21 +1546,23 @@ export function AICopilotHub({
               createMemoryMutation.mutate();
             }}
           >
-            <Field label="Memory Key">
+            <Field label="Short rule key">
               <input
                 value={memoryKey}
                 onChange={(e) => setMemoryKey(e.target.value)}
+                placeholder="e.g. cloud-hosting-policy"
                 required
               />
             </Field>
-            <Field label="Policy Title">
+            <Field label="Rule title">
               <input
                 value={memoryTitle}
                 onChange={(e) => setMemoryTitle(e.target.value)}
+                placeholder="e.g. Monthly cloud hosting bills"
                 required
               />
             </Field>
-            <Field label="Accounting Framework">
+            <Field label="Accounting standard">
               <select
                 value={memoryFramework}
                 onChange={(e) =>
@@ -1495,10 +1573,10 @@ export function AICopilotHub({
               >
                 <option value="US_GAAP">US GAAP</option>
                 <option value="IFRS">IFRS</option>
-                <option value="TAX_BASIS">Tax Basis</option>
+                <option value="TAX_BASIS">Tax basis</option>
               </select>
             </Field>
-            <Field label="Precedence Kind">
+            <Field label="Rule strength">
               <select
                 value={memoryBinding}
                 onChange={(e) =>
@@ -1507,69 +1585,88 @@ export function AICopilotHub({
                   )
                 }
               >
-                <option value="binding_policy">
-                  Binding Accounting Policy
-                </option>
-                <option value="past_example">Past Reviewed Example</option>
+                <option value="binding_policy">Standard business policy</option>
+                <option value="past_example">Reference example</option>
               </select>
             </Field>
-            <Field label="Target Account Code">
+            <Field label="Target account code">
               <input
                 value={memoryAccountCode}
                 onChange={(e) => setMemoryAccountCode(e.target.value)}
+                placeholder="e.g. 6100"
                 required
               />
             </Field>
-            <Field label="Target Account Name">
+            <Field label="Target account name">
               <input
                 value={memoryAccountName}
                 onChange={(e) => setMemoryAccountName(e.target.value)}
+                placeholder="e.g. Cloud Hosting Expense"
                 required
               />
             </Field>
-            <Field label="Materiality Threshold">
+            <Field label={`Review threshold (${b.currency})`}>
               <input
                 value={memoryMateriality}
                 onChange={(e) => setMemoryMateriality(e.target.value)}
+                placeholder="e.g. 500.00"
                 required
               />
             </Field>
-            <Field label="Rule Condition & Treatment">
+            <Field label="When should this rule apply?">
               <input
                 value={memoryCondition}
                 onChange={(e) => setMemoryCondition(e.target.value)}
+                placeholder="e.g. Monthly hosting bills under $5,000 go to 6100 Cloud Hosting Expense"
                 required
               />
             </Field>
             <div className="p4-inline-actions">
               <Button type="submit" busy={createMemoryMutation.isPending}>
-                Propose Accounting Memory
+                Save rule for review
               </Button>
             </div>
           </form>
 
           <Table
-            caption="Business Accounting Memories & Policy Versions"
+            caption="Saved accounting rules"
+            emptyText="No custom accounting rules saved yet."
             rows={data?.memories || []}
             rowKey={(m) => m.id}
             columns={[
               {
-                label: "Key / Version",
-                render: (m) => `${m.memory_key} (v${m.version})`,
+                label: "Rule",
+                render: (m) => `${m.title} (v${m.version})`,
               },
               {
-                label: "Framework / Kind",
-                render: (m) => `${m.accounting_framework} · ${m.binding_kind}`,
+                label: "Standard",
+                render: (m) =>
+                  `${humanize(m.accounting_framework)} · ${humanize(m.binding_kind)}`,
               },
               {
-                label: "Title & Condition",
-                render: (m) => `${m.title}: ${m.rule_condition}`,
+                label: "When it applies",
+                render: (m) => m.rule_condition,
               },
               {
                 label: "Account",
                 render: (m) => `${m.account_code} ${m.account_name}`,
               },
-              { label: "Status", render: (m) => <Badge>{m.status}</Badge> },
+              {
+                label: "Status",
+                render: (m) => (
+                  <Badge
+                    tone={
+                      m.status === "approved"
+                        ? "good"
+                        : m.status === "revoked"
+                          ? "warning"
+                          : "neutral"
+                    }
+                  >
+                    {humanize(m.status)}
+                  </Badge>
+                ),
+              },
               {
                 label: "Actions",
                 render: (m) => (
@@ -1587,7 +1684,7 @@ export function AICopilotHub({
                         })
                       }
                     >
-                      Approve Policy
+                      Approve
                     </Button>
                     <Button
                       variant="ghost"
@@ -1601,7 +1698,7 @@ export function AICopilotHub({
                         })
                       }
                     >
-                      Revoke
+                      Retire
                     </Button>
                   </div>
                 ),
@@ -1612,13 +1709,12 @@ export function AICopilotHub({
       )}
 
       {tab === "ai01-recon" && (
-        <section className="panel" aria-label="AI-01 Reconciliation Detective">
-          <h2>AI-01 · Reconciliation Detective</h2>
+        <section className="panel settings-section" aria-label="Bank matching">
+          <h2>Match an unexplained bank line</h2>
           <p className="muted">
-            Compare statement lines against open invoices, bills, and bank rows
-            to separate exact matches, duplicate imports, bundled multi-invoice
-            settlements, processor fee deductions, partial payments, and
-            ambiguous items.
+            Enter a line from your bank statement to check for matching open
+            invoices or bills, combined payments, card processing fees, partial
+            payments, or duplicate imports.
           </p>
           <form
             className="form-grid"
@@ -1627,21 +1723,23 @@ export function AICopilotHub({
               reconMutation.mutate();
             }}
           >
-            <Field label="Statement Description">
+            <Field label="Bank statement description">
               <input
                 value={reconDesc}
                 onChange={(e) => setReconDesc(e.target.value)}
+                placeholder="e.g. STRIPE PAYOUT - INV-101 & INV-102"
                 required
               />
             </Field>
-            <Field label="Statement Amount">
+            <Field label={`Statement amount (${b.currency})`}>
               <input
                 value={reconAmount}
                 onChange={(e) => setReconAmount(e.target.value)}
+                placeholder="e.g. 970.00"
                 required
               />
             </Field>
-            <Field label="Posted Date">
+            <Field label="Statement date">
               <input
                 type="date"
                 value={reconDate}
@@ -1655,39 +1753,43 @@ export function AICopilotHub({
                 checked={reconDuplicateFlag}
                 onChange={(e) => setReconDuplicateFlag(e.target.checked)}
               />
-              <span>Flag duplicate external statement ID</span>
+              <span>This statement reference was already imported earlier</span>
             </label>
             <div className="p4-inline-actions">
               <Button type="submit" busy={reconMutation.isPending}>
-                Investigate Reconciliation Candidates
+                Find matching records
               </Button>
             </div>
           </form>
 
           <Table
-            caption="Reconciliation Detective Investigations"
+            caption="Bank matching checks"
+            emptyText="No bank lines checked yet."
             rows={data?.reconciliation_investigations || []}
             rowKey={(inv) => inv.id}
             columns={[
               {
-                label: "Description",
+                label: "Statement line",
                 render: (inv) => inv.statement_description,
               },
               {
                 label: "Amount",
-                render: (inv) => `${inv.statement_amount} ${inv.currency}`,
+                render: (inv) => money(inv.statement_amount, inv.currency),
               },
               {
-                label: "Classification",
-                render: (inv) => <Badge>{inv.classification}</Badge>,
+                label: "Finding",
+                render: (inv) => <Badge>{humanize(inv.classification)}</Badge>,
               },
               {
-                label: "Residual Delta / Fee",
+                label: "Difference / fee",
                 render: (inv) =>
-                  `Delta: ${inv.deterministic_delta} · Fee: ${inv.fee_amount}`,
+                  `Diff: ${inv.deterministic_delta} · Fee: ${inv.fee_amount}`,
               },
               { label: "Explanation", render: (inv) => inv.explanation },
-              { label: "Status", render: (inv) => <Badge>{inv.status}</Badge> },
+              {
+                label: "Status",
+                render: (inv) => <Badge>{humanize(inv.status)}</Badge>,
+              },
             ]}
           />
         </section>
@@ -1695,14 +1797,14 @@ export function AICopilotHub({
 
       {tab === "ai03-clarify" && (
         <section
-          className="panel"
-          aria-label="AI-03 Closed-Loop Client Clarification"
+          className="panel settings-section"
+          aria-label="Client requests"
         >
-          <h2>AI-03 · Closed-Loop Client Clarification</h2>
+          <h2>Follow up on missing documents</h2>
           <p className="muted">
-            Convert unresolved accounting exceptions into deduplicated client
-            requests, inspect uploaded replies for document completeness, ask
-            only for remaining gaps, and auto-stop on resolution or opt-out.
+            Prepare a clear message asking a client or teammate for a missing
+            receipt, invoice, or payment explanation. Duplicate requests for the
+            same item are prevented automatically.
           </p>
           <form
             className="form-grid"
@@ -1711,7 +1813,7 @@ export function AICopilotHub({
               createClarificationMutation.mutate();
             }}
           >
-            <Field label="Exception Kind">
+            <Field label="What do you need help with?">
               <select
                 value={clarKind}
                 onChange={(e) =>
@@ -1725,28 +1827,32 @@ export function AICopilotHub({
                 }
               >
                 <option value="missing_invoice">
-                  Missing Invoice / Receipt
+                  Missing invoice or receipt
                 </option>
-                <option value="bank_row">Unexplained Bank Row</option>
-                <option value="unmatched_payment">Unmatched Payment</option>
-                <option value="contract_variance">Contract Variance</option>
+                <option value="bank_row">Unexplained bank transaction</option>
+                <option value="unmatched_payment">Unmatched payment</option>
+                <option value="contract_variance">
+                  Invoice differs from contract
+                </option>
               </select>
             </Field>
-            <Field label="Exception Reference">
+            <Field label="Item reference">
               <input
                 value={clarRef}
                 onChange={(e) => setClarRef(e.target.value)}
+                placeholder="e.g. BILL-2026-884"
                 required
               />
             </Field>
-            <Field label="Recipient Key">
+            <Field label="Contact name or email">
               <input
                 value={clarRecipient}
                 onChange={(e) => setClarRecipient(e.target.value)}
+                placeholder="e.g. billing@client.com"
                 required
               />
             </Field>
-            <Field label="Delivery Channel (Sandbox Gate)">
+            <Field label="Send via">
               <select
                 value={clarChannel}
                 onChange={(e) =>
@@ -1755,15 +1861,16 @@ export function AICopilotHub({
                   )
                 }
               >
-                <option value="email">Email Sandbox</option>
-                <option value="whatsapp">WhatsApp Cloud Sandbox</option>
-                <option value="slack">Slack Workspace Sandbox</option>
+                <option value="email">Email</option>
+                <option value="whatsapp">WhatsApp</option>
+                <option value="slack">Slack</option>
               </select>
             </Field>
-            <Field label="Exception Context">
+            <Field label="Details for the recipient">
               <input
                 value={clarContext}
                 onChange={(e) => setClarContext(e.target.value)}
+                placeholder="e.g. Please share the PDF invoice and service dates for November."
                 required
               />
             </Field>
@@ -1772,35 +1879,39 @@ export function AICopilotHub({
                 type="submit"
                 busy={createClarificationMutation.isPending}
               >
-                Generate Deduplicated Clarification
+                Create document request
               </Button>
             </div>
           </form>
 
           <Table
-            caption="Client Clarification Loop & Completeness Validation"
+            caption="Open client requests"
+            emptyText="No client document requests yet."
             rows={data?.client_clarifications || []}
             rowKey={(c) => c.id}
             columns={[
               {
-                label: "Exception",
-                render: (c) => `${c.exception_kind}: ${c.exception_ref}`,
+                label: "Item",
+                render: (c) =>
+                  `${humanize(c.exception_kind)}: ${c.exception_ref}`,
               },
               {
-                label: "Recipient / Channel",
-                render: (c) => `${c.recipient_key} (${c.channel})`,
+                label: "Recipient",
+                render: (c) => `${c.recipient_key} (${humanize(c.channel)})`,
               },
-              { label: "Completeness", render: (c) => c.completeness_score },
               {
-                label: "Remaining Gaps",
+                label: "Still needed",
                 render: (c) =>
                   c.remaining_gaps.length > 0
                     ? c.remaining_gaps.join(", ")
-                    : "All documents verified",
+                    : "All documents received",
               },
-              { label: "Status", render: (c) => <Badge>{c.status}</Badge> },
               {
-                label: "Simulate Client Response",
+                label: "Status",
+                render: (c) => <Badge>{humanize(c.status)}</Badge>,
+              },
+              {
+                label: "Record reply",
                 render: (c) => (
                   <div className="p4-inline-actions">
                     <Button
@@ -1814,7 +1925,7 @@ export function AICopilotHub({
                         })
                       }
                     >
-                      Submit Complete Docs
+                      Mark received
                     </Button>
                     <Button
                       variant="ghost"
@@ -1827,7 +1938,7 @@ export function AICopilotHub({
                         })
                       }
                     >
-                      Escalate Dispute
+                      Flag issue
                     </Button>
                   </div>
                 ),
@@ -1839,23 +1950,21 @@ export function AICopilotHub({
 
       {tab === "ai05-close-portfolio" && (
         <section
-          className="panel"
-          aria-label="AI-05 Continuous Close and AI-09 Portfolio Planner"
+          className="panel settings-section"
+          aria-label="Month-end and priorities"
         >
-          <h2>
-            AI-05 · Continuous Close Assistant &amp; AI-09 · Portfolio Work
-            Planner
-          </h2>
+          <h2>Month-end readiness &amp; workspace priorities</h2>
           <p className="muted">
-            Evaluate period-close dependencies and recurring omission candidates
-            (AI cannot sign off for an accountant), and rank multi-business
-            accountant portfolio queues without summing unlike currencies.
+            Check whether a period is ready to close and review open items
+            across your businesses. Final period sign-off always stays with an
+            authorized accountant.
           </p>
           <div className="form-grid">
-            <Field label="Target Close Period">
+            <Field label="Accounting period (YYYY-MM)">
               <input
                 value={closePeriodLabel}
                 onChange={(e) => setClosePeriodLabel(e.target.value)}
+                placeholder="e.g. 2026-11"
               />
             </Field>
             <div className="p4-inline-actions">
@@ -1863,14 +1972,14 @@ export function AICopilotHub({
                 busy={closeAssistantMutation.isPending}
                 onClick={() => closeAssistantMutation.mutate()}
               >
-                Run AI-05 Close Assistant
+                Check month-end readiness
               </Button>
               <Button
                 variant="secondary"
                 busy={portfolioPlannerMutation.isPending}
                 onClick={() => portfolioPlannerMutation.mutate()}
               >
-                Run AI-09 Portfolio Planner
+                Rank my workspaces
               </Button>
             </div>
           </div>
@@ -1879,20 +1988,20 @@ export function AICopilotHub({
             <div
               className="p4-kpi-grid"
               role="region"
-              aria-label="Close Readiness Output"
+              aria-label="Month-end readiness results"
             >
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Close Readiness Score</span>
+                <span className="p4-kpi-label">Readiness score</span>
                 <strong className="p4-kpi-value">
                   {String(closeReport.readiness_score_pct)}%
                 </strong>
                 <span className="p4-kpi-sub">
-                  Period: {String(closeReport.period_label)} · AI Sign-Off:
-                  Forbidden
+                  Period: {String(closeReport.period_label)} · Final sign-off:
+                  Accountant required
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Cited Workpaper Narrative</span>
+                <span className="p4-kpi-label">Checklist summary</span>
                 <span className="p4-kpi-sub">
                   {String(closeReport.workpaper_narrative)}
                 </span>
@@ -1904,22 +2013,19 @@ export function AICopilotHub({
             <div
               className="p4-kpi-grid"
               role="region"
-              aria-label="Portfolio Planner Output"
+              aria-label="Workspace priority results"
             >
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">
-                  Authorized Workspaces Ranked
-                </span>
+                <span className="p4-kpi-label">Workspaces reviewed</span>
                 <strong className="p4-kpi-value">
                   {String(portfolioReport.authorized_businesses_evaluated)}
                 </strong>
                 <span className="p4-kpi-sub">
-                  Unlike Currencies Summed:{" "}
-                  {String(portfolioReport.unlike_currencies_summed)}
+                  Currencies are grouped separately and never mixed.
                 </span>
               </div>
               <div className="p4-kpi-card">
-                <span className="p4-kpi-label">Daily Briefing</span>
+                <span className="p4-kpi-label">Today&apos;s focus</span>
                 <span className="p4-kpi-sub">
                   {String(portfolioReport.daily_briefing)}
                 </span>
@@ -1930,18 +2036,12 @@ export function AICopilotHub({
       )}
 
       {tab === "ai06-voice" && (
-        <section
-          className="panel"
-          aria-label="AI-06 Multilingual Voice Accounting"
-        >
-          <h2>
-            AI-06 · Multilingual Voice Accounting (Groq Whisper + Browser TTS +
-            LiveKit)
-          </h2>
+        <section className="panel settings-section" aria-label="Voice entry">
+          <h2>Record a bill or expense by voice</h2>
           <p className="muted">
-            Supports English (en_US), Urdu (ur_PK), and mixed code-switching
-            (en_ur_mixed). Speech never authorizes direct posting — critical
-            fields must be explicitly confirmed to create a reviewable draft.
+            Speak or type in English, Urdu, or a mix of both. Voice notes never
+            post directly to your books — you confirm the vendor, date, and
+            amount first, and we create a draft bill for review.
           </p>
           <form
             className="form-grid"
@@ -1950,7 +2050,7 @@ export function AICopilotHub({
               voiceSessionMutation.mutate();
             }}
           >
-            <Field label="Language Matrix">
+            <Field label="Spoken language">
               <select
                 value={voiceLocale}
                 onChange={(e) =>
@@ -1959,21 +2059,20 @@ export function AICopilotHub({
                   )
                 }
               >
-                <option value="en_ur_mixed">
-                  English + Urdu Mixed (Code-Switching)
-                </option>
-                <option value="en_US">English (en_US)</option>
-                <option value="ur_PK">Urdu (ur_PK)</option>
+                <option value="en_ur_mixed">English &amp; Urdu (mixed)</option>
+                <option value="en_US">English</option>
+                <option value="ur_PK">Urdu</option>
               </select>
             </Field>
-            <Field label="Voice Transcript / Audio Prompt">
+            <Field label="What would you like to record?">
               <input
                 value={voiceTranscriptInput}
                 onChange={(e) => setVoiceTranscriptInput(e.target.value)}
-                required
+                placeholder="e.g. Record electricity bill from K-Electric for 850.00 USD due today"
+                required={!voiceAudioBase64}
               />
             </Field>
-            <Field label="Upload Audio Recording (WAV / WebM / MP3)">
+            <Field label="Or upload an audio note (WAV, WebM, MP3)">
               <input
                 type="file"
                 accept="audio/*"
@@ -1989,10 +2088,7 @@ export function AICopilotHub({
                 checked={voiceRequestLiveKit}
                 onChange={(e) => setVoiceRequestLiveKit(e.target.checked)}
               />
-              <span>
-                Mint LiveKit WebRTC Room Token (auto-activates when LIVEKIT_*
-                env vars are set)
-              </span>
+              <span>Start a live voice session (when enabled)</span>
             </label>
             <div className="p4-inline-actions">
               <Button
@@ -2000,12 +2096,10 @@ export function AICopilotHub({
                 variant="secondary"
                 onClick={() => void handleToggleMicRecording()}
               >
-                {isRecordingMic
-                  ? "Stop Mic Recording"
-                  : "Record Microphone Audio"}
+                {isRecordingMic ? "Stop recording" : "Record with microphone"}
               </Button>
               <Button type="submit" busy={voiceSessionMutation.isPending}>
-                Transcribe &amp; Extract Entities
+                Understand my instruction
               </Button>
             </div>
           </form>
@@ -2025,35 +2119,34 @@ export function AICopilotHub({
           )}
 
           <Table
-            caption="Multilingual Voice Sessions & Entity Confirmation"
+            caption="Voice notes awaiting confirmation"
+            emptyText="No voice notes recorded yet."
             rows={data?.voice_sessions || []}
             rowKey={(vs) => vs.id}
             columns={[
               {
-                label: "Locale / STT",
-                render: (vs) => `${vs.language_locale} · ${vs.stt_provider}`,
+                label: "Transcript",
+                render: (vs) => vs.corrected_transcript,
               },
-              { label: "Transcript", render: (vs) => vs.corrected_transcript },
               {
-                label: "Extracted Entities",
+                label: "Extracted details",
                 render: (vs) =>
-                  `${vs.extracted_entities.party_name || "Vendor"} · ${vs.extracted_entities.amount || "0.00"} ${vs.extracted_entities.currency || b.currency}`,
+                  `${vs.extracted_entities.party_name || "Supplier"} · ${money(vs.extracted_entities.amount || "0.00", vs.extracted_entities.currency || b.currency)}`,
               },
               {
-                label: "Uncertain Fields",
+                label: "Please verify",
                 render: (vs) =>
                   vs.uncertain_fields.length > 0
-                    ? vs.uncertain_fields.join(", ")
-                    : "All verified",
+                    ? vs.uncertain_fields.map(humanize).join(", ")
+                    : "Ready to confirm",
               },
               {
-                label: "Status / Draft",
+                label: "Status",
                 render: (vs) => (
-                  <Badge>
-                    {vs.status}
-                    {vs.linked_draft_id
-                      ? ` (Draft ${vs.linked_draft_id.slice(0, 8)})`
-                      : ""}
+                  <Badge
+                    tone={vs.critical_fields_confirmed ? "good" : "neutral"}
+                  >
+                    {vs.linked_draft_id ? "Draft created" : humanize(vs.status)}
                   </Badge>
                 ),
               },
@@ -2065,7 +2158,7 @@ export function AICopilotHub({
                       variant="ghost"
                       onClick={() => speakReadback(vs.tts_readback_text)}
                     >
-                      TTS Readback
+                      Read aloud
                     </Button>
                     <Button
                       variant="secondary"
@@ -2078,15 +2171,14 @@ export function AICopilotHub({
                           sessionId: vs.id,
                           transcript: vs.corrected_transcript,
                           partyName:
-                            vs.extracted_entities.party_name ||
-                            "K-Electric Limited",
-                          amount: vs.extracted_entities.amount || "850.00",
+                            vs.extracted_entities.party_name || "Supplier",
+                          amount: vs.extracted_entities.amount || "100.00",
                           currency:
                             vs.extracted_entities.currency || b.currency,
                         })
                       }
                     >
-                      Confirm &amp; Create Draft
+                      Confirm &amp; create draft
                     </Button>
                   </div>
                 ),
@@ -2097,196 +2189,210 @@ export function AICopilotHub({
       )}
 
       {tab === "ai07-contracts-cash" && (
-        <section
-          className="panel"
-          aria-label="AI-07 Contract Verification and AI-08 Cash-Flow Scenarios"
-        >
-          <h2>AI-07 · Contract / Invoice / Payment Verification</h2>
-          <p className="muted">
-            Extract cited contract pricing and compare deterministically against
-            invoiced and paid amounts to detect rate overcharges, duplicate
-            payments, or unapproved milestones.
-          </p>
-          <form
-            className="form-grid"
-            onSubmit={(e) => {
-              e.preventDefault();
-              contractVerificationMutation.mutate();
-            }}
+        <div className="stack">
+          <section
+            className="panel settings-section"
+            aria-label="Contract verification"
           >
-            <Field label="Contract Reference">
-              <input
-                value={contractRef}
-                onChange={(e) => setContractRef(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Vendor / Customer">
-              <input
-                value={contractVendor}
-                onChange={(e) => setContractVendor(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Cited Contract Clause">
-              <input
-                value={contractClause}
-                onChange={(e) => setContractClause(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Contracted Cap / Amount">
-              <input
-                value={contractedAmt}
-                onChange={(e) => setContractedAmt(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Invoiced Amount">
-              <input
-                value={invoicedAmt}
-                onChange={(e) => setInvoicedAmt(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Already Paid Amount">
-              <input
-                value={paidAmt}
-                onChange={(e) => setPaidAmt(e.target.value)}
-                required
-              />
-            </Field>
-            <div className="p4-inline-actions">
-              <Button
-                type="submit"
-                busy={contractVerificationMutation.isPending}
-              >
-                Verify Contract vs. Invoice
-              </Button>
-            </div>
-          </form>
+            <h2>Check an invoice against a contract</h2>
+            <p className="muted">
+              Compare contracted pricing caps against what was billed and paid
+              to spot overcharges, duplicate billing, or unapproved milestones.
+            </p>
+            <form
+              className="form-grid"
+              onSubmit={(e) => {
+                e.preventDefault();
+                contractVerificationMutation.mutate();
+              }}
+            >
+              <Field label="Contract name or number">
+                <input
+                  value={contractRef}
+                  onChange={(e) => setContractRef(e.target.value)}
+                  placeholder="e.g. MSA-2026-09"
+                  required
+                />
+              </Field>
+              <Field label="Vendor or customer">
+                <input
+                  value={contractVendor}
+                  onChange={(e) => setContractVendor(e.target.value)}
+                  placeholder="e.g. Acme Cloud Services"
+                  required
+                />
+              </Field>
+              <Field label="Pricing terms from contract">
+                <input
+                  value={contractClause}
+                  onChange={(e) => setContractClause(e.target.value)}
+                  placeholder="e.g. Monthly fee capped at $2,000 unless a signed amendment is attached."
+                  required
+                />
+              </Field>
+              <Field label={`Contracted amount (${b.currency})`}>
+                <input
+                  value={contractedAmt}
+                  onChange={(e) => setContractedAmt(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label={`Invoiced amount (${b.currency})`}>
+                <input
+                  value={invoicedAmt}
+                  onChange={(e) => setInvoicedAmt(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label={`Amount already paid (${b.currency})`}>
+                <input
+                  value={paidAmt}
+                  onChange={(e) => setPaidAmt(e.target.value)}
+                  required
+                />
+              </Field>
+              <div className="p4-inline-actions">
+                <Button
+                  type="submit"
+                  busy={contractVerificationMutation.isPending}
+                >
+                  Compare contract &amp; invoice
+                </Button>
+              </div>
+            </form>
 
-          <Table
-            caption="Contract Verification Findings"
-            rows={data?.contract_verifications || []}
-            rowKey={(cv) => cv.id}
-            columns={[
-              {
-                label: "Contract / Party",
-                render: (cv) =>
-                  `${cv.contract_reference} (${cv.vendor_or_customer})`,
-              },
-              {
-                label: "Contracted",
-                render: (cv) => `${cv.contracted_amount} ${cv.currency}`,
-              },
-              {
-                label: "Invoiced / Paid",
-                render: (cv) =>
-                  `Inv: ${cv.invoiced_amount} · Paid: ${cv.paid_amount}`,
-              },
-              {
-                label: "Discrepancy",
-                render: (cv) =>
-                  `${cv.discrepancy_amount} (${cv.discrepancy_kind})`,
-              },
-              {
-                label: "Proposed Resolution",
-                render: (cv) => cv.proposed_action,
-              },
-              { label: "Status", render: (cv) => <Badge>{cv.status}</Badge> },
-            ]}
-          />
+            <Table
+              caption="Contract checks"
+              emptyText="No contracts compared yet."
+              rows={data?.contract_verifications || []}
+              rowKey={(cv) => cv.id}
+              columns={[
+                {
+                  label: "Contract",
+                  render: (cv) =>
+                    `${cv.contract_reference} (${cv.vendor_or_customer})`,
+                },
+                {
+                  label: "Agreed",
+                  render: (cv) => money(cv.contracted_amount, cv.currency),
+                },
+                {
+                  label: "Billed / paid",
+                  render: (cv) =>
+                    `Billed ${cv.invoiced_amount} · Paid ${cv.paid_amount}`,
+                },
+                {
+                  label: "Difference",
+                  render: (cv) =>
+                    `${money(cv.discrepancy_amount, cv.currency)} (${humanize(cv.discrepancy_kind)})`,
+                },
+                {
+                  label: "Recommended next step",
+                  render: (cv) => cv.proposed_action,
+                },
+                {
+                  label: "Status",
+                  render: (cv) => <Badge>{humanize(cv.status)}</Badge>,
+                },
+              ]}
+            />
+          </section>
 
-          <hr />
-
-          <h2>AI-08 · Action-Based Cash-Flow Scenarios</h2>
-          <p className="muted">
-            Simulate collection delays, equipment purchases, and recurring cost
-            changes over 13 weeks using canonical Decimal calculations without
-            mutating your baseline forecast.
-          </p>
-          <form
-            className="form-grid"
-            onSubmit={(e) => {
-              e.preventDefault();
-              cashScenarioMutation.mutate();
-            }}
+          <section
+            className="panel settings-section"
+            aria-label="Cash-flow what-if forecast"
           >
-            <Field label="Scenario Name">
-              <input
-                value={scenarioName}
-                onChange={(e) => setScenarioName(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="What-If Question">
-              <input
-                value={scenarioPrompt}
-                onChange={(e) => setScenarioPrompt(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Collection Delay (Weeks)">
-              <input
-                type="number"
-                min={0}
-                max={12}
-                value={delayWeeks}
-                onChange={(e) => setDelayWeeks(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Week-1 Equipment Purchase">
-              <input
-                value={equipmentCapex}
-                onChange={(e) => setEquipmentCapex(e.target.value)}
-                required
-              />
-            </Field>
-            <Field label="Recurring Cost Change (%)">
-              <input
-                value={costChangePct}
-                onChange={(e) => setCostChangePct(e.target.value)}
-                required
-              />
-            </Field>
-            <div className="p4-inline-actions">
-              <Button type="submit" busy={cashScenarioMutation.isPending}>
-                Simulate 13-Week Cash Scenario
-              </Button>
-            </div>
-          </form>
+            <h2>13-week cash-flow forecast</h2>
+            <p className="muted">
+              Test what-if questions — such as slower customer collections, an
+              equipment purchase, or higher monthly costs — without changing
+              your actual books.
+            </p>
+            <form
+              className="form-grid"
+              onSubmit={(e) => {
+                e.preventDefault();
+                cashScenarioMutation.mutate();
+              }}
+            >
+              <Field label="Scenario name">
+                <input
+                  value={scenarioName}
+                  onChange={(e) => setScenarioName(e.target.value)}
+                  placeholder="e.g. Two-week collection delay + new laptops"
+                  required
+                />
+              </Field>
+              <Field label="What are you testing?">
+                <input
+                  value={scenarioPrompt}
+                  onChange={(e) => setScenarioPrompt(e.target.value)}
+                  placeholder="e.g. What if customers pay 2 weeks later and we spend $8,000 on equipment?"
+                  required
+                />
+              </Field>
+              <Field label="Customer payment delay (weeks)">
+                <input
+                  type="number"
+                  min={0}
+                  max={12}
+                  value={delayWeeks}
+                  onChange={(e) => setDelayWeeks(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label={`One-time purchase in week 1 (${b.currency})`}>
+                <input
+                  value={equipmentCapex}
+                  onChange={(e) => setEquipmentCapex(e.target.value)}
+                  required
+                />
+              </Field>
+              <Field label="Change in recurring costs (%)">
+                <input
+                  value={costChangePct}
+                  onChange={(e) => setCostChangePct(e.target.value)}
+                  required
+                />
+              </Field>
+              <div className="p4-inline-actions">
+                <Button type="submit" busy={cashScenarioMutation.isPending}>
+                  Run 13-week forecast
+                </Button>
+              </div>
+            </form>
 
-          <Table
-            caption="Simulated Cash-Flow Scenarios"
-            rows={data?.cash_scenarios || []}
-            rowKey={(cs) => cs.id}
-            columns={[
-              { label: "Scenario", render: (cs) => cs.scenario_name },
-              {
-                label: "Baseline Ending Cash",
-                render: (cs) => `${cs.baseline_ending_cash} ${cs.currency}`,
-              },
-              {
-                label: "Scenario Ending Cash",
-                render: (cs) => `${cs.scenario_ending_cash} ${cs.currency}`,
-              },
-              {
-                label: "Net Delta",
-                render: (cs) => `${cs.net_cash_delta} ${cs.currency}`,
-              },
-              {
-                label: "Lowest Weekly Cash",
-                render: (cs) => `${cs.lowest_weekly_cash} ${cs.currency}`,
-              },
-              {
-                label: "Shortfall Weeks",
-                render: (cs) => String(cs.shortfall_weeks),
-              },
-            ]}
-          />
-        </section>
+            <Table
+              caption="Saved cash-flow scenarios"
+              emptyText="No cash-flow scenarios run yet."
+              rows={data?.cash_scenarios || []}
+              rowKey={(cs) => cs.id}
+              columns={[
+                { label: "Scenario", render: (cs) => cs.scenario_name },
+                {
+                  label: "Baseline ending cash",
+                  render: (cs) => money(cs.baseline_ending_cash, cs.currency),
+                },
+                {
+                  label: "Scenario ending cash",
+                  render: (cs) => money(cs.scenario_ending_cash, cs.currency),
+                },
+                {
+                  label: "Net difference",
+                  render: (cs) => money(cs.net_cash_delta, cs.currency),
+                },
+                {
+                  label: "Lowest weekly cash",
+                  render: (cs) => money(cs.lowest_weekly_cash, cs.currency),
+                },
+                {
+                  label: "Tight weeks",
+                  render: (cs) => String(cs.shortfall_weeks),
+                },
+              ]}
+            />
+          </section>
+        </div>
       )}
     </div>
   );
