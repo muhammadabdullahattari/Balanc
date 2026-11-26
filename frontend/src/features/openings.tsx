@@ -10,6 +10,7 @@ import {
   Empty,
   ErrorNotice,
   NextPage,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useAccess, useBusiness } from "./context";
@@ -288,7 +289,7 @@ export function Openings() {
               rowKey={(r) => r.id}
               columns={[
                 { label: "Reference", render: (r) => r.reference },
-                { label: "Kind", render: (r) => r.kind },
+                { label: "Kind", render: (r) => humanize(r.kind) },
                 { label: "Original date", render: (r) => r.original_date },
                 { label: "Due", render: (r) => r.due_date },
                 { label: "Cutover", render: (r) => r.cutover_date },
@@ -388,7 +389,7 @@ function ParallelComparison() {
               .filter((batch) => batch.mode !== "chart")
               .map((batch) => (
                 <option key={batch.id} value={batch.id}>
-                  {batch.cutover_date} · {batch.mode} · {batch.id.slice(0, 8)}
+                  {batch.cutover_date} · {batch.mode}
                 </option>
               ))}
           </select>

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, keys, result } from "../api/runtime";
-import { Button, ErrorNotice, Field, Table } from "../components/ui";
+import { Button, ErrorNotice, Field, Table, humanize } from "../components/ui";
 import { useAccess, useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
 
@@ -163,7 +163,7 @@ export function CleanupControls() {
         rowKey={(r) => r.id}
         columns={[
           { label: "Policy", render: (r) => r.reference },
-          { label: "Location", render: (r) => r.location },
+          { label: "Location", render: (r) => humanize(r.location) },
           { label: "Days", render: (r) => r.retention_days },
           {
             label: "Approval",
@@ -216,14 +216,14 @@ export function CleanupControls() {
               <option value="">Select policy</option>
               {policies.data?.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.reference} · {p.location}
+                  {p.reference} · {humanize(p.location)}
                 </option>
               ))}
             </select>
           </Field>
           <Field
             label="Record or copy ID"
-            hint="For external copies, use your inventory UUID and provide its exact location in the reference."
+            hint="For external copies, enter the record ID from your archive list and note its storage location below."
           >
             <input name="resource" required />
           </Field>
@@ -245,7 +245,7 @@ export function CleanupControls() {
         rowKey={(r) => r.id}
         columns={[
           { label: "Record", render: (r) => r.resource_id },
-          { label: "Status", render: (r) => r.status },
+          { label: "Status", render: (r) => humanize(r.status) },
           { label: "Attempts", render: (r) => r.attempts },
           { label: "Outcome", render: (r) => r.outcome || "Awaiting dry run" },
           {

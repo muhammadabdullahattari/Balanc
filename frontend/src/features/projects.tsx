@@ -13,6 +13,7 @@ import {
   Modal,
   PageHeading,
   Table,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useAccess, useBusiness } from "./context";
@@ -220,7 +221,7 @@ export function Projects() {
         >
           {(["income", "cost", "margin"] as const).map((key) => (
             <article className="metric" key={key}>
-              <div>{key}</div>
+              <div>{humanize(key)}</div>
               <strong>{money(totals.data[key], business.currency)}</strong>
             </article>
           ))}

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, keys, result } from "../api/runtime";
-import { Button, ErrorNotice, Table, money } from "../components/ui";
+import { Button, ErrorNotice, Table, humanize, money } from "../components/ui";
 import type { components } from "../api/generated/schema";
 import { useAccess, useBusiness } from "./context";
 
@@ -53,10 +53,10 @@ export function ClosePackages({ periodId }: { periodId: string }) {
       ) : (
         <>
           <Button disabled={prepare.isPending} onClick={() => prepare.mutate()}>
-            {prepare.isPending ? "Preparingâ€¦" : "Prepare workpaper package"}
+            {prepare.isPending ? "Preparing…" : "Prepare workpaper package"}
           </Button>
           <ErrorNotice error={packages.error || prepare.error || sign.error} />
-          {packages.isPending && <p role="status">Loading workpapersâ€¦</p>}
+          {packages.isPending && <p role="status">Loading workpapers…</p>}
           {prepare.isSuccess && <p role="status">Workpaper package saved.</p>}
           {sign.isSuccess && (
             <p role="status">Independent sign-off recorded.</p>
@@ -68,11 +68,11 @@ export function ClosePackages({ periodId }: { periodId: string }) {
           {packages.data?.items.map(({ package: item, review, can_sign }) => (
             <details key={item.id}>
               <summary>
-                {new Date(item.prepared_at).toLocaleString()} Â·{" "}
+                {new Date(item.prepared_at).toLocaleString()} ·{" "}
                 {review ? "Signed off" : "Awaiting review"}
               </summary>
               <p>
-                {item.start} through {item.end} Â·{" "}
+                {item.start} through {item.end} ·{" "}
                 {item.locked ? "Locked" : "Open"} at capture
               </p>
               <p>Prepared by {item.prepared_by}</p>
@@ -104,9 +104,9 @@ export function ClosePackages({ periodId }: { periodId: string }) {
               <ul>
                 {item.tasks.map((task) => (
                   <li key={String(task.id)}>
-                    {String(task.name)} Â· {String(task.state)}
+                    {String(task.name)} · {humanize(String(task.state))}
                     {task.evidence_id
-                      ? ` Â· Evidence ${String(task.evidence_id)}`
+                      ? ` · Evidence ${String(task.evidence_id)}`
                       : ""}
                     {task.comment ? <p>{String(task.comment)}</p> : null}
                     {task.review_comment ? (

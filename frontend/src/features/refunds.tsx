@@ -11,6 +11,7 @@ import {
   ErrorNotice,
   Modal,
   NextPage,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
@@ -94,7 +95,7 @@ export function Refunds() {
               rowKey={(p) => p.id}
               columns={[
                 { label: "Date", render: (p) => p.accounting_date },
-                { label: "Type", render: (p) => p.kind },
+                { label: "Type", render: (p) => humanize(p.kind) },
                 { label: "Amount", render: (p) => money(p.total, b.currency) },
                 {
                   label: "Action",

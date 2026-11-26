@@ -10,6 +10,7 @@ import {
   ErrorNotice,
   Modal,
   Badge,
+  humanize,
 } from "../components/ui";
 import { useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
@@ -102,7 +103,7 @@ export function Drafts() {
             rowKey={(r) => r.id}
             columns={[
               { label: "Number", render: (r) => r.payload.number },
-              { label: "Type", render: (r) => r.payload.kind },
+              { label: "Type", render: (r) => humanize(r.payload.kind) },
               { label: "State", render: (r) => <Badge>{r.status}</Badge> },
               {
                 label: "Review",

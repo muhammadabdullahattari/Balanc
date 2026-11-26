@@ -1,11 +1,300 @@
-"""Idempotent startup schema guard for P3, P4, and W0 tables on pre-stamped deployments."""
+"""Idempotent startup schema guard for P3, P4, and W0..AI-10 tables on pre-stamped DBs."""
 
 from __future__ import annotations
+
+import os
 
 from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
-_EXTENDED_TABLES_SQL = """
+_EARLY_0039_TABLES_SQL = """
+CREATE TABLE IF NOT EXISTS app.channel_reminder_preferences (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  recipient_key text NOT NULL,
+  recipient_name text NOT NULL,
+  whatsapp_phone text NOT NULL DEFAULT '',
+  slack_channel text NOT NULL DEFAULT '#all-balanc',
+  email_address text NOT NULL DEFAULT '',
+  whatsapp_opt_in boolean NOT NULL DEFAULT true,
+  slack_opt_in boolean NOT NULL DEFAULT true,
+  email_fallback boolean NOT NULL DEFAULT true,
+  channel_order text[] NOT NULL DEFAULT ARRAY['whatsapp','slack','email'],
+  quiet_start_hour integer NOT NULL DEFAULT 22 CHECK (quiet_start_hour BETWEEN 0 AND 23),
+  quiet_end_hour integer NOT NULL DEFAULT 7 CHECK (quiet_end_hour BETWEEN 0 AND 23),
+  timezone text NOT NULL DEFAULT 'UTC',
+  locale text NOT NULL DEFAULT 'en_US',
+  max_attempts integer NOT NULL DEFAULT 3 CHECK (max_attempts BETWEEN 1 AND 10),
+  opted_out boolean NOT NULL DEFAULT false,
+  opted_out_at timestamptz,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (business_id, recipient_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.workspace_channel_connections (
+  business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
+  default_whatsapp_recipient text NOT NULL DEFAULT '+923412685261',
+  default_slack_channel text NOT NULL DEFAULT '#all-balanc',
+  encrypted_config text NOT NULL DEFAULT '',
+  actor uuid NOT NULL REFERENCES app.users(id),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.channel_reminders (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  target_kind text NOT NULL CHECK (target_kind IN ('bill','invoice','evidence','approval')),
+  target_id uuid NOT NULL,
+  target_label text NOT NULL,
+  recipient_key text NOT NULL,
+  channel text NOT NULL CHECK (channel IN ('whatsapp','slack','email')),
+  destination text NOT NULL,
+  template_name text NOT NULL DEFAULT 'hello_world',
+  message_body text NOT NULL,
+  attempt_number integer NOT NULL DEFAULT 1 CHECK (attempt_number >= 1),
+  status text NOT NULL CHECK (status IN (
+    'sent','delivered','read',
+    'skipped_resolved','skipped_opted_out',
+    'skipped_quiet_hours','skipped_cap_reached','failed'
+  )),
+  provider_message_id text NOT NULL DEFAULT '',
+  provider_response jsonb NOT NULL DEFAULT '{}'::jsonb,
+  idempotency_key text NOT NULL,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (business_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.supplier_portal_connections (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  supplier_id uuid,
+  vendor_name text NOT NULL,
+  portal_kind text NOT NULL CHECK (portal_kind IN (
+    'web_totp','api_stripe','utility_portal','telecom_portal','cloud_portal'
+  )),
+  portal_url text NOT NULL,
+  login_username text NOT NULL,
+  encrypted_password text NOT NULL,
+  encrypted_totp_seed text NOT NULL DEFAULT '',
+  totp_enabled boolean NOT NULL DEFAULT true,
+  schedule_frequency text NOT NULL DEFAULT 'monthly' CHECK (schedule_frequency IN (
+    'manual','daily','weekly','monthly'
+  )),
+  status text NOT NULL DEFAULT 'active' CHECK (status IN (
+    'active','revoked','auth_failed','portal_changed','rate_limited'
+  )),
+  last_sync_at timestamptz,
+  last_totp_verified_at timestamptz,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.supplier_portal_ingestions (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  connection_id uuid NOT NULL REFERENCES app.supplier_portal_connections(id),
+  external_invoice_id text NOT NULL,
+  invoice_number text NOT NULL,
+  vendor_name text NOT NULL,
+  invoice_date date NOT NULL,
+  due_date date NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  total_amount numeric(18,6) NOT NULL CHECK (total_amount > 0),
+  tax_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (tax_amount >= 0),
+  content_sha256 text NOT NULL,
+  evidence_file_id uuid,
+  trade_draft_id uuid,
+  totp_code_used_hash text NOT NULL DEFAULT '',
+  ocr_confidence numeric(5,4) NOT NULL DEFAULT 0.9800,
+  provenance jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL CHECK (status IN (
+    'ingested_to_draft','duplicate_skipped','manual_review_required'
+  )),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.supplier_payment_controls (
+  business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
+  kill_switch_active boolean NOT NULL DEFAULT false,
+  kill_switch_reason text NOT NULL DEFAULT '',
+  single_payment_limit numeric(18,6) NOT NULL DEFAULT 50000.000000
+    CHECK (single_payment_limit > 0),
+  dual_approval_threshold numeric(18,6) NOT NULL DEFAULT 5000.000000
+    CHECK (dual_approval_threshold > 0),
+  default_rail text NOT NULL DEFAULT 'stripe_live' CHECK (default_rail IN (
+    'stripe_live','ach_nacha','swift_wire'
+  )),
+  updated_by uuid NOT NULL REFERENCES app.users(id),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.supplier_beneficiaries (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  supplier_id uuid,
+  supplier_name text NOT NULL,
+  account_holder_name text NOT NULL,
+  bank_name text NOT NULL,
+  routing_or_swift text NOT NULL,
+  account_number_masked text NOT NULL,
+  account_fingerprint_sha256 text NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  rail text NOT NULL DEFAULT 'stripe_live' CHECK (rail IN (
+    'stripe_live','ach_nacha','swift_wire'
+  )),
+  out_of_band_verified boolean NOT NULL DEFAULT false,
+  verification_reference text NOT NULL DEFAULT '',
+  verified_by uuid REFERENCES app.users(id),
+  verified_at timestamptz,
+  version integer NOT NULL DEFAULT 1,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.supplier_payment_executions (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  bill_id uuid,
+  bill_reference text NOT NULL,
+  supplier_name text NOT NULL,
+  beneficiary_id uuid NOT NULL REFERENCES app.supplier_beneficiaries(id),
+  beneficiary_version integer NOT NULL,
+  beneficiary_fingerprint text NOT NULL,
+  amount numeric(18,6) NOT NULL CHECK (amount > 0),
+  currency text NOT NULL DEFAULT 'USD',
+  rail text NOT NULL CHECK (rail IN ('stripe_live','ach_nacha','swift_wire')),
+  idempotency_key text NOT NULL,
+  state text NOT NULL CHECK (state IN (
+    'prepared','first_approved','approved_ready','executed',
+    'settled_posted','invalidated','rejected','failed'
+  )),
+  requires_dual_approval boolean NOT NULL DEFAULT false,
+  prepared_by uuid NOT NULL REFERENCES app.users(id),
+  first_approved_by uuid REFERENCES app.users(id),
+  final_approved_by uuid REFERENCES app.users(id),
+  step_up_verified boolean NOT NULL DEFAULT false,
+  step_up_method text NOT NULL DEFAULT '',
+  provider_reference text NOT NULL DEFAULT '',
+  provider_payload jsonb NOT NULL DEFAULT '{}'::jsonb,
+  remittance_advice text NOT NULL DEFAULT '',
+  settlement_journal_id uuid,
+  failure_reason text NOT NULL DEFAULT '',
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  executed_at timestamptz,
+  UNIQUE (business_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.reconciliation_sla_trackers (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  target_date date NOT NULL,
+  sla_hours integer NOT NULL DEFAULT 24 CHECK (sla_hours BETWEEN 1 AND 168),
+  started_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  deadline_at timestamptz NOT NULL,
+  completed_at timestamptz,
+  status text NOT NULL DEFAULT 'on_track' CHECK (status IN (
+    'on_track','at_risk','breached','completed'
+  )),
+  pending_bank_rows integer NOT NULL DEFAULT 0,
+  missing_evidence_bills integer NOT NULL DEFAULT 0,
+  pending_drafts integer NOT NULL DEFAULT 0,
+  pending_close_tasks integer NOT NULL DEFAULT 0,
+  chased_count integer NOT NULL DEFAULT 0,
+  last_chased_at timestamptz,
+  checklist jsonb NOT NULL DEFAULT '[]'::jsonb,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (business_id, target_date)
+);
+
+CREATE TABLE IF NOT EXISTS app.gross_to_net_payout_reconciliations (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  payout_reference text NOT NULL,
+  provider text NOT NULL DEFAULT 'stripe_financial_connections' CHECK (provider IN (
+    'stripe_financial_connections','shopify_payouts','amazon_settlement','square_payouts'
+  )),
+  payout_date date NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  gross_sales_amount numeric(18,6) NOT NULL CHECK (gross_sales_amount > 0),
+  processing_fee_amount numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (processing_fee_amount >= 0),
+  refund_dispute_amount numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (refund_dispute_amount >= 0),
+  tax_withheld_amount numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (tax_withheld_amount >= 0),
+  net_payout_amount numeric(18,6) NOT NULL CHECK (net_payout_amount > 0),
+  bank_row_id uuid,
+  journal_id uuid,
+  source_draft_id uuid,
+  split_lines jsonb NOT NULL DEFAULT '[]'::jsonb,
+  status text NOT NULL DEFAULT 'reconciled_posted' CHECK (status IN (
+    'previewed','draft_created','reconciled_posted'
+  )),
+  idempotency_key text NOT NULL,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  UNIQUE (business_id, idempotency_key)
+);
+
+CREATE TABLE IF NOT EXISTS app.voice_note_instructions (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  audio_filename text NOT NULL DEFAULT 'voice-instruction.webm',
+  audio_mime_type text NOT NULL DEFAULT 'audio/webm',
+  audio_duration_seconds integer NOT NULL DEFAULT 12
+    CHECK (audio_duration_seconds >= 1),
+  audio_sha256 text NOT NULL,
+  transcript_text text NOT NULL,
+  extracted_action text NOT NULL CHECK (extracted_action IN (
+    'bill','invoice','expense','journal'
+  )),
+  extracted_counterparty text NOT NULL DEFAULT '',
+  extracted_amount numeric(18,6) NOT NULL CHECK (extracted_amount > 0),
+  extracted_tax_amount numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (extracted_tax_amount >= 0),
+  extracted_currency text NOT NULL DEFAULT 'USD',
+  extracted_date date NOT NULL,
+  extracted_memo text NOT NULL,
+  confidence_score numeric(5,4) NOT NULL DEFAULT 0.9600,
+  source_draft_id uuid,
+  journal_id uuid,
+  status text NOT NULL DEFAULT 'pending_review' CHECK (status IN (
+    'pending_review','approved_to_draft','posted','rejected'
+  )),
+  reviewer_note text NOT NULL DEFAULT '',
+  actor uuid NOT NULL REFERENCES app.users(id),
+  reviewed_by uuid REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  reviewed_at timestamptz
+);
+
+CREATE TABLE IF NOT EXISTS app.tenant_encryption_keys (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  key_version integer NOT NULL DEFAULT 1 CHECK (key_version >= 1),
+  algorithm text NOT NULL DEFAULT 'AES-256-GCM-FERNET-ENVELOPE',
+  wrapped_dek_ciphertext text NOT NULL DEFAULT '',
+  dek_fingerprint_sha256 text NOT NULL,
+  status text NOT NULL DEFAULT 'active' CHECK (status IN (
+    'active','rotated','destroyed'
+  )),
+  encrypted_records_count integer NOT NULL DEFAULT 0,
+  destruction_reason text NOT NULL DEFAULT '',
+  destruction_certificate_sha256 text NOT NULL DEFAULT '',
+  created_by uuid NOT NULL REFERENCES app.users(id),
+  destroyed_by uuid REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  rotated_at timestamptz,
+  destroyed_at timestamptz,
+  UNIQUE (business_id, key_version)
+);
+"""
+
+_LATE_0039_AND_0040_TABLES_SQL = """
 CREATE TABLE IF NOT EXISTS app.ai_ocr_cost_benchmarks (
   id uuid PRIMARY KEY,
   business_id uuid NOT NULL REFERENCES app.businesses(id),
@@ -299,6 +588,233 @@ CREATE TABLE IF NOT EXISTS app.p4_group_consolidation_runs (
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
 
+CREATE TABLE IF NOT EXISTS app.ai_runs (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  feature_id text NOT NULL CHECK (feature_id IN (
+    'AI-01','AI-02','AI-03','AI-04','AI-05',
+    'AI-06','AI-07','AI-08','AI-09','AI-10'
+  )),
+  wave text NOT NULL DEFAULT 'W0' CHECK (wave IN (
+    'W0','W1','W2','W3','W4','W5','W6'
+  )),
+  provider text NOT NULL DEFAULT 'groq' CHECK (provider IN (
+    'groq','deterministic_fallback'
+  )),
+  model_name text NOT NULL DEFAULT 'llama-3.3-70b-versatile',
+  prompt_version text NOT NULL DEFAULT 'v1.0',
+  tool_versions jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'completed' CHECK (status IN (
+    'running','completed','abstained','canceled','failed'
+  )),
+  input_summary text NOT NULL,
+  structured_output jsonb NOT NULL DEFAULT '{}'::jsonb,
+  citations jsonb NOT NULL DEFAULT '[]'::jsonb,
+  tool_invocations jsonb NOT NULL DEFAULT '[]'::jsonb,
+  confidence_score numeric(6,4) NOT NULL DEFAULT 1.0000
+    CHECK (confidence_score >= 0 AND confidence_score <= 1),
+  uncertainty_flags text[] NOT NULL DEFAULT ARRAY[]::text[],
+  snapshot_hash text NOT NULL,
+  business_version integer NOT NULL DEFAULT 0,
+  policy_version integer NOT NULL DEFAULT 1,
+  prompt_tokens integer NOT NULL DEFAULT 0 CHECK (prompt_tokens >= 0),
+  completion_tokens integer NOT NULL DEFAULT 0 CHECK (completion_tokens >= 0),
+  total_tokens integer NOT NULL DEFAULT 0 CHECK (total_tokens >= 0),
+  latency_ms integer NOT NULL DEFAULT 0 CHECK (latency_ms >= 0),
+  estimated_cost_usd numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (estimated_cost_usd >= 0),
+  approval_state text NOT NULL DEFAULT 'pending_review' CHECK (approval_state IN (
+    'not_required','pending_review','approved',
+    'rejected','stale_invalidated','executed'
+  )),
+  approval_content_hash text NOT NULL,
+  approved_by uuid REFERENCES app.users(id),
+  approved_at timestamptz,
+  rejection_reason text NOT NULL DEFAULT '',
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_tool_audit_logs (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id) ON DELETE CASCADE,
+  tool_name text NOT NULL,
+  parameters_hash text NOT NULL,
+  row_count integer NOT NULL DEFAULT 0 CHECK (row_count >= 0),
+  result_bytes integer NOT NULL DEFAULT 0 CHECK (result_bytes >= 0),
+  untrusted_content_sanitized boolean NOT NULL DEFAULT true,
+  duration_ms integer NOT NULL DEFAULT 0 CHECK (duration_ms >= 0),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  executed_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_accounting_memories (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  memory_key text NOT NULL,
+  title text NOT NULL,
+  accounting_framework text NOT NULL DEFAULT 'US_GAAP'
+    CHECK (accounting_framework IN ('US_GAAP','IFRS','TAX_BASIS')),
+  category text NOT NULL DEFAULT 'categorization' CHECK (category IN (
+    'categorization','recognition','materiality','vendor_policy','close_rule'
+  )),
+  binding_kind text NOT NULL DEFAULT 'binding_policy' CHECK (binding_kind IN (
+    'binding_policy','past_example'
+  )),
+  rule_condition text NOT NULL,
+  account_code text NOT NULL,
+  account_name text NOT NULL,
+  materiality_threshold numeric(18,6) NOT NULL DEFAULT 0
+    CHECK (materiality_threshold >= 0),
+  effective_from date NOT NULL,
+  effective_to date,
+  version integer NOT NULL DEFAULT 1 CHECK (version >= 1),
+  status text NOT NULL DEFAULT 'pending_review' CHECK (status IN (
+    'pending_review','approved','superseded','revoked'
+  )),
+  evidence_refs jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_by uuid NOT NULL REFERENCES app.users(id),
+  reviewed_by uuid REFERENCES app.users(id),
+  approved_at timestamptz,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (effective_to IS NULL OR effective_to >= effective_from),
+  UNIQUE (business_id, memory_key, version)
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_reconciliation_investigations (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id),
+  bank_row_id uuid,
+  statement_description text NOT NULL,
+  statement_amount numeric(18,6) NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  classification text NOT NULL CHECK (classification IN (
+    'exact_match','duplicate_import','repeated_legitimate_charge',
+    'partial_settlement','bundled_payment','fee_deducted',
+    'fx_timing_difference','ambiguous_needs_evidence'
+  )),
+  candidates jsonb NOT NULL DEFAULT '[]'::jsonb,
+  deterministic_delta numeric(18,6) NOT NULL DEFAULT 0,
+  fee_amount numeric(18,6) NOT NULL DEFAULT 0,
+  proposed_allocation jsonb NOT NULL DEFAULT '{}'::jsonb,
+  explanation text NOT NULL,
+  status text NOT NULL DEFAULT 'proposed' CHECK (status IN (
+    'open','proposed','approved','rejected','abstained'
+  )),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_client_clarifications (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id),
+  exception_kind text NOT NULL CHECK (exception_kind IN (
+    'bank_row','missing_invoice','unmatched_payment','contract_variance'
+  )),
+  exception_ref text NOT NULL,
+  recipient_key text NOT NULL,
+  channel text NOT NULL DEFAULT 'email'
+    CHECK (channel IN ('email','whatsapp','slack')),
+  questions jsonb NOT NULL DEFAULT '[]'::jsonb,
+  required_documents text[] NOT NULL DEFAULT ARRAY[]::text[],
+  client_reply_text text NOT NULL DEFAULT '',
+  uploaded_evidence_ref text NOT NULL DEFAULT '',
+  completeness_score numeric(6,4) NOT NULL DEFAULT 0
+    CHECK (completeness_score >= 0 AND completeness_score <= 1),
+  remaining_gaps text[] NOT NULL DEFAULT ARRAY[]::text[],
+  status text NOT NULL DEFAULT 'sent_sandbox' CHECK (status IN (
+    'draft','sent_sandbox','partially_answered',
+    'resolved_closed','opted_out','escalated_dispute'
+  )),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_voice_accounting_sessions (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id),
+  language_locale text NOT NULL DEFAULT 'en_US' CHECK (language_locale IN (
+    'en_US','ur_PK','en_ur_mixed'
+  )),
+  audio_format text NOT NULL DEFAULT 'audio/webm',
+  duration_seconds integer NOT NULL DEFAULT 6
+    CHECK (duration_seconds BETWEEN 1 AND 300),
+  stt_provider text NOT NULL DEFAULT 'groq_whisper_large_v3_turbo'
+    CHECK (stt_provider IN (
+      'groq_whisper_large_v3_turbo','browser_web_speech','deterministic_fixture'
+    )),
+  raw_transcript text NOT NULL,
+  corrected_transcript text NOT NULL,
+  extracted_intent text NOT NULL,
+  extracted_entities jsonb NOT NULL DEFAULT '{}'::jsonb,
+  uncertain_fields text[] NOT NULL DEFAULT ARRAY[]::text[],
+  critical_fields_confirmed boolean NOT NULL DEFAULT false,
+  confirmed_by uuid REFERENCES app.users(id),
+  linked_draft_id uuid,
+  tts_readback_text text NOT NULL,
+  livekit_room_name text NOT NULL DEFAULT '',
+  status text NOT NULL DEFAULT 'transcribed_needs_confirmation' CHECK (status IN (
+    'transcribed_needs_confirmation','confirmed_draft_created','abstained_noisy'
+  )),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_contract_verifications (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id),
+  contract_reference text NOT NULL,
+  vendor_or_customer text NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  contracted_amount numeric(18,6) NOT NULL CHECK (contracted_amount >= 0),
+  invoiced_amount numeric(18,6) NOT NULL CHECK (invoiced_amount >= 0),
+  paid_amount numeric(18,6) NOT NULL DEFAULT 0 CHECK (paid_amount >= 0),
+  discrepancy_amount numeric(18,6) NOT NULL DEFAULT 0,
+  discrepancy_kind text NOT NULL CHECK (discrepancy_kind IN (
+    'aligned','rate_overcharge','unapproved_milestone',
+    'duplicate_payment','missing_credit','fx_rate_drift'
+  )),
+  extracted_clauses jsonb NOT NULL DEFAULT '[]'::jsonb,
+  proposed_action text NOT NULL,
+  status text NOT NULL DEFAULT 'discrepancy_flagged' CHECK (status IN (
+    'verified_aligned','discrepancy_flagged','schedule_proposed','resolved'
+  )),
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
+CREATE TABLE IF NOT EXISTS app.ai_cash_scenarios (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  run_id uuid NOT NULL REFERENCES app.ai_runs(id),
+  scenario_name text NOT NULL,
+  natural_language_prompt text NOT NULL,
+  currency text NOT NULL DEFAULT 'USD',
+  horizon_weeks integer NOT NULL DEFAULT 13
+    CHECK (horizon_weeks BETWEEN 4 AND 52),
+  parameters jsonb NOT NULL DEFAULT '{}'::jsonb,
+  baseline_ending_cash numeric(18,6) NOT NULL DEFAULT 0,
+  scenario_ending_cash numeric(18,6) NOT NULL DEFAULT 0,
+  net_cash_delta numeric(18,6) NOT NULL DEFAULT 0,
+  lowest_weekly_cash numeric(18,6) NOT NULL DEFAULT 0,
+  shortfall_weeks integer NOT NULL DEFAULT 0 CHECK (shortfall_weeks >= 0),
+  weekly_series jsonb NOT NULL DEFAULT '[]'::jsonb,
+  actor uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+
 CREATE TABLE IF NOT EXISTS app.ai_tenant_controls (
   business_id uuid PRIMARY KEY REFERENCES app.businesses(id),
   ai_enabled boolean NOT NULL DEFAULT true,
@@ -347,7 +863,58 @@ CREATE TABLE IF NOT EXISTS app.ai_evaluation_datasets (
 );
 """
 
+_INDEXES_SQL = """
+CREATE INDEX IF NOT EXISTS channel_reminders_target_idx
+  ON app.channel_reminders (business_id, target_kind, target_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS supplier_portal_connections_biz_idx
+  ON app.supplier_portal_connections (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS supplier_portal_ingestions_lookup_idx
+  ON app.supplier_portal_ingestions (
+    business_id, connection_id, external_invoice_id, created_at DESC
+  );
+CREATE INDEX IF NOT EXISTS supplier_beneficiaries_biz_idx
+  ON app.supplier_beneficiaries (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS supplier_payment_executions_biz_idx
+  ON app.supplier_payment_executions (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS gross_to_net_payout_biz_idx
+  ON app.gross_to_net_payout_reconciliations (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS voice_note_instructions_biz_idx
+  ON app.voice_note_instructions (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS tenant_encryption_keys_biz_idx
+  ON app.tenant_encryption_keys (business_id, key_version DESC);
+CREATE INDEX IF NOT EXISTS ai_runs_business_feature_idx
+  ON app.ai_runs (business_id, feature_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_tool_audit_logs_biz_idx
+  ON app.ai_tool_audit_logs (business_id, run_id, executed_at DESC);
+CREATE INDEX IF NOT EXISTS ai_accounting_memories_lookup_idx
+  ON app.ai_accounting_memories (business_id, accounting_framework, status, effective_from DESC);
+CREATE INDEX IF NOT EXISTS ai_recon_investigations_biz_idx
+  ON app.ai_reconciliation_investigations (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_client_clarifications_biz_idx
+  ON app.ai_client_clarifications (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_voice_sessions_biz_idx
+  ON app.ai_voice_accounting_sessions (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_contract_verifications_biz_idx
+  ON app.ai_contract_verifications (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_cash_scenarios_biz_idx
+  ON app.ai_cash_scenarios (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS ai_evaluation_datasets_biz_idx
+  ON app.ai_evaluation_datasets (business_id, created_at DESC);
+"""
+
 _RLS_TABLES = (
+    ("channel_reminder_preferences", "channel_reminder_preferences_scope"),
+    ("workspace_channel_connections", "workspace_channel_connections_scope"),
+    ("channel_reminders", "channel_reminders_scope"),
+    ("supplier_portal_connections", "supplier_portal_connections_scope"),
+    ("supplier_portal_ingestions", "supplier_portal_ingestions_scope"),
+    ("supplier_payment_controls", "supplier_payment_controls_scope"),
+    ("supplier_beneficiaries", "supplier_beneficiaries_scope"),
+    ("supplier_payment_executions", "supplier_payment_executions_scope"),
+    ("reconciliation_sla_trackers", "reconciliation_sla_trackers_scope"),
+    ("gross_to_net_payout_reconciliations", "gross_to_net_payout_scope"),
+    ("voice_note_instructions", "voice_note_instructions_scope"),
+    ("tenant_encryption_keys", "tenant_encryption_keys_scope"),
     ("ai_ocr_cost_benchmarks", "ai_ocr_cost_benchmarks_scope"),
     ("accounting_expansion_workflows", "accounting_expansion_workflows_scope"),
     ("enterprise_sso_cell_configs", "enterprise_sso_cell_configs_scope"),
@@ -359,14 +926,44 @@ _RLS_TABLES = (
     ("p4_inventory_movements", "p4_inventory_movements_scope"),
     ("p4_group_entities", "p4_group_entities_scope"),
     ("p4_group_consolidation_runs", "p4_group_consolidation_runs_scope"),
+    ("ai_runs", "ai_runs_scope"),
+    ("ai_tool_audit_logs", "ai_tool_audit_logs_scope"),
+    ("ai_accounting_memories", "ai_accounting_memories_scope"),
+    ("ai_reconciliation_investigations", "ai_reconciliation_investigations_scope"),
+    ("ai_client_clarifications", "ai_client_clarifications_scope"),
+    ("ai_voice_accounting_sessions", "ai_voice_accounting_sessions_scope"),
+    ("ai_contract_verifications", "ai_contract_verifications_scope"),
+    ("ai_cash_scenarios", "ai_cash_scenarios_scope"),
     ("ai_tenant_controls", "ai_tenant_controls_scope"),
     ("ai_evaluation_datasets", "ai_evaluation_datasets_scope"),
 )
 
 
+def _resolve_runtime_roles(conn: Connection) -> list[str]:
+    """Return quoted role identifiers that exist in pg_roles for runtime grants."""
+    candidates = {
+        os.environ.get("APP_DB_USER", "").strip(),
+        os.environ.get("LEDGERPILOT_DB_RUNTIME_USER", "").strip(),
+        "ledgerpilot_app",
+    }
+    roles: list[str] = []
+    preparer = conn.dialect.identifier_preparer
+    for candidate in sorted(c for c in candidates if c):
+        exists = conn.execute(
+            text("SELECT 1 FROM pg_roles WHERE rolname = :r"),
+            {"r": candidate},
+        ).scalar()
+        if exists:
+            roles.append(preparer.quote(candidate))
+    return roles
+
+
 def ensure_extended_schema(conn: Connection) -> None:
-    """Ensure late-0039 and 0040 tables and RLS policies exist on pre-stamped DBs."""
-    conn.execute(text(_EXTENDED_TABLES_SQL))
+    """Ensure all 0039 and 0040 tables, indexes, RLS policies, and grants exist."""
+    conn.execute(text(_EARLY_0039_TABLES_SQL))
+    conn.execute(text(_LATE_0039_AND_0040_TABLES_SQL))
+    conn.execute(text(_INDEXES_SQL))
+    extra_roles = _resolve_runtime_roles(conn)
     for table_name, policy_name in _RLS_TABLES:
         conn.execute(
             text(
@@ -387,6 +984,11 @@ def ensure_extended_schema(conn: Connection) -> None:
                   END IF;
                 END
                 $$;
+                GRANT SELECT, INSERT, UPDATE, DELETE ON app.{table_name} TO CURRENT_USER;
                 """
             )
         )
+        for quoted_role in extra_roles:
+            conn.execute(
+                text(f"GRANT SELECT, INSERT, UPDATE, DELETE ON app.{table_name} TO {quoted_role}")
+            )

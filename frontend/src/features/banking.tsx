@@ -14,6 +14,7 @@ import {
   NextPage,
   PageHeading,
   Table,
+  humanize,
   money,
 } from "../components/ui";
 import { useBusiness } from "./context";
@@ -380,7 +381,7 @@ export function Banking() {
           <>
             <dl className="review-summary">
               <dt>Action</dt>
-              <dd>{command.action}</dd>
+              <dd>{humanize(command.action)}</dd>
               <dt>Reason</dt>
               <dd>{command.reason}</dd>
               <dt>Account</dt>
@@ -471,7 +472,7 @@ export function Banking() {
                   matches.data.items.map((m) => (
                     <label className="check" key={m.id}>
                       <input type="checkbox" name="journals" value={m.id} />
-                      {m.accounting_date} · {m.memo} · {m.source_kind}
+                      {m.accounting_date} · {m.memo} · {humanize(m.source_kind)}
                     </label>
                   ))
                 ) : (

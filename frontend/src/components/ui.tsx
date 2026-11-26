@@ -298,7 +298,8 @@ export function Badge({
 }) {
   const shown =
     typeof children === "string" &&
-    /^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/.test(children)
+    (/^[A-Za-z0-9]+(?:_[A-Za-z0-9]+)+$/.test(children) ||
+      /^[a-z]{3,}$/.test(children))
       ? humanize(children)
       : children;
   return <span className={`badge ${tone}`}>{shown}</span>;

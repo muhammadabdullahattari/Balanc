@@ -13,6 +13,7 @@ import {
   Modal,
   PageHeading,
   Table,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
@@ -314,7 +315,7 @@ export function Loans() {
           <>
             <dl className="review-summary">
               <dt>Movement</dt>
-              <dd>{body.kind}</dd>
+              <dd>{humanize(body.kind)}</dd>
               <dt>Principal</dt>
               <dd>{money(body.principal, b.currency)}</dd>
               <dt>Interest</dt>

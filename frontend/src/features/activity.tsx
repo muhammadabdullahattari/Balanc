@@ -11,6 +11,7 @@ import {
   Loading,
   NextPage,
   Badge,
+  humanize,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
 import { EmailOperations } from "./email-operations";
@@ -169,7 +170,7 @@ export function Activity() {
               columns={[
                 {
                   label: "Activity",
-                  render: (n) => n.kind.replaceAll("_", " "),
+                  render: (n) => humanize(n.kind),
                 },
                 {
                   label: "Source",
@@ -326,7 +327,7 @@ export function Activity() {
                   columns={[
                     {
                       label: "Email",
-                      render: (job) => job.kind.replaceAll("_", " "),
+                      render: (job) => humanize(job.kind),
                     },
                     {
                       label: "Status",
@@ -343,8 +344,8 @@ export function Activity() {
                           {job.state === "uncertain"
                             ? "Delivery needs review"
                             : job.state === "sent"
-                              ? "Accepted by SMTP"
-                              : job.state}
+                              ? "Delivered to mail server"
+                              : humanize(job.state)}
                         </Badge>
                       ),
                     },
@@ -418,7 +419,7 @@ export function Search() {
               rowKey={(r) => r.id}
               columns={[
                 { label: "Number", render: (r) => r.number },
-                { label: "Type", render: (r) => r.kind },
+                { label: "Type", render: (r) => humanize(r.kind) },
                 { label: "Record reference", render: (r) => r.id },
               ]}
             />

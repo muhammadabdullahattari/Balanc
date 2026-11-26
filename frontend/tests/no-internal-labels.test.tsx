@@ -10,6 +10,10 @@ import {
   P3AutomationHub,
 } from "../src/features/p3-automation";
 import { QuickBooksImport } from "../src/features/quickbooks-import";
+import { Settings } from "../src/features/settings";
+import { CleanupControls } from "../src/features/cleanup";
+import { ClosePackages } from "../src/features/close-packages";
+import { RetentionControls } from "../src/features/retention";
 
 const FORBIDDEN_INTERNAL_LABELS = [
   /\bP[1-4]\b/,
@@ -25,12 +29,18 @@ const FORBIDDEN_INTERNAL_LABELS = [
   /\bIAS 21\b/,
   /\bNACHA\b/,
   /\bMT103\b/,
+  /\bUUID\b/,
+  /\bSMTP\b/,
+  /\bPolicy version\b/,
   /\bllama-3\.3/i,
   /\bwhisper-large/i,
   /\b25\.000000\b/,
   /\bus-east-va-cell-1\b/,
   /\beu-central-fra-cell-1\b/,
   /\bpending_review\b/,
+  /\ufffd/,
+  /\u00e2\u20ac/,
+  /\u00c2\u00b7/,
 ];
 
 const mockBusiness = {
@@ -63,7 +73,7 @@ function assertNoInternalLabels(textContent: string, screenName: string) {
 }
 
 describe("User-facing copy hygiene (zero internal/developer labels)", () => {
-  it("never renders ticket codes, phase prefixes, model IDs, or developer jargon across AI, Automation, WhatsApp, Slack, and QuickBooks screens", async () => {
+  it("never renders ticket codes, phase prefixes, model IDs, mojibake, or developer jargon across AI, Automation, Settings, Retention, Cleanup, Close, and QuickBooks screens", async () => {
     queryClient.clear();
     const getSpy = vi.spyOn(api, "GET").mockImplementation((async (
       url: string,
@@ -109,6 +119,47 @@ describe("User-facing copy hygiene (zero internal/developer labels)", () => {
             contract_verifications: [],
             cash_scenarios: [],
             evaluation_datasets: [],
+          },
+        };
+      }
+      if (url.includes("/retention/cleanup/")) {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: [],
+        };
+      }
+      if (url.endsWith("/retention")) {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: {
+            default_years: 7,
+            policies: [
+              {
+                id: "pol-1",
+                category: "trade_documents",
+                jurisdiction: "US",
+                years: 7,
+                version: 1,
+                reference: "IRS Rev. Proc.",
+              },
+            ],
+            holds: [],
+          },
+        };
+      }
+      if (url.endsWith("/memberships")) {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: {
+            items: [
+              {
+                user_id: "d1c40361-f7c0-47c2-8df2-c4acb6ebfab6",
+                role: "owner",
+                active: true,
+                can_post: true,
+                can_invite: true,
+              },
+            ],
           },
         };
       }
@@ -244,6 +295,56 @@ describe("User-facing copy hygiene (zero internal/developer labels)", () => {
     expect(slackOnly.container.textContent).not.toContain("Connect WhatsApp");
     assertNoInternalLabels(slackOnly.container.textContent || "", "Slack-only");
     slackOnly.unmount();
+
+    // Verify Settings Business, Team, WhatsApp, and Slack tabs
+    for (const section of ["business", "team", "whatsapp", "slack"]) {
+      const st = wrap(<Settings initialSection={section} />);
+      await waitFor(() =>
+        expect(st.container.querySelector("h1")).toBeTruthy(),
+      );
+      if (section === "business") {
+        expect(st.container.textContent).toContain("Accrual");
+        expect(st.container.textContent).toContain("January");
+      }
+      if (section === "team") {
+        await waitFor(() =>
+          expect(st.container.textContent).toContain("Workspace member"),
+        );
+        expect(st.container.textContent).not.toContain("d1c40361…");
+        expect(st.container.textContent).toContain("Accountant");
+      }
+      assertNoInternalLabels(
+        st.container.textContent || "",
+        `Settings:${section}`,
+      );
+      st.unmount();
+    }
+
+    const cleanup = wrap(<CleanupControls />);
+    await waitFor(() => expect(cleanup.container.textContent).toBeTruthy());
+    assertNoInternalLabels(
+      cleanup.container.textContent || "",
+      "CleanupControls",
+    );
+    cleanup.unmount();
+
+    const retention = wrap(<RetentionControls />);
+    await waitFor(() =>
+      expect(retention.container.textContent).toContain("Trade documents"),
+    );
+    assertNoInternalLabels(
+      retention.container.textContent || "",
+      "RetentionControls",
+    );
+    retention.unmount();
+
+    const closePkg = wrap(<ClosePackages periodId="period-1" />);
+    await waitFor(() => expect(closePkg.container.textContent).toBeTruthy());
+    assertNoInternalLabels(
+      closePkg.container.textContent || "",
+      "ClosePackages",
+    );
+    closePkg.unmount();
 
     const qb = wrap(<QuickBooksImport />);
     await waitFor(() => expect(qb.container.textContent).toBeTruthy());

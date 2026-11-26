@@ -20,6 +20,7 @@ import {
   PageHeading,
   SectionTabs,
   Table,
+  humanize,
 } from "../components/ui";
 import { useBusiness, useAccess } from "./context";
 import type { components } from "../api/generated/schema";
@@ -179,15 +180,17 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
               <dt>Base currency</dt>
               <dd>{b.currency}</dd>
               <dt>Accounting basis</dt>
-              <dd>{b.basis}</dd>
+              <dd>{humanize(b.basis)}</dd>
               <dt>Timezone</dt>
               <dd>{b.timezone}</dd>
               <dt>Jurisdiction</dt>
               <dd>{b.jurisdiction}</dd>
-              <dt>Fiscal start month</dt>
-              <dd>{b.fiscal_month}</dd>
-              <dt>Policy version</dt>
-              <dd>{b.policy_version}</dd>
+              <dt>Fiscal year starts</dt>
+              <dd>
+                {new Date(
+                  Date.UTC(2026, Math.max(0, (b.fiscal_month || 1) - 1), 1),
+                ).toLocaleString("en-US", { month: "long", timeZone: "UTC" })}
+              </dd>
             </dl>
           </>
         )}
@@ -216,8 +219,8 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
                       m.email ? (
                         <span className="member-email">{m.email}</span>
                       ) : (
-                        <span className="member-id muted" title={m.user_id}>
-                          {m.user_id.slice(0, 8)}…
+                        <span className="member-id muted">
+                          Workspace member
                         </span>
                       ),
                   },
@@ -255,7 +258,9 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
                         "auditor",
                         ...(isOwner ? ["owner"] : []),
                       ].map((r) => (
-                        <option key={r}>{r}</option>
+                        <option key={r} value={r}>
+                          {humanize(r)}
+                        </option>
                       ))}
                     </select>
                   </Field>

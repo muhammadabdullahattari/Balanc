@@ -15,6 +15,7 @@ import {
   NextPage,
   PageHeading,
   Table,
+  humanize,
 } from "../components/ui";
 import { useBusiness, today } from "./context";
 import type { components } from "../api/generated/schema";
@@ -117,7 +118,13 @@ export function Accounts() {
                 },
                 { label: "Account", render: (a) => <strong>{a.name}</strong> },
                 { label: "Type", render: (a) => <Badge>{a.kind}</Badge> },
-                { label: "Control", render: (a) => a.control || "—" },
+                {
+                  label: "Control",
+                  render: (a) =>
+                    a.control
+                      ? controlLabels[a.control] || humanize(a.control)
+                      : "—",
+                },
                 {
                   label: "Status",
                   render: (a) => (
@@ -390,7 +397,7 @@ export function People() {
                   value={r}
                   defaultChecked={i === 0}
                 />
-                {r}
+                {humanize(r)}
               </label>
             ))}
           </fieldset>
@@ -416,7 +423,7 @@ export function People() {
           >
             {party?.roles.map((r) => (
               <option key={r} value={r}>
-                {r}
+                {humanize(r)}
               </option>
             ))}
           </select>
@@ -436,7 +443,7 @@ export function People() {
               columns={[
                 { label: "Date", render: (r) => r.accounting_date },
                 { label: "Document", render: (r) => r.number },
-                { label: "Type", render: (r) => r.kind },
+                { label: "Type", render: (r) => humanize(r.kind) },
                 { label: "Amount", render: (r) => money(r.amount, b.currency) },
                 {
                   label: "Running balance",

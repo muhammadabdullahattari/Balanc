@@ -328,12 +328,15 @@ export function Evidence() {
                   Download original
                 </Button>
               </div>
-              <dl className="review-summary">
-                <dt>Content fingerprint</dt>
-                <dd>{detail.data.content_hash}</dd>
-                <dt>Scan version</dt>
-                <dd>{detail.data.scan_version || "Pending"}</dd>
-              </dl>
+              <details className="chart-data">
+                <summary>Verification details</summary>
+                <dl className="review-summary">
+                  <dt>Content fingerprint</dt>
+                  <dd>{detail.data.content_hash}</dd>
+                  <dt>Scan version</dt>
+                  <dd>{detail.data.scan_version || "Pending"}</dd>
+                </dl>
+              </details>
               <h3>Review history</h3>
               <ErrorNotice error={annotations.error} />
               {annotations.data?.items.map((annotation) => (

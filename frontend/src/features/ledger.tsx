@@ -13,6 +13,7 @@ import {
   Loading,
   NextPage,
   Modal,
+  humanize,
   money,
   Badge,
 } from "../components/ui";
@@ -252,7 +253,7 @@ export function Ledger() {
                 <dd>{detail.data.id}</dd>
                 <dt>Source</dt>
                 <dd>
-                  {detail.data.source_kind} ·{" "}
+                  {humanize(detail.data.source_kind)} ·{" "}
                   {detail.data.source_id || "Manual entry"}
                 </dd>
                 {detail.data.asset_id && (

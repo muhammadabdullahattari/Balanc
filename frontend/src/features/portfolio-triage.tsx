@@ -1,7 +1,14 @@
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, result } from "../api/runtime";
-import { Button, ErrorNotice, Field, Loading } from "../components/ui";
+import {
+  Button,
+  ErrorNotice,
+  Field,
+  Loading,
+  formatWhen,
+  humanize,
+} from "../components/ui";
 
 const SORT_LABELS: Record<
   "exceptions" | "status" | "severity" | "assignee",
@@ -204,7 +211,7 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
           <option value="">Select an exception</option>
           {items.data?.map((x) => (
             <option key={x.source_id} value={x.source_id}>
-              {x.kind}: {x.description}
+              {humanize(x.kind)}: {x.description}
             </option>
           ))}
         </select>
@@ -240,7 +247,7 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
                 .filter((m) => m.active && m.role === "accountant")
                 .map((m) => (
                   <option key={m.user_id} value={m.user_id}>
-                    {m.user_id}
+                    {m.email || m.user_id}
                   </option>
                 ))}
             </select>
@@ -262,7 +269,7 @@ function Assignments({ id, changed }: { id: string; changed: () => void }) {
           </Button>
           {history.data?.map((h) => (
             <p key={String(h.event_id)}>
-              {String(h.changed_at)} · {String(h.actor)}:{" "}
+              {formatWhen(String(h.changed_at))} · {String(h.actor)}:{" "}
               {String(h.previous_user ?? "Unassigned")} →{" "}
               {String(h.assigned_user ?? "Unassigned")}
             </p>

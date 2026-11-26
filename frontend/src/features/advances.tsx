@@ -11,6 +11,7 @@ import {
   ErrorNotice,
   Modal,
   NextPage,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
@@ -131,7 +132,7 @@ export function Advances() {
               rowKey={(r) => r.id}
               columns={[
                 { label: "Date", render: (r) => r.accounting_date },
-                { label: "Direction", render: (r) => r.direction },
+                { label: "Direction", render: (r) => humanize(r.direction) },
                 { label: "Amount", render: (r) => money(r.amount, b.currency) },
                 {
                   label: "Unapplied",

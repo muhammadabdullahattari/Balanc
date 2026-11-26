@@ -399,14 +399,14 @@ export function EntryTools({ accounts }: { accounts: Accounts }) {
                 <details>
                   <summary>Exchange rate history</summary>
                   <ErrorNotice error={history.error} />
-                  {history.isPending && <p role="status">Loading rates�</p>}
+                  {history.isPending && <p role="status">Loading rates…</p>}
                   {history.data?.length === 0 && <p>No rates recorded yet.</p>}
                   <ul>
                     {history.data?.map((row) => (
                       <li key={String(row.id)}>
-                        {String(row.day)} � {String(row.foreign_currency)}/
-                        {String(row.base_currency)} � {String(row.rate)} �{" "}
-                        {row.manual ? "Manual override" : "Provider"} �{" "}
+                        {String(row.day)} · {String(row.foreign_currency)}/
+                        {String(row.base_currency)} · {String(row.rate)} ·{" "}
+                        {row.manual ? "Manual override" : "Provider"} ·{" "}
                         {String(row.source)}
                       </li>
                     ))}

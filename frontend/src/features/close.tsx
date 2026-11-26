@@ -14,6 +14,7 @@ import {
   money,
   PageHeading,
   Table,
+  humanize,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
 import type { components } from "../api/generated/schema";
@@ -304,7 +305,7 @@ export function Close() {
                 .filter((m) => m.active)
                 .map((m) => (
                   <option key={m.user_id} value={m.user_id}>
-                    {m.role} · {m.user_id}
+                    {humanize(m.role)} · {m.email || m.user_id}
                   </option>
                 ))}
             </select>

@@ -10,6 +10,7 @@ import {
   Modal,
   PageHeading,
   Table,
+  humanize,
   money,
 } from "../components/ui";
 import { today, useBusiness } from "./context";
@@ -150,7 +151,7 @@ export function Reconciliation() {
                   )
                   .map((e) => (
                     <option key={e.id} value={e.id}>
-                      {e.filename} · {e.status}
+                      {e.filename} · {humanize(e.status)}
                     </option>
                   ))}
               </select>

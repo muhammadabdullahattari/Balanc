@@ -2,7 +2,7 @@ import { CleanupControls } from "./cleanup";
 import { ExportDisposal } from "./export-disposal";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
-import { Button, ErrorNotice, Field, Table } from "../components/ui";
+import { Button, ErrorNotice, Field, Table, humanize } from "../components/ui";
 import { today, useBusiness, useAccess } from "./context";
 import type { components } from "../api/generated/schema";
 
@@ -156,7 +156,7 @@ export function RetentionControls() {
               <select name="category">
                 {categories.map((c) => (
                   <option key={c} value={c}>
-                    {c.replaceAll("_", " ")}
+                    {humanize(c)}
                   </option>
                 ))}
               </select>
@@ -203,7 +203,7 @@ export function RetentionControls() {
             columns={[
               {
                 label: "Record class",
-                render: (p) => p.category.replaceAll("_", " "),
+                render: (p) => humanize(p.category),
               },
               { label: "Jurisdiction", render: (p) => p.jurisdiction },
               { label: "Years", render: (p) => p.years },
@@ -222,7 +222,7 @@ export function RetentionControls() {
               <select name="category">
                 {categories.map((c) => (
                   <option key={c} value={c}>
-                    {c.replaceAll("_", " ")}
+                    {humanize(c)}
                   </option>
                 ))}
               </select>
@@ -257,7 +257,7 @@ export function RetentionControls() {
                 <option value="legal">Legal hold</option>
                 <option value="regulatory">Regulatory hold</option>
                 <option value="exception">
-                  Retention exception � protect from cleanup
+                  Retention exception — protect from cleanup
                 </option>
               </select>
             </Field>
@@ -266,7 +266,7 @@ export function RetentionControls() {
                 <option value="all">All financial records</option>
                 {categories.map((c) => (
                   <option key={c} value={c}>
-                    {c.replaceAll("_", " ")}
+                    {humanize(c)}
                   </option>
                 ))}
               </select>
@@ -284,9 +284,9 @@ export function RetentionControls() {
             columns={[
               {
                 label: "Scope",
-                render: (h) => h.category.replaceAll("_", " "),
+                render: (h) => humanize(h.category),
               },
-              { label: "Type", render: (h) => h.kind },
+              { label: "Type", render: (h) => humanize(h.kind) },
               { label: "Reason", render: (h) => h.reason },
               {
                 label: "State",
