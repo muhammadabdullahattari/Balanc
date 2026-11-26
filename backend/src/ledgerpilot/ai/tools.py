@@ -278,7 +278,8 @@ def tool_get_open_trade_documents(
         db.execute(
             text(
                 """
-                SELECT d.id, d.kind, d.number, d.issue_date, d.due_date, d.total, d.disputed,
+                SELECT d.id, d.kind, d.number,
+                       d.accounting_date AS issue_date, d.due_date, d.total, d.disputed,
                        COALESCE(SUM(a.amount), 0) AS allocated,
                        EXISTS (
                          SELECT 1 FROM app.evidence_links el
@@ -292,7 +293,7 @@ def tool_get_open_trade_documents(
                 WHERE d.business_id = :bid
                   AND d.kind IN ('invoice', 'bill')
                   AND (:dkind = 'all' OR d.kind = :dkind)
-                GROUP BY d.id, d.kind, d.number, d.issue_date, d.due_date, d.total, d.disputed
+                GROUP BY d.id, d.kind, d.number, d.accounting_date, d.due_date, d.total, d.disputed
                 HAVING COALESCE(SUM(a.amount), 0) < d.total
                 ORDER BY d.due_date ASC, d.id ASC
                 LIMIT :lim
@@ -357,10 +358,11 @@ def tool_get_unmatched_bank_rows(
         db.execute(
             text(
                 """
-                SELECT id, date AS posted_date, amount, description, reference, state
+                SELECT id, accounting_date AS posted_date, amount, description,
+                       COALESCE(external_id, '') AS reference, state
                 FROM app.bank_rows
                 WHERE business_id = :bid AND state = 'for_review'
-                ORDER BY date ASC, id ASC
+                ORDER BY accounting_date ASC, id ASC
                 LIMIT :lim
                 """
             ),

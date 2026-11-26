@@ -105,7 +105,7 @@ def _persist_ai_run(
             ) VALUES (
               :id, :bid, :fid, :wave, :prov, :mname, 'v1.0',
               CAST(:tvers AS jsonb), :status, :isum, CAST(:sout AS jsonb), CAST(:cites AS jsonb),
-              CAST(:tinv AS jsonb), :conf, :uflags, :shash,
+              CAST(:tinv AS jsonb), :conf, CAST(:uflags AS text[]), :shash,
               :bver, :pver, :ptok, :ctok,
               :ttok, :lat, :cost, :astate,
               :ahash, :actor
@@ -1324,8 +1324,8 @@ def create_ai_client_clarification(
               completeness_score, remaining_gaps, status, actor
             ) VALUES (
               :id, :bid, :rid, :ekind, :eref,
-              :rkey, :ch, CAST(:qs AS jsonb), :rdocs,
-              0, :rgaps, :st, :actor
+              :rkey, :ch, CAST(:qs AS jsonb), CAST(:rdocs AS text[]),
+              0, CAST(:rgaps AS text[]), :st, :actor
             )
             """
         ),
@@ -1410,7 +1410,7 @@ def process_ai_client_clarification_reply(
             SET client_reply_text = :reply,
                 uploaded_evidence_ref = :evref,
                 completeness_score = :score,
-                remaining_gaps = :rgaps,
+                remaining_gaps = CAST(:rgaps AS text[]),
                 status = :st,
                 updated_at = clock_timestamp()
             WHERE business_id = :bid AND id = :cid
@@ -1755,7 +1755,7 @@ def create_ai_voice_accounting_session(
             ) VALUES (
               :id, :bid, :rid, :lang, :afmt, :dur,
               :sttp, :rawt, :cort, :intent,
-              CAST(:ents AS jsonb), :unc, false,
+              CAST(:ents AS jsonb), CAST(:unc AS text[]), false,
               :tts, :lkroom, :st, :actor
             )
             """
