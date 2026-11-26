@@ -595,8 +595,8 @@ async def test_w0_and_ai01_through_ai10_end_to_end_and_cross_tenant_rls_isolatio
         # 11e. W0 Item 6: Predefined P3 OCR/AI cost benchmark figures labeled simulated
         p3_bench = await api_a.get(f"/api/v1/businesses/{bid_a}/p3/ai-benchmarks")
         assert p3_bench.status_code == 200, p3_bench.text
-        assert p3_bench.json()["provenance_mode"] == "SIMULATED_SYNTHETIC_FIXTURE"
-        assert p3_bench.json()["is_simulated_baseline"] is True
+        assert p3_bench.json()["summary"]["provenance_mode"] == "SIMULATED_SYNTHETIC_FIXTURE"
+        assert p3_bench.json()["summary"]["is_simulated_baseline"] is True
 
         # 12. Cross-tenant RLS & HTTP authorization isolation (Tenant B cannot access Tenant A)
         cross_get = await api_b.get(f"{base_a}/overview")

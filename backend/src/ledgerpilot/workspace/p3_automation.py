@@ -5249,6 +5249,8 @@ def list_ai_ocr_and_cost_benchmarks(
         .all()
     )
     return {
+        "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
+        "is_simulated_baseline": True,
         "summary": {
             "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
             "is_simulated_baseline": True,
