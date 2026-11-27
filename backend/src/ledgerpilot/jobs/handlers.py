@@ -116,6 +116,40 @@ def handle_report_export(
     return generate_report_export(db, business_id, report_type, parameters, fmt)
 
 
+def handle_financial_audit(
+    db: Session,
+    business_id: UUID | None,
+    created_by: UUID | None,
+    payload: dict[str, Any],
+) -> dict[str, Any]:
+    if business_id is None or created_by is None:
+        raise ValueError("Financial audit job requires business_id and created_by")
+    from ledgerpilot.audit.graph import execute_financial_audit
+    from ledgerpilot.database import set_context
+
+    set_context(db, created_by, business_id)
+    settings = get_settings()
+    audit_run_id = UUID(str(payload["audit_run_id"])) if payload.get("audit_run_id") else None
+    audit_type = payload.get("audit_type", "emergency")
+    req_params = payload.get("request_params") or {}
+    res = execute_financial_audit(
+        db,
+        business_id=business_id,
+        actor_id=created_by,
+        audit_type=audit_type,
+        trigger_source="background_job",
+        request_params=req_params,
+        settings=settings,
+        run_id=audit_run_id,
+        persist=True,
+    )
+    return {
+        "audit_run_id": res["id"],
+        "status": res["status"],
+        "severity_summary": res["severity_summary"],
+    }
+
+
 def register_default_handlers() -> None:
     """Register all standard background job handlers."""
     from ledgerpilot.jobs.worker import register_handler
@@ -125,4 +159,5 @@ def register_default_handlers() -> None:
     register_handler("identity_smtp", handle_identity_smtp)
     register_handler("quickbooks_import", handle_quickbooks_import)
     register_handler("report_export", handle_report_export)
+    register_handler("financial_audit", handle_financial_audit)
     register_handler("rate_limit_janitor", handle_rate_limit_janitor)

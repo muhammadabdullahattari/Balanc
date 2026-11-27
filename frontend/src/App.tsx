@@ -135,8 +135,14 @@ const AICopilotHub = lazy(() =>
     default: m.AICopilotHub,
   })),
 );
+const FinancialAudit = lazy(() =>
+  import("./features/financial-audit").then((m) => ({
+    default: m.FinancialAudit,
+  })),
+);
 const navigation = [
   { to: "/ai-assistant", label: "AI assistant", icon: CheckSquare },
+  { to: "/financial-audit", label: "Financial audit", icon: CheckSquare },
   { to: "/drafts", label: "Draft review", icon: FileText },
   { to: "/refunds", label: "Payments & refunds", icon: ArrowLeftRight },
   { to: "/advances", label: "Advances", icon: Landmark },
@@ -572,6 +578,7 @@ function Workspace() {
                     "/loans",
                     "/reconciliation",
                     "/close",
+                    "/financial-audit",
                   ],
                 },
                 {
@@ -748,6 +755,7 @@ function Workspace() {
                   <Route path="/prepaids" element={<Prepaids />} />
                   <Route path="/accounts" element={<Accounts />} />
                   <Route path="/close" element={<Close />} />
+                  <Route path="/financial-audit" element={<FinancialAudit />} />
                   <Route path="/ai-assistant" element={<AICopilotHub />} />
                   {/* legacy-redirects */}
                   <Route

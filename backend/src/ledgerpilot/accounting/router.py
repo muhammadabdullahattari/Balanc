@@ -233,6 +233,19 @@ def lock_period(
         business_id,
         period.id,
     )
+    if data.locked:
+        from ledgerpilot.audit.triggers import trigger_auto_audit
+
+        trigger_auto_audit(
+            db,
+            business_id=business_id,
+            actor_id=identity.user.id,
+            audit_type="auto_period_close",
+            trigger_source="period_locked",
+            start_date=period.start_date,
+            end_date=period.end_date,
+            trigger_resource_id=str(period.id),
+        )
     return {"id": str(period.id), "locked": period.locked, "version": period.version}
 
 

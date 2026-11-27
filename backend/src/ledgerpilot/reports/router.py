@@ -148,17 +148,32 @@ def profit_loss(
 def balance_sheet(
     business_id: UUID,
     as_of: date,
+    request: Request,
     identity: Identity,
     db: DB,
     basis: Literal["cash", "accrual"] = "accrual",
 ) -> dict[str, Any]:
     authorize(db, identity, business_id)
-    return save_report(
+    saved = save_report(
         db,
         identity,
         business_id,
         service.financial(db, business_id, date(1900, 1, 1), as_of, basis, "balance-sheet"),
     )
+    from ledgerpilot.audit.triggers import trigger_auto_audit
+
+    trigger_auto_audit(
+        db,
+        business_id=business_id,
+        actor_id=identity.user.id,
+        audit_type="auto_balance_sheet",
+        trigger_source="balance_sheet_generated",
+        start_date=as_of.replace(day=1),
+        end_date=as_of,
+        trigger_resource_id=str(saved["report_id"]),
+        settings=request.app.state.settings,
+    )
+    return saved
 
 
 @router.get(

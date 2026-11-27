@@ -1,7 +1,7 @@
 """Explicit model registration; migrations use frozen SQL snapshots."""
 
 from ledgerpilot.accounting.models import Account, Journal, JournalLine, Period
-from ledgerpilot.audit.models import AuditEvent
+from ledgerpilot.audit.models import AuditEvent, FinancialAuditRun
 from ledgerpilot.banking.models import (
     BankCorrection,
     BankImport,
@@ -85,6 +85,7 @@ __all__ = [
     "AdvanceApplication",
     "Allocation",
     "AuditEvent",
+    "FinancialAuditRun",
     "AuthRateBucket",
     "AuthSession",
     "BankImport",

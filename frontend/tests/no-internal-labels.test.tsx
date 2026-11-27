@@ -13,6 +13,7 @@ import { QuickBooksImport } from "../src/features/quickbooks-import";
 import { Settings } from "../src/features/settings";
 import { CleanupControls } from "../src/features/cleanup";
 import { ClosePackages } from "../src/features/close-packages";
+import { FinancialAudit } from "../src/features/financial-audit";
 import { RetentionControls } from "../src/features/retention";
 
 const FORBIDDEN_INTERNAL_LABELS = [
@@ -160,6 +161,126 @@ describe("User-facing copy hygiene (zero internal/developer labels)", () => {
                 can_invite: true,
               },
             ],
+          },
+        };
+      }
+      if (url === "/api/v1/businesses/{business_id}/audits/graph") {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: {
+            mermaid: "graph TD;",
+            nodes: ["validate_request", "load_data", "polish_report"],
+            tools: [
+              "evaluate_accounting_rules",
+              "reconcile_balances_and_continuity",
+            ],
+          },
+        };
+      }
+      if (url === "/api/v1/businesses/{business_id}/audits") {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: {
+            items: [
+              {
+                id: "90a32f25-4948-45c0-9142-8def637b0a9c",
+                audit_type: "monthly",
+                trigger_source: "manual",
+                status: "completed",
+                job_id: null,
+                period_start: "2026-11-01",
+                period_end: "2026-11-30",
+                severity_summary: {
+                  critical: 0,
+                  high: 1,
+                  medium: 0,
+                  low: 0,
+                  total: 1,
+                  health_status: "attention_needed",
+                },
+                executive_summary:
+                  "Checked November 2026 records and found 1 item to review.",
+                created_at: "2026-11-26T12:00:00Z",
+              },
+            ],
+            next_cursor: null,
+          },
+        };
+      }
+      if (url === "/api/v1/businesses/{business_id}/audits/{audit_id}") {
+        return {
+          response: new Response(null, { status: 200 }),
+          data: {
+            id: "90a32f25-4948-45c0-9142-8def637b0a9c",
+            business_id: "42132f25-4948-45c0-9142-8def637b0a9c",
+            audit_type: "monthly",
+            trigger_source: "manual",
+            status: "completed",
+            thread_id: "audit-thread-1",
+            job_id: null,
+            period_start: "2026-11-01",
+            period_end: "2026-11-30",
+            scope_filters: {},
+            loaded_data_summary: {},
+            severity_summary: {
+              critical: 0,
+              high: 1,
+              medium: 0,
+              low: 0,
+              total: 1,
+              health_status: "attention_needed",
+            },
+            findings: [
+              {
+                id: "F-001",
+                severity: "High",
+                category: "bank_reconciliation",
+                rule_violated: "unreviewed_bank_rows",
+                affected_records: ["bank_row:1"],
+                expected_vs_actual: {
+                  expected: "0 unreviewed bank rows",
+                  actual: "2 unreviewed bank rows",
+                  difference: "2",
+                },
+                evidence: [
+                  "2 imported bank statement rows are waiting for review.",
+                ],
+                recommendation:
+                  "Categorize or match the remaining bank statement rows before closing the month.",
+              },
+            ],
+            raw_report: {},
+            polished_report: {
+              executive_summary:
+                "Checked November 2026 records and found 1 item to review.",
+              severity_breakdown: "Critical: 0 | High: 1 | Medium: 0 | Low: 0",
+              findings_narrative: [
+                {
+                  id: "F-001",
+                  severity: "High",
+                  what: "Two imported bank statement rows are still waiting for review.",
+                  where: "Banking feed",
+                  why_it_matters:
+                    "Unreviewed bank rows can leave cash or expenses understated.",
+                  recommended_fix:
+                    "Review and match both statement rows in Banking.",
+                },
+              ],
+              next_steps: [
+                "Review the two pending bank statement rows in Banking.",
+              ],
+              markdown: "# Financial Audit",
+              provider: "groq",
+              model_name: "llama-3.3-70b-versatile",
+              fallback_used: false,
+              fallback_reason: "",
+              numeric_guard_passed: true,
+              chunks_processed: 1,
+            },
+            retrieved_context: [],
+            metadata: {},
+            created_by: "d1c40361-f7c0-47c2-8df2-c4acb6ebfab6",
+            created_at: "2026-11-26T12:00:00Z",
           },
         };
       }
@@ -350,6 +471,16 @@ describe("User-facing copy hygiene (zero internal/developer labels)", () => {
     await waitFor(() => expect(qb.container.textContent).toBeTruthy());
     assertNoInternalLabels(qb.container.textContent || "", "QuickBooksImport");
     qb.unmount();
+
+    const finAudit = wrap(<FinancialAudit />);
+    await waitFor(() =>
+      expect(finAudit.container.textContent).toContain("Checked November 2026"),
+    );
+    assertNoInternalLabels(
+      finAudit.container.textContent || "",
+      "FinancialAudit",
+    );
+    finAudit.unmount();
 
     getSpy.mockRestore();
   });

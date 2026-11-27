@@ -1083,6 +1083,70 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/businesses/{business_id}/audits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List Audit Runs
+         * @description List past manual and auto-triggered financial audit runs for this workspace.
+         */
+        get: operations["list_audit_runs_api_v1_businesses__business_id__audits_get"];
+        put?: never;
+        /**
+         * Create Audit Run
+         * @description Trigger a monthly, yearly, or emergency read-only financial audit (sync or async job).
+         */
+        post: operations["create_audit_run_api_v1_businesses__business_id__audits_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/businesses/{business_id}/audits/graph": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Graph Diagram
+         * @description Return the compiled LangGraph Mermaid diagram, node list, and registered tool names.
+         */
+        get: operations["get_graph_diagram_api_v1_businesses__business_id__audits_graph_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/businesses/{business_id}/audits/{audit_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Audit Run
+         * @description Fetch full structured and polished details for a single financial audit run.
+         */
+        get: operations["get_audit_run_api_v1_businesses__business_id__audits__audit_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/businesses/{business_id}/bank-imports": {
         parameters: {
             query?: never;
@@ -5432,6 +5496,30 @@ export interface components {
             /** Next Cursor */
             next_cursor: string | null;
         };
+        /** AuditFindingResponse */
+        AuditFindingResponse: {
+            /** Affected Records */
+            affected_records: string[];
+            /** Category */
+            category: string;
+            /** Evidence */
+            evidence: string[];
+            /** Expected Vs Actual */
+            expected_vs_actual: {
+                [key: string]: string;
+            };
+            /** Id */
+            id: string;
+            /** Recommendation */
+            recommendation: string;
+            /** Rule Violated */
+            rule_violated: string;
+            /**
+             * Severity
+             * @enum {string}
+             */
+            severity: "Critical" | "High" | "Medium" | "Low";
+        };
         /** AuditGrantCreate */
         AuditGrantCreate: {
             /** Hours */
@@ -5479,6 +5567,172 @@ export interface components {
             report_ids: string[];
             /** Revoked At */
             revoked_at: string | null;
+        };
+        /** AuditGraphTopologyResponse */
+        AuditGraphTopologyResponse: {
+            /** Mermaid */
+            mermaid: string;
+            /** Nodes */
+            nodes: string[];
+            /** Tools */
+            tools: string[];
+        };
+        /**
+         * AuditRunCreateRequest
+         * @description Request payload for running a monthly, yearly, or emergency financial audit.
+         */
+        AuditRunCreateRequest: {
+            /**
+             * Audit Type
+             * @enum {string}
+             */
+            audit_type: "monthly" | "yearly" | "emergency";
+            /**
+             * Calendar Year
+             * @description Use Jan 1..Dec 31 instead of workspace fiscal_month for yearly audits.
+             * @default false
+             */
+            calendar_year: boolean;
+            /**
+             * End Date
+             * @description Optional end date for emergency/on-demand audits (defaults to today).
+             */
+            end_date?: string | null;
+            /**
+             * Month
+             * @description Target month in YYYY-MM format when audit_type='monthly'.
+             */
+            month?: string | null;
+            /**
+             * Run Async
+             * @description Queue the audit as a durable background job instead of waiting inline.
+             * @default false
+             */
+            run_async: boolean;
+            /**
+             * Start Date
+             * @description Optional start date for emergency/on-demand audits (defaults to earliest record).
+             */
+            start_date?: string | null;
+            /**
+             * Year
+             * @description Target fiscal or calendar year when audit_type='yearly'.
+             */
+            year?: number | null;
+        };
+        /** AuditRunDetailResponse */
+        AuditRunDetailResponse: {
+            /**
+             * Audit Type
+             * @enum {string}
+             */
+            audit_type: "monthly" | "yearly" | "emergency" | "auto_balance_sheet" | "auto_period_close";
+            /**
+             * Business Id
+             * Format: uuid
+             */
+            business_id: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /**
+             * Created By
+             * Format: uuid
+             */
+            created_by: string;
+            /** Findings */
+            findings: components["schemas"]["AuditFindingResponse"][];
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /** Loaded Data Summary */
+            loaded_data_summary: {
+                [key: string]: unknown;
+            };
+            /** Metadata */
+            metadata: {
+                [key: string]: unknown;
+            };
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            polished_report: components["schemas"]["PolishedReportResponse"];
+            /** Raw Report */
+            raw_report: {
+                [key: string]: unknown;
+            };
+            /** Retrieved Context */
+            retrieved_context: {
+                [key: string]: unknown;
+            }[];
+            /** Scope Filters */
+            scope_filters: {
+                [key: string]: unknown;
+            };
+            severity_summary: components["schemas"]["SeveritySummaryResponse"];
+            /** Status */
+            status: string;
+            /** Thread Id */
+            thread_id: string;
+            /** Trigger Source */
+            trigger_source: string;
+        };
+        /** AuditRunListResponse */
+        AuditRunListResponse: {
+            /** Items */
+            items: components["schemas"]["AuditRunSummaryItem"][];
+            /** Next Cursor */
+            next_cursor?: string | null;
+        };
+        /** AuditRunSummaryItem */
+        AuditRunSummaryItem: {
+            /**
+             * Audit Type
+             * @enum {string}
+             */
+            audit_type: "monthly" | "yearly" | "emergency" | "auto_balance_sheet" | "auto_period_close";
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Executive Summary */
+            executive_summary: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Job Id */
+            job_id?: string | null;
+            /**
+             * Period End
+             * Format: date
+             */
+            period_end: string;
+            /**
+             * Period Start
+             * Format: date
+             */
+            period_start: string;
+            severity_summary: components["schemas"]["SeveritySummaryResponse"];
+            /** Status */
+            status: string;
+            /** Trigger Source */
+            trigger_source: string;
         };
         /** AuthDeliveryResult */
         AuthDeliveryResult: {
@@ -7677,6 +7931,21 @@ export interface components {
             kind: string;
             /** Name */
             name: string;
+        };
+        /** FindingNarrativeItem */
+        FindingNarrativeItem: {
+            /** Id */
+            id: string;
+            /** Recommended Fix */
+            recommended_fix: string;
+            /** Severity */
+            severity: string;
+            /** What */
+            what: string;
+            /** Where */
+            where: string;
+            /** Why It Matters */
+            why_it_matters: string;
         };
         /** ForecastEvaluation */
         ForecastEvaluation: {
@@ -9920,6 +10189,40 @@ export interface components {
             /** Retention Days */
             retention_days: number;
         };
+        /** PolishedReportResponse */
+        PolishedReportResponse: {
+            /**
+             * Chunks Processed
+             * @default 1
+             */
+            chunks_processed: number;
+            /** Executive Summary */
+            executive_summary: string;
+            /**
+             * Fallback Reason
+             * @default
+             */
+            fallback_reason: string;
+            /** Fallback Used */
+            fallback_used: boolean;
+            /** Findings Narrative */
+            findings_narrative: components["schemas"]["FindingNarrativeItem"][];
+            /** Markdown */
+            markdown: string;
+            /** Model Name */
+            model_name: string;
+            /** Next Steps */
+            next_steps: string[];
+            /**
+             * Numeric Guard Passed
+             * @default true
+             */
+            numeric_guard_passed: boolean;
+            /** Provider */
+            provider: string;
+            /** Severity Breakdown */
+            severity_breakdown: string;
+        };
         /** PortfolioPlannerInput */
         PortfolioPlannerInput: {
             /**
@@ -11157,6 +11460,39 @@ export interface components {
             items: components["schemas"]["SearchHit"][];
             /** Next Cursor */
             next_cursor: string | null;
+        };
+        /** SeveritySummaryResponse */
+        SeveritySummaryResponse: {
+            /**
+             * Critical
+             * @default 0
+             */
+            critical: number;
+            /**
+             * Health Status
+             * @default clean_verified
+             */
+            health_status: string;
+            /**
+             * High
+             * @default 0
+             */
+            high: number;
+            /**
+             * Low
+             * @default 0
+             */
+            low: number;
+            /**
+             * Medium
+             * @default 0
+             */
+            medium: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
         };
         /** SignOff */
         SignOff: {
@@ -21764,6 +22100,607 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuditGrantRead"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Method Not Allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Requested Range Not Satisfiable */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    list_audit_runs_api_v1_businesses__business_id__audits_get: {
+        parameters: {
+            query?: {
+                audit_type?: ("monthly" | "yearly" | "emergency" | "auto_balance_sheet" | "auto_period_close") | null;
+                limit?: number;
+                cursor?: string | null;
+            };
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRunListResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Method Not Allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Requested Range Not Satisfiable */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    create_audit_run_api_v1_businesses__business_id__audits_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuditRunCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRunDetailResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Method Not Allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Requested Range Not Satisfiable */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_graph_diagram_api_v1_businesses__business_id__audits_graph_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditGraphTopologyResponse"];
+                };
+            };
+            /** @description Bad Request */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unauthorized */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Forbidden */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Not Found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Method Not Allowed */
+            405: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Gone */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Precondition Failed */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Request Entity Too Large */
+            413: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Requested Range Not Satisfiable */
+            416: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Unprocessable Entity */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Too Many Requests */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Internal Server Error */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+            /** @description Service Unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorEnvelope"];
+                };
+            };
+        };
+    };
+    get_audit_run_api_v1_businesses__business_id__audits__audit_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                business_id: string;
+                audit_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditRunDetailResponse"];
                 };
             };
             /** @description Bad Request */

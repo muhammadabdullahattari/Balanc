@@ -97,6 +97,10 @@ The EC2 path is a quota-limited demo, not the production AWS topology in the SRS
 
 Posted journals must be balanced, immutable, idempotent, auditable, and scoped to the active business. Period locks and subledger/control-account tie-outs are enforced by backend services and PostgreSQL. Bank transactions are evidence of cash movement; uncertain transactions remain in review rather than being silently posted as income or expense. The SRS is the source of requirements; record architecture changes as ADRs and update the SRS before implementation.
 
+## Financial audit (LangGraph + RAG + Groq polishing)
+
+LedgerPilot provides a read-only **Financial Audit** engine (`backend/src/ledgerpilot/audit/` and `/financial-audit` in the web client) supporting **monthly** (`YYYY-MM`), **yearly** (fiscal or calendar year), **emergency / on-demand** (earliest record or custom `start_date` through `end_date`, sync or `run_async` background job), and **auto-triggered** audits whenever a Balance Sheet is generated or an accounting period is locked/packaged. All math, balance sheet reconciliations, opening/closing continuities, subledger tie-outs, banking/payment rule checks, and anomaly detections run deterministically in `Decimal` tools, enriched with tenant-scoped RAG policy citations and polished into plain English via `GROQ_API_KEY` (with automatic numeric-hallucination rejection and deterministic template fallback). See [Financial Audit & LangGraph Workflow](docs/financial-audit-langgraph.md) for the full architecture diagram, API examples, and guide to adding new rules.
+
 ## Local identity mailbox
 
 Mailpit's browser port is configured with `MAILPIT_UI_PORT` (default `8025`); this sets both the Compose host port and the local mailbox link. It does not change `SMTP_PORT` (default `1025`). Pending signup survives a temporary SMTP outage; use the original registration browser to resend when delivery recovers. No automatic email queue is configured. `RATE_WINDOW_SECONDS` and `RATE_COOLDOWN_MAX_SECONDS` default to `60` and support values from 1 to 3600; defaults need no `.env` changes. See [the QA resolution record](docs/qa-findings-resolution.md).

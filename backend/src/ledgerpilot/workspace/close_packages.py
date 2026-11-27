@@ -180,6 +180,19 @@ def prepare(
         )
     )
     record(db, identity.user.id, "close.package_prepared", business_id, identifier)
+    from ledgerpilot.audit.triggers import trigger_auto_audit
+
+    trigger_auto_audit(
+        db,
+        business_id=business_id,
+        actor_id=identity.user.id,
+        audit_type="auto_period_close",
+        trigger_source="close_package_prepared",
+        start_date=period.start_date,
+        end_date=period.end_date,
+        trigger_resource_id=str(identifier),
+        settings=request.app.state.settings,
+    )
     return dict(result)
 
 

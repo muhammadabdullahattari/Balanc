@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 291,
-  "distinct_operations": 248,
+  "call_sites": 295,
+  "distinct_operations": 252,
   "operations": [
     {
       "file": "App.tsx",
@@ -657,6 +657,26 @@
       "file": "features/export-disposal.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/retention/disposal/exports"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audits"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audits/{audit_id}"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audits/graph"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/audits"
     },
     {
       "file": "features/google-signin.tsx",

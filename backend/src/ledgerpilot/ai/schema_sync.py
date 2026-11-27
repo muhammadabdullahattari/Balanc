@@ -861,6 +861,37 @@ CREATE TABLE IF NOT EXISTS app.ai_evaluation_datasets (
   created_by uuid NOT NULL REFERENCES app.users(id),
   created_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+
+CREATE TABLE IF NOT EXISTS app.financial_audit_runs (
+  id uuid PRIMARY KEY,
+  business_id uuid NOT NULL REFERENCES app.businesses(id),
+  audit_type text NOT NULL CHECK (audit_type IN (
+    'monthly','yearly','emergency','auto_balance_sheet','auto_period_close'
+  )),
+  trigger_source text NOT NULL DEFAULT 'manual' CHECK (trigger_source IN (
+    'manual','balance_sheet_generated','period_locked',
+    'close_package_prepared','background_job'
+  )),
+  period_start date NOT NULL,
+  period_end date NOT NULL,
+  scope_filters jsonb NOT NULL DEFAULT '{}'::jsonb,
+  status text NOT NULL DEFAULT 'completed' CHECK (status IN (
+    'queued','running','completed','completed_empty','failed'
+  )),
+  job_id uuid REFERENCES app.background_jobs(id),
+  thread_id text NOT NULL,
+  loaded_data_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  severity_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+  findings jsonb NOT NULL DEFAULT '[]'::jsonb,
+  raw_report jsonb NOT NULL DEFAULT '{}'::jsonb,
+  polished_report jsonb NOT NULL DEFAULT '{}'::jsonb,
+  retrieved_context jsonb NOT NULL DEFAULT '[]'::jsonb,
+  metadata_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_by uuid NOT NULL REFERENCES app.users(id),
+  created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+  CHECK (period_end >= period_start)
+);
 """
 
 _INDEXES_SQL = """
@@ -900,6 +931,10 @@ CREATE INDEX IF NOT EXISTS ai_cash_scenarios_biz_idx
   ON app.ai_cash_scenarios (business_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS ai_evaluation_datasets_biz_idx
   ON app.ai_evaluation_datasets (business_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS financial_audit_runs_biz_created_idx
+  ON app.financial_audit_runs (business_id, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS financial_audit_runs_biz_type_period_idx
+  ON app.financial_audit_runs (business_id, audit_type, period_start, period_end);
 """
 
 _RLS_TABLES = (
@@ -936,6 +971,7 @@ _RLS_TABLES = (
     ("ai_cash_scenarios", "ai_cash_scenarios_scope"),
     ("ai_tenant_controls", "ai_tenant_controls_scope"),
     ("ai_evaluation_datasets", "ai_evaluation_datasets_scope"),
+    ("financial_audit_runs", "financial_audit_runs_scope"),
 )
 
 
