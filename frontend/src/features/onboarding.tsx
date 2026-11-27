@@ -14,6 +14,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { api, result, keys, queryClient } from "../api/runtime";
+import { TimezoneSelect } from "../components/timezone-select";
 import {
   Button,
   ErrorNotice,
@@ -638,13 +639,7 @@ export function BusinessChooser({
               ))}
             </select>
           </Field>
-          <Field label="Timezone">
-            <input
-              name="timezone"
-              defaultValue={Intl.DateTimeFormat().resolvedOptions().timeZone}
-              required
-            />
-          </Field>
+          <TimezoneSelect name="timezone" label="Timezone" required />
           <Field
             label="Jurisdiction / accounting policy"
             hint="Use the policy reviewed by your accountant."

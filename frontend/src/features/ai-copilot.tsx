@@ -1,6 +1,16 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
+import {
+  MAX_VOICE_AUDIO_BYTES,
+  computeRecordingId,
+  describeMicrophoneError,
+  formatRecordingDuration,
+  loadPersistedVoiceReply,
+  pickSupportedAudioMimeType,
+  savePersistedVoiceReply,
+  type PersistedVoiceReply,
+} from "../components/voice-recorder";
 import {
   Badge,
   Button,
@@ -318,9 +328,62 @@ export function AICopilotHub({
   const [voiceAudioBase64, setVoiceAudioBase64] = useState("");
   const [voiceAudioFormat, setVoiceAudioFormat] = useState("audio/webm");
   const [voiceAudioPreviewUrl, setVoiceAudioPreviewUrl] = useState("");
+  const [voiceRecordingId, setVoiceRecordingId] = useState("");
+  const [activeVoiceReply, setActiveVoiceReply] =
+    useState<PersistedVoiceReply | null>(null);
   const [isRecordingMic, setIsRecordingMic] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [voiceMicError, setVoiceMicError] = useState("");
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const recordedChunksRef = useRef<BlobPart[]>([]);
+
+  useEffect(() => {
+    return () => {
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+      }
+      if (
+        mediaRecorderRef.current &&
+        mediaRecorderRef.current.state !== "inactive"
+      ) {
+        try {
+          mediaRecorderRef.current.stop();
+        } catch {
+          // ignore cleanup stop error
+        }
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const hasInput = Boolean(voiceAudioBase64 || voiceTranscriptInput.trim());
+    if (!hasInput) {
+      setVoiceRecordingId("");
+      setActiveVoiceReply(null);
+      return () => {
+        cancelled = true;
+      };
+    }
+    void computeRecordingId(
+      voiceLocale,
+      voiceAudioBase64,
+      voiceTranscriptInput,
+    ).then((recId) => {
+      if (cancelled) return;
+      setVoiceRecordingId(recId);
+      const cached = loadPersistedVoiceReply(b.id, recId);
+      setActiveVoiceReply(cached);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [b.id, voiceAudioBase64, voiceLocale, voiceTranscriptInput]);
 
   // Usage controls, export & quality checks state
   const [ctrlPaused, setCtrlPaused] = useState(false);
@@ -509,8 +572,19 @@ export function AICopilotHub({
           },
         }),
       ),
-    onSuccess: () => {
-      setStatusNotice("Client document request prepared.");
+    onSuccess: (res) => {
+      const r = res as {
+        status?: string;
+        channel?: string;
+        recipient_key?: string;
+      };
+      if (r?.status === "sent" && r?.channel === "email") {
+        setStatusNotice(
+          `Document request emailed to ${r.recipient_key || clarRecipient}.`,
+        );
+      } else {
+        setStatusNotice("Client document request sent.");
+      }
       refreshOverview();
     },
   });
@@ -587,8 +661,22 @@ export function AICopilotHub({
   });
 
   const voiceSessionMutation = useMutation({
-    mutationFn: async () =>
-      result(
+    mutationFn: async (opts?: { regenerate?: boolean }) => {
+      const forceRegenerate = Boolean(opts?.regenerate);
+      const recId =
+        voiceRecordingId ||
+        (await computeRecordingId(
+          voiceLocale,
+          voiceAudioBase64,
+          voiceTranscriptInput,
+        ));
+      if (!forceRegenerate) {
+        const saved = loadPersistedVoiceReply(b.id, recId);
+        if (saved) {
+          return { reply: saved, fromStorage: true };
+        }
+      }
+      const raw = (await result(
         api.POST("/api/v1/businesses/{business_id}/ai/voice-session", {
           params: { path },
           body: {
@@ -599,14 +687,57 @@ export function AICopilotHub({
               voiceTranscriptInput ||
               (voiceAudioBase64 ? "Transcribed audio note" : ""),
             request_livekit_room: voiceRequestLiveKit,
+            recording_id: recId,
+            regenerate: forceRegenerate,
           },
         }),
-      ),
-    onSuccess: () => {
+      )) as unknown as {
+        id?: string;
+        recording_id?: string;
+        raw_transcript?: string;
+        corrected_transcript?: string;
+        extracted_intent?: string;
+        extracted_entities?: PersistedVoiceReply["extractedEntities"];
+        uncertain_fields?: string[];
+        tts_readback_text?: string;
+        status?: string;
+      };
+      const finalRecId = raw.recording_id || recId;
+      const persisted: PersistedVoiceReply = {
+        recordingId: finalRecId,
+        sessionId: String(raw.id || ""),
+        locale: voiceLocale,
+        rawTranscript: String(raw.raw_transcript || voiceTranscriptInput),
+        correctedTranscript: String(
+          raw.corrected_transcript ||
+            raw.raw_transcript ||
+            voiceTranscriptInput,
+        ),
+        extractedIntent: String(
+          raw.extracted_intent || "prepare_supplier_bill_draft",
+        ),
+        extractedEntities: raw.extracted_entities || {},
+        uncertainFields: Array.isArray(raw.uncertain_fields)
+          ? raw.uncertain_fields
+          : [],
+        ttsReadbackText: String(raw.tts_readback_text || ""),
+        status: String(raw.status || "transcribed_needs_confirmation"),
+        savedAt: new Date().toISOString(),
+      };
+      savePersistedVoiceReply(b.id, persisted);
+      return { reply: persisted, fromStorage: false };
+    },
+    onSuccess: ({ reply, fromStorage }) => {
+      setVoiceRecordingId(reply.recordingId);
+      setActiveVoiceReply(reply);
       setStatusNotice(
-        "Voice note processed. Review and confirm the details below to create a bill draft.",
+        fromStorage
+          ? "Loaded saved reply for this recording. Click Regenerate reply if you want a fresh extraction."
+          : "Voice note processed. Review and confirm the details below to create a bill draft.",
       );
-      refreshOverview();
+      if (!fromStorage) {
+        refreshOverview();
+      }
     },
   });
 
@@ -801,65 +932,138 @@ export function AICopilotHub({
       reader.readAsDataURL(blob);
     });
 
+  const stopRecordingCleanup = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach((t) => t.stop());
+      mediaStreamRef.current = null;
+    }
+  };
+
   const handleToggleMicRecording = async () => {
     if (isRecordingMic && mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
+      if (recordingTimerRef.current) {
+        clearInterval(recordingTimerRef.current);
+        recordingTimerRef.current = null;
+      }
+      try {
+        if (mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      } catch {
+        stopRecordingCleanup();
+      }
       setIsRecordingMic(false);
       return;
     }
+
+    setVoiceMicError("");
     if (
+      (typeof window !== "undefined" && window.isSecureContext === false) ||
       typeof navigator === "undefined" ||
       !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== "function" ||
       typeof MediaRecorder === "undefined"
     ) {
-      setStatusNotice(
-        "Microphone recording is not supported in this browser. Upload an audio file or type your note below.",
-      );
+      const msg = describeMicrophoneError(null);
+      setVoiceMicError(msg);
+      setStatusNotice(msg);
       return;
     }
+
+    let stream: MediaStream | null = null;
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
       recordedChunksRef.current = [];
-      const recorder = new MediaRecorder(stream);
+      const preferredMime = pickSupportedAudioMimeType();
+      const recorder = preferredMime
+        ? new MediaRecorder(stream, { mimeType: preferredMime })
+        : new MediaRecorder(stream);
+
       recorder.ondataavailable = (ev) => {
         if (ev.data && ev.data.size > 0) {
           recordedChunksRef.current.push(ev.data);
         }
       };
+      recorder.onerror = (ev) => {
+        stopRecordingCleanup();
+        setIsRecordingMic(false);
+        const msg = describeMicrophoneError(
+          (ev as unknown as { error?: unknown }).error ?? ev,
+        );
+        setVoiceMicError(msg);
+      };
       recorder.onstop = async () => {
-        const mime = recorder.mimeType || "audio/webm";
+        const mime = recorder.mimeType || preferredMime || "audio/webm";
         const audioBlob = new Blob(recordedChunksRef.current, { type: mime });
-        stream.getTracks().forEach((t) => t.stop());
+        stopRecordingCleanup();
+        if (audioBlob.size === 0) {
+          setVoiceMicError(
+            "No audio was captured from your microphone. Check that your mic is not muted and try again.",
+          );
+          return;
+        }
+        if (audioBlob.size > MAX_VOICE_AUDIO_BYTES) {
+          setVoiceMicError(
+            "This recording is larger than 2.8 MB. Please record a shorter voice note or upload a compressed clip.",
+          );
+          return;
+        }
         if (typeof URL !== "undefined" && URL.createObjectURL) {
           setVoiceAudioPreviewUrl(URL.createObjectURL(audioBlob));
         }
-        const b64 = await blobToBase64(audioBlob);
-        setVoiceAudioFormat(mime);
-        setVoiceAudioBase64(b64.slice(0, 180000));
-        setStatusNotice(
-          "Voice recording ready. Click Understand my instruction to extract the bill details.",
-        );
+        try {
+          const b64 = await blobToBase64(audioBlob);
+          setVoiceAudioFormat(mime);
+          setVoiceAudioBase64(b64);
+          setStatusNotice(
+            "Voice recording ready. Click Understand my instruction to extract the bill details.",
+          );
+        } catch (readErr) {
+          setVoiceMicError(describeMicrophoneError(readErr));
+        }
       };
+
       mediaRecorderRef.current = recorder;
-      recorder.start();
+      setRecordingSeconds(0);
+      recorder.start(250);
       setIsRecordingMic(true);
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
       setStatusNotice("Recording… Click Stop recording when you finish.");
-    } catch {
-      setStatusNotice(
-        "Microphone access was blocked. Allow microphone access in your browser, upload an audio file, or type below.",
-      );
+    } catch (err) {
+      if (stream) {
+        stream.getTracks().forEach((t) => t.stop());
+      }
+      stopRecordingCleanup();
+      setIsRecordingMic(false);
+      const msg = describeMicrophoneError(err);
+      setVoiceMicError(msg);
+      setStatusNotice(msg);
     }
   };
 
   const handleAudioFileUpload = async (file: File | null) => {
     if (!file) return;
+    setVoiceMicError("");
+    if (file.size > MAX_VOICE_AUDIO_BYTES) {
+      setVoiceMicError(
+        `Audio file "${file.name}" exceeds the 2.8 MB limit. Choose a shorter or compressed audio clip.`,
+      );
+      return;
+    }
     const mime = file.type || "audio/wav";
     if (typeof URL !== "undefined" && URL.createObjectURL) {
       setVoiceAudioPreviewUrl(URL.createObjectURL(file));
     }
     const b64 = await blobToBase64(file);
     setVoiceAudioFormat(mime);
-    setVoiceAudioBase64(b64.slice(0, 180000));
+    setVoiceAudioBase64(b64);
     setStatusNotice(
       `Audio file "${file.name}" attached. Click Understand my instruction to continue.`,
     );
@@ -1806,6 +2010,7 @@ export function AICopilotHub({
             receipt, invoice, or payment explanation. Duplicate requests for the
             same item are prevented automatically.
           </p>
+          <ErrorNotice error={createClarificationMutation.error} />
           <form
             className="form-grid"
             onSubmit={(e) => {
@@ -2043,11 +2248,14 @@ export function AICopilotHub({
             post directly to your books — you confirm the vendor, date, and
             amount first, and we create a draft bill for review.
           </p>
+          <ErrorNotice
+            error={voiceSessionMutation.error || confirmVoiceMutation.error}
+          />
           <form
             className="form-grid"
             onSubmit={(e) => {
               e.preventDefault();
-              voiceSessionMutation.mutate();
+              voiceSessionMutation.mutate({ regenerate: false });
             }}
           >
             <Field label="Spoken language">
@@ -2090,10 +2298,49 @@ export function AICopilotHub({
               />
               <span>Start a live voice session (when enabled)</span>
             </label>
+            <div
+              className={`voice-recorder-bar${isRecordingMic ? " is-recording" : ""}`}
+              role="status"
+              aria-live="polite"
+            >
+              <span className="voice-recorder-status">
+                {isRecordingMic ? (
+                  <>
+                    <span className="recording-dot" aria-hidden="true" />
+                    Recording live · {formatRecordingDuration(recordingSeconds)}
+                  </>
+                ) : voiceAudioBase64 ? (
+                  <>
+                    Audio clip ready (
+                    {formatRecordingDuration(recordingSeconds)}) — click
+                    Understand my instruction
+                  </>
+                ) : (
+                  <>
+                    Microphone ready — click Record with microphone to capture a
+                    spoken note
+                  </>
+                )}
+              </span>
+              {isRecordingMic && (
+                <Button
+                  type="button"
+                  variant="danger"
+                  onClick={() => void handleToggleMicRecording()}
+                >
+                  Stop recording
+                </Button>
+              )}
+            </div>
+            {voiceMicError && (
+              <div className="notice error" role="alert">
+                <div>{voiceMicError}</div>
+              </div>
+            )}
             <div className="p4-inline-actions">
               <Button
                 type="button"
-                variant="secondary"
+                variant={isRecordingMic ? "danger" : "secondary"}
                 onClick={() => void handleToggleMicRecording()}
               >
                 {isRecordingMic ? "Stop recording" : "Record with microphone"}
@@ -2109,12 +2356,85 @@ export function AICopilotHub({
               className="p4-inline-actions"
               role="region"
               aria-label="Recorded Audio Playback"
+              style={{ marginTop: "14px" }}
             >
               <audio
                 controls
                 src={voiceAudioPreviewUrl}
                 aria-label="Voice Accounting Audio Playback"
               />
+            </div>
+          )}
+
+          {activeVoiceReply && (
+            <div
+              className="voice-reply-card"
+              role="region"
+              aria-label="Saved voice reply"
+            >
+              <h3>Saved reply for this recording</h3>
+              <p style={{ margin: 0 }}>{activeVoiceReply.ttsReadbackText}</p>
+              <div className="voice-reply-meta">
+                <span>
+                  <strong>Transcript:</strong>{" "}
+                  {activeVoiceReply.correctedTranscript}
+                </span>
+                <span>
+                  <strong>Vendor / party:</strong>{" "}
+                  {activeVoiceReply.extractedEntities.party_name || "Supplier"}
+                </span>
+                <span>
+                  <strong>Amount:</strong>{" "}
+                  {money(
+                    activeVoiceReply.extractedEntities.amount || "0.00",
+                    activeVoiceReply.extractedEntities.currency || b.currency,
+                  )}
+                </span>
+              </div>
+              <div className="p4-inline-actions">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    speakReadback(activeVoiceReply.ttsReadbackText)
+                  }
+                >
+                  Read aloud
+                </Button>
+                {activeVoiceReply.sessionId && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={confirmVoiceMutation.isPending}
+                    onClick={() =>
+                      confirmVoiceMutation.mutate({
+                        sessionId: activeVoiceReply.sessionId,
+                        transcript: activeVoiceReply.correctedTranscript,
+                        partyName:
+                          activeVoiceReply.extractedEntities.party_name ||
+                          "Supplier",
+                        amount:
+                          activeVoiceReply.extractedEntities.amount || "100.00",
+                        currency:
+                          activeVoiceReply.extractedEntities.currency ||
+                          b.currency,
+                      })
+                    }
+                  >
+                    Confirm &amp; create draft
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="secondary"
+                  busy={voiceSessionMutation.isPending}
+                  onClick={() =>
+                    voiceSessionMutation.mutate({ regenerate: true })
+                  }
+                >
+                  Regenerate reply
+                </Button>
+              </div>
             </div>
           )}
 

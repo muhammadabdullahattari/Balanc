@@ -17,7 +17,7 @@ def security_headers(settings: Settings, scheme: str, path: str) -> dict[str, st
         "X-Content-Type-Options": "nosniff",
         "X-Frame-Options": "DENY",
         "Referrer-Policy": "no-referrer",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+        "Permissions-Policy": "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
         "Content-Security-Policy": (
             "default-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
         ),

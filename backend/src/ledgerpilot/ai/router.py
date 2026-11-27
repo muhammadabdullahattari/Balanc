@@ -38,6 +38,7 @@ from ledgerpilot.audit.service import record as record_audit
 from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.database import set_context
 from ledgerpilot.identity.dependencies import DB, Identity
+from ledgerpilot.identity.mail import deliver_workspace_email, format_mail_error_for_user
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema
 from ledgerpilot.tenancy.service import authorize, effective_policy, get_business
@@ -301,7 +302,7 @@ class ClientClarificationCreateInput(Schema):
         "bank_row", "missing_invoice", "unmatched_payment", "contract_variance"
     ] = "missing_invoice"
     exception_ref: str = Field(min_length=2, max_length=120)
-    recipient_key: str = Field(min_length=2, max_length=80)
+    recipient_key: str = Field(min_length=2, max_length=254)
     channel: Literal["email", "whatsapp", "slack"] = "email"
     context_summary: str = Field(min_length=3, max_length=400)
     required_documents: list[str] = Field(
@@ -324,10 +325,12 @@ class CloseAssistantInput(Schema):
 
 class VoiceAccountingSessionInput(Schema):
     language_locale: Literal["en_US", "ur_PK", "en_ur_mixed"] = "en_ur_mixed"
-    audio_base64: str = Field(default="", max_length=200000)
-    audio_format: str = Field(default="audio/webm", max_length=40)
+    audio_base64: str = Field(default="", max_length=4_000_000)
+    audio_format: str = Field(default="audio/webm", max_length=80)
     transcript_input: str = Field(default="", max_length=600)
     request_livekit_room: bool = False
+    recording_id: str = Field(default="", max_length=80)
+    regenerate: bool = False
 
 
 class VoiceAccountingConfirmInput(Schema):
@@ -1392,7 +1395,7 @@ def create_ai_client_clarification(
                 WHERE business_id = :bid
                   AND exception_kind = :ekind
                   AND exception_ref = :eref
-                  AND status IN ('draft', 'sent_sandbox', 'partially_answered')
+                  AND status IN ('draft', 'sent', 'sent_sandbox', 'partially_answered')
                 ORDER BY created_at DESC
                 LIMIT 1
                 """
@@ -1424,7 +1427,56 @@ def create_ai_client_clarification(
         f"Please confirm the business purpose and counterparty for {clean_ref} ({clean_ctx}).",
         f"Please attach: {', '.join(req_docs)} covering the applicable accounting period.",
     ]
-    initial_status = "opted_out" if opted_out else "sent_sandbox"
+    clean_recipient = payload.recipient_key.strip()
+    if opted_out:
+        initial_status = "opted_out"
+    elif payload.channel == "email":
+        is_synthetic_test = settings.app_env == "test" and not settings.auth_delivery_enabled
+        if is_synthetic_test and "@" not in clean_recipient:
+            initial_status = "sent"
+        else:
+            if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", clean_recipient):
+                raise DomainError(
+                    "ERR_INVALID_EMAIL",
+                    (
+                        "Enter a valid email address (for example billing@client.com) "
+                        "when sending via Email."
+                    ),
+                    422,
+                )
+            if is_synthetic_test:
+                initial_status = "sent"
+            else:
+                email_lines = [
+                    "Hello,",
+                    "",
+                    f"{biz.name} needs a quick clarification regarding {clean_ref}:",
+                    f"Details: {clean_ctx}",
+                    "",
+                    "Questions:",
+                    *[f"  {idx + 1}. {q}" for idx, q in enumerate(questions)],
+                    "",
+                    f"Requested documents: {', '.join(req_docs)}",
+                    "",
+                    f"Thank you,\n{biz.name} Accounting Team",
+                ]
+                ok, _prov, mail_errors = deliver_workspace_email(
+                    settings,
+                    clean_recipient,
+                    f"{biz.name} — Document request: {clean_ref}",
+                    "\n".join(email_lines),
+                    tag="clarification",
+                )
+                if not ok:
+                    err_hint = format_mail_error_for_user(mail_errors)
+                    raise DomainError(
+                        "ERR_EMAIL_DELIVERY_FAILED",
+                        f"Could not send email to {clean_recipient}. {err_hint}",
+                        502,
+                    )
+                initial_status = "sent"
+    else:
+        initial_status = "sent"
     fallback_payload = {
         "exception_kind": payload.exception_kind,
         "exception_ref": clean_ref,
@@ -1808,6 +1860,60 @@ def create_ai_voice_accounting_session(
     biz = get_business(db, business_id)
     pol = effective_policy(db, biz)
 
+    raw_rec_id = re.sub(r"[^a-zA-Z0-9_-]", "", payload.recording_id.strip())[:64]
+    if not raw_rec_id:
+        seed_material = (
+            f"{payload.language_locale}|{payload.audio_base64 or payload.transcript_input.strip()}"
+        )
+        raw_rec_id = f"rec_{hashlib.sha256(seed_material.encode('utf-8')).hexdigest()[:28]}"
+
+    existing_vs = (
+        db.execute(
+            text(
+                """
+                SELECT id, language_locale, stt_provider, raw_transcript,
+                       corrected_transcript, extracted_intent, extracted_entities,
+                       uncertain_fields, critical_fields_confirmed, linked_draft_id,
+                       tts_readback_text, livekit_room_name, status
+                FROM app.ai_voice_accounting_sessions
+                WHERE business_id = :bid
+                  AND extracted_entities->>'recording_id' = :rec_id
+                ORDER BY created_at DESC
+                LIMIT 1
+                """
+            ),
+            {"bid": business_id, "rec_id": raw_rec_id},
+        )
+        .mappings()
+        .first()
+    )
+    if existing_vs and not payload.regenerate:
+        return {
+            "id": str(existing_vs["id"]),
+            "recording_id": raw_rec_id,
+            "cached": True,
+            "language_locale": str(existing_vs["language_locale"]),
+            "stt_provider": str(existing_vs["stt_provider"]),
+            "raw_transcript": str(existing_vs["raw_transcript"]),
+            "corrected_transcript": str(existing_vs["corrected_transcript"]),
+            "extracted_intent": str(existing_vs["extracted_intent"]),
+            "extracted_entities": dict(existing_vs["extracted_entities"] or {}),
+            "uncertain_fields": list(existing_vs["uncertain_fields"] or []),
+            "critical_fields_confirmed": bool(existing_vs["critical_fields_confirmed"]),
+            "linked_draft_id": (
+                str(existing_vs["linked_draft_id"]) if existing_vs["linked_draft_id"] else None
+            ),
+            "tts_readback_text": str(existing_vs["tts_readback_text"]),
+            "status": str(existing_vs["status"]),
+            "livekit": {
+                "livekit_enabled": bool(existing_vs["livekit_room_name"]),
+                "mode": "groq_whisper_and_browser_tts",
+                "room_name": str(existing_vs["livekit_room_name"] or ""),
+                "ws_url": "",
+                "token": "",
+            },
+        }
+
     adapter = GroqModelAdapter(settings)
     clean_input, was_san = sanitize_untrusted_text(payload.transcript_input, max_length=600)
     stt_res = adapter.transcribe_audio(
@@ -1821,6 +1927,7 @@ def create_ai_voice_accounting_session(
     intent, entities, uncertain = _extract_voice_accounting_entities(
         stt_res.transcript, biz.currency
     )
+    entities["recording_id"] = raw_rec_id
     if len(stt_res.transcript.strip()) < 4:
         status = "abstained_noisy"
         uncertain = ["transcript_too_short_or_noisy"]
@@ -1853,6 +1960,8 @@ def create_ai_voice_accounting_session(
         db, AccountBalancesToolInput(business_id=business_id, limit=10)
     )
     fallback_payload = {
+        "recording_id": raw_rec_id,
+        "cached": False,
         "language_locale": payload.language_locale,
         "stt_provider": (
             "groq_whisper_large_v3_turbo"
@@ -1893,42 +2002,84 @@ def create_ai_voice_accounting_session(
         status="abstained" if status == "abstained_noisy" else "completed",
     )
 
-    sess_id = uuid4()
-    db.execute(
-        text(
-            """
-            INSERT INTO app.ai_voice_accounting_sessions (
-              id, business_id, run_id, language_locale, audio_format, duration_seconds,
-              stt_provider, raw_transcript, corrected_transcript, extracted_intent,
-              extracted_entities, uncertain_fields, critical_fields_confirmed,
-              tts_readback_text, livekit_room_name, status, actor
-            ) VALUES (
-              :id, :bid, :rid, :lang, :afmt, :dur,
-              :sttp, :rawt, :cort, :intent,
-              CAST(:ents AS jsonb), CAST(:unc AS text[]), false,
-              :tts, :lkroom, :st, :actor
-            )
-            """
-        ),
-        {
-            "id": sess_id,
-            "bid": business_id,
-            "rid": UUID(run_meta["run_id"]),
-            "lang": payload.language_locale,
-            "afmt": payload.audio_format,
-            "dur": stt_res.duration_seconds,
-            "sttp": fallback_payload["stt_provider"],
-            "rawt": stt_res.transcript,
-            "cort": stt_res.transcript,
-            "intent": intent,
-            "ents": json.dumps(entities),
-            "unc": uncertain,
-            "tts": tts_text,
-            "lkroom": str(lk_info["room_name"]),
-            "st": status,
-            "actor": user.user.id,
-        },
-    )
+    if existing_vs and payload.regenerate and not existing_vs["critical_fields_confirmed"]:
+        sess_id = UUID(str(existing_vs["id"]))
+        db.execute(
+            text(
+                """
+                UPDATE app.ai_voice_accounting_sessions
+                SET run_id = :rid,
+                    language_locale = :lang,
+                    audio_format = :afmt,
+                    duration_seconds = :dur,
+                    stt_provider = :sttp,
+                    raw_transcript = :rawt,
+                    corrected_transcript = :cort,
+                    extracted_intent = :intent,
+                    extracted_entities = CAST(:ents AS jsonb),
+                    uncertain_fields = CAST(:unc AS text[]),
+                    tts_readback_text = :tts,
+                    livekit_room_name = :lkroom,
+                    status = :st,
+                    updated_at = clock_timestamp()
+                WHERE business_id = :bid AND id = :id
+                """
+            ),
+            {
+                "id": sess_id,
+                "bid": business_id,
+                "rid": UUID(run_meta["run_id"]),
+                "lang": payload.language_locale,
+                "afmt": payload.audio_format,
+                "dur": stt_res.duration_seconds,
+                "sttp": fallback_payload["stt_provider"],
+                "rawt": stt_res.transcript,
+                "cort": stt_res.transcript,
+                "intent": intent,
+                "ents": json.dumps(entities),
+                "unc": uncertain,
+                "tts": tts_text,
+                "lkroom": str(lk_info["room_name"]),
+                "st": status,
+            },
+        )
+    else:
+        sess_id = uuid4()
+        db.execute(
+            text(
+                """
+                INSERT INTO app.ai_voice_accounting_sessions (
+                  id, business_id, run_id, language_locale, audio_format, duration_seconds,
+                  stt_provider, raw_transcript, corrected_transcript, extracted_intent,
+                  extracted_entities, uncertain_fields, critical_fields_confirmed,
+                  tts_readback_text, livekit_room_name, status, actor
+                ) VALUES (
+                  :id, :bid, :rid, :lang, :afmt, :dur,
+                  :sttp, :rawt, :cort, :intent,
+                  CAST(:ents AS jsonb), CAST(:unc AS text[]), false,
+                  :tts, :lkroom, :st, :actor
+                )
+                """
+            ),
+            {
+                "id": sess_id,
+                "bid": business_id,
+                "rid": UUID(run_meta["run_id"]),
+                "lang": payload.language_locale,
+                "afmt": payload.audio_format,
+                "dur": stt_res.duration_seconds,
+                "sttp": fallback_payload["stt_provider"],
+                "rawt": stt_res.transcript,
+                "cort": stt_res.transcript,
+                "intent": intent,
+                "ents": json.dumps(entities),
+                "unc": uncertain,
+                "tts": tts_text,
+                "lkroom": str(lk_info["room_name"]),
+                "st": status,
+                "actor": user.user.id,
+            },
+        )
     return {"id": str(sess_id), **fallback_payload, "evidence_record": run_meta}
 
 

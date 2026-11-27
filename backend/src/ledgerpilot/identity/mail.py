@@ -1,6 +1,8 @@
 """Real SMTP delivery; disabled delivery fails explicitly, never returns tokens."""
 
 import logging
+import os
+import re
 import smtplib
 from email.message import EmailMessage
 from typing import Any
@@ -189,6 +191,112 @@ def _deliver_raw(
     return errors
 
 
+def format_mail_error_for_user(errors: list[str]) -> str:
+    """Convert raw provider/socket diagnostics into clear user-facing guidance."""
+    joined = " | ".join(errors)
+    lower = joined.lower()
+    if "you can only send testing emails to your own email address" in lower:
+        return (
+            "The email provider is in unverified-domain mode and only delivers to the account "
+            "owner until a sender domain is verified (or configure Brevo or SendGrid)."
+        )
+    if any(
+        phrase in lower
+        for phrase in (
+            "network is unreachable",
+            "connection refused",
+            "timed out",
+            "errno 101",
+            "errno 111",
+        )
+    ):
+        return (
+            "Could not connect to the outgoing mail server (connection timed out or was "
+            "blocked by the hosting network; configure an HTTPS email API key such as "
+            "Brevo, Resend, or SendGrid)."
+        )
+    if any(
+        phrase in lower
+        for phrase in (
+            "username and password not accepted",
+            "authentication",
+            "535",
+            "(401)",
+            "(403)",
+            "unauthorized",
+        )
+    ):
+        return (
+            "The email provider rejected the sender credentials or unverified sender address. "
+            "Verify your email API key and sender address configuration."
+        )
+    if errors:
+        cleaned = errors[0].replace("SMTP", "Mail server").replace("smtp", "mail server")
+        return cleaned[:240]
+    return "Email delivery was not confirmed by the provider."
+
+
+def deliver_workspace_email(
+    settings: Settings,
+    recipient: str,
+    subject: str,
+    body_text: str,
+    *,
+    tag: str = "workspace",
+    html_body: str | None = None,
+) -> tuple[bool, str, list[str]]:
+    """Send a workspace email and return (confirmed, provider_mode, errors)."""
+    clean_to = (recipient or "").strip()
+    if not re.match(r"^[^@\s]+@[^@\s]+\.[^@\s]+$", clean_to):
+        return (
+            False,
+            "invalid_recipient",
+            ["Enter a valid email address (for example billing@client.com)."],
+        )
+
+    has_api_key = bool(
+        (os.environ.get("RESEND_API_KEY") or "").strip()
+        or (os.environ.get("BREVO_API_KEY") or "").strip()
+        or (os.environ.get("SENDGRID_API_KEY") or "").strip()
+    )
+    has_live_mail_server = bool(
+        getattr(settings, "auth_delivery_enabled", False)
+        or (
+            settings.smtp_host
+            and settings.smtp_host.strip().lower() not in {"", "127.0.0.1", "localhost"}
+            and settings.smtp_username
+        )
+    )
+    if not has_api_key and not has_live_mail_server:
+        msg = (
+            "Email delivery is not configured on this server (configure BREVO_API_KEY, "
+            "RESEND_API_KEY, SENDGRID_API_KEY, or enable mail server credentials)."
+        )
+        logger.error("Workspace email (%s) to %s aborted: %s", tag, clean_to, msg)
+        return False, "unconfigured", [msg]
+
+    errors = _deliver_raw(settings, clean_to, subject, body_text, tag=tag, html_body=html_body)
+    if errors:
+        logger.error(
+            "Workspace email (%s) to %s failed: %s",
+            tag,
+            clean_to,
+            " | ".join(errors),
+        )
+        return False, "failed", errors
+
+    provider = (
+        "resend"
+        if (os.environ.get("RESEND_API_KEY") or "").strip()
+        else (
+            "brevo"
+            if (os.environ.get("BREVO_API_KEY") or "").strip()
+            else ("sendgrid" if (os.environ.get("SENDGRID_API_KEY") or "").strip() else "mail")
+        )
+    )
+    return True, provider, []
+
+
 def send_transactional_email(
     settings: Settings,
     recipient: str,
@@ -203,13 +311,10 @@ def send_transactional_email(
         return False
     if not getattr(settings, "auth_delivery_enabled", False):
         return False
-    errors = _deliver_raw(settings, recipient, subject, body_text, tag=tag, html_body=html_body)
-    if errors:
-        logger.warning(
-            "Transactional email (%s) to %s failed: %s", tag, recipient, " | ".join(errors)
-        )
-        return False
-    return True
+    ok, _provider, _errors = deliver_workspace_email(
+        settings, recipient, subject, body_text, tag=tag, html_body=html_body
+    )
+    return ok
 
 
 def deliver(settings: Settings, recipient: str, purpose: str, token: str) -> None:

@@ -10786,6 +10786,11 @@ export interface components {
              * @default false
              */
             is_resolved_override: boolean;
+            /**
+             * Recipient Email
+             * @default
+             */
+            recipient_email: string;
             /** Recipient Key */
             recipient_key: string;
             /** Target Id */
@@ -12212,6 +12217,16 @@ export interface components {
              * @enum {string}
              */
             language_locale: "en_US" | "ur_PK" | "en_ur_mixed";
+            /**
+             * Recording Id
+             * @default
+             */
+            recording_id: string;
+            /**
+             * Regenerate
+             * @default false
+             */
+            regenerate: boolean;
             /**
              * Request Livekit Room
              * @default false

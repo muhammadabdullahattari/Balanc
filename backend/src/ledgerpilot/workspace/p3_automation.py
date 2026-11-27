@@ -23,11 +23,11 @@ from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from cryptography.fernet import Fernet, MultiFernet
 from fastapi import APIRouter, Depends
-from pydantic import Field
+from pydantic import Field, field_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
@@ -35,7 +35,10 @@ from ledgerpilot.audit.service import record
 from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.identity.dependencies import DB, Principal
 from ledgerpilot.identity.dependencies import Identity as CurrentUser
-from ledgerpilot.identity.mail import send_transactional_email
+from ledgerpilot.identity.mail import (
+    deliver_workspace_email,
+    format_mail_error_for_user,
+)
 from ledgerpilot.shared.errors import DomainError
 from ledgerpilot.shared.schemas import Schema as StrictModel
 from ledgerpilot.tenancy.service import authorize
@@ -188,6 +191,18 @@ class ReminderPreferenceInput(StrictModel):
     locale: str = Field(default="en_US", max_length=16)
     max_attempts: int = Field(default=3, ge=1, le=10)
     opted_out: bool = False
+
+    @field_validator("timezone")
+    @classmethod
+    def validate_iana_timezone(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Use an IANA timezone")
+        try:
+            ZoneInfo(cleaned)
+        except (ValueError, ZoneInfoNotFoundError):
+            raise ValueError("Use an IANA timezone") from None
+        return cleaned
 
 
 class ReminderOptOutInput(StrictModel):
@@ -375,7 +390,8 @@ class ReminderDispatchInput(StrictModel):
     target_kind: Literal["bill", "invoice", "evidence", "approval"] = "bill"
     target_id: UUID | None = None
     target_label: str = Field(min_length=1, max_length=160)
-    recipient_key: str = Field(min_length=1, max_length=120)
+    recipient_key: str = Field(min_length=1, max_length=254)
+    recipient_email: str = Field(default="", max_length=254)
     channel: Literal["auto", "whatsapp", "slack", "email"] = "auto"
     template_name: str = Field(default="hello_world", max_length=80)
     custom_message: str = Field(default="", max_length=1000)
@@ -1455,7 +1471,13 @@ def dispatch_multichannel_reminder(
 
     wa_phone = pref["whatsapp_phone"] if pref and pref["whatsapp_phone"] else default_wa
     slack_ch = pref["slack_channel"] if pref and pref["slack_channel"] else default_slack
-    email_addr = pref["email_address"] if pref and pref["email_address"] else _actor_email(user)
+    raw_rkey = payload.recipient_key.strip()
+    explicit_email = payload.recipient_email.strip() or (raw_rkey if "@" in raw_rkey else "")
+    email_addr = (
+        explicit_email
+        or (str(pref["email_address"]).strip() if pref and pref["email_address"] else "")
+        or _actor_email(user)
+    )
     opted_out = bool(pref["opted_out"]) if pref else False
     max_attempts = int(pref["max_attempts"]) if pref else 3
     q_start = int(pref["quiet_start_hour"]) if pref else 22
@@ -1598,14 +1620,28 @@ def dispatch_multichannel_reminder(
                     override_bot_token=ws_cfg.get("slack_bot_token", ""),
                 )
             else:
-                send_transactional_email(
-                    settings,
-                    email_addr,
-                    f"LedgerPilot Reminder: {payload.target_label}",
-                    message_body,
-                )
-                provider_msg_id = f"smtp.{uuid4().hex[:14]}"
-                provider_resp = {"mode": "email_smtp", "recipient": email_addr}
+                if settings.app_env == "test" and not settings.auth_delivery_enabled:
+                    provider_msg_id = f"test.email.{uuid4().hex[:14]}"
+                    provider_resp = {"mode": "email_test", "recipient": email_addr}
+                else:
+                    ok, prov_used, mail_errors = deliver_workspace_email(
+                        settings,
+                        email_addr,
+                        f"LedgerPilot Reminder: {payload.target_label}",
+                        message_body,
+                        tag="reminder",
+                    )
+                    if not ok:
+                        if payload.channel == "auto" and idx < len(eligible) - 1:
+                            failed_channels.append("email")
+                            continue
+                        raise DomainError(
+                            "ERR_EMAIL_DELIVERY_FAILED",
+                            f"Could not send email reminder to {email_addr}. {format_mail_error_for_user(mail_errors)}",
+                            502,
+                        )
+                    provider_msg_id = f"{prov_used}.{uuid4().hex[:14]}"
+                    provider_resp = {"mode": f"email_{prov_used}", "recipient": email_addr}
 
             if (
                 payload.channel == "auto"

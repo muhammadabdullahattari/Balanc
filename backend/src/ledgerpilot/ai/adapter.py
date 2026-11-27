@@ -385,7 +385,17 @@ class GroqModelAdapter:
             )
 
         boundary = "----LedgerPilotGroqAudioBoundary7f9a2b"
-        ext = "wav" if "wav" in audio_format.lower() else "webm"
+        clean_mime = (audio_format or "audio/webm").split(";")[0].strip().lower() or "audio/webm"
+        if "wav" in clean_mime:
+            ext = "wav"
+        elif any(t in clean_mime for t in ("mp4", "m4a", "aac")):
+            ext = "m4a"
+        elif "ogg" in clean_mime:
+            ext = "ogg"
+        elif any(t in clean_mime for t in ("mpeg", "mp3")):
+            ext = "mp3"
+        else:
+            ext = "webm"
         iso_lang = "ur" if language_locale.startswith("ur") else "en"
         stt_model = self.settings.groq_stt_model
         parts: list[bytes] = []
@@ -397,11 +407,12 @@ class GroqModelAdapter:
         _add_field("model", stt_model)
         if language_locale != "en_ur_mixed":
             _add_field("language", iso_lang)
+        _add_field("temperature", "0")
         _add_field("response_format", "json")
         parts.append(f"--{boundary}\r\n".encode())
         parts.append(
             f'Content-Disposition: form-data; name="file"; filename="voice.{ext}"\r\n'
-            f"Content-Type: {audio_format or 'audio/webm'}\r\n\r\n".encode()
+            f"Content-Type: {clean_mime}\r\n\r\n".encode()
         )
         parts.append(raw_audio)
         parts.append(f"\r\n--{boundary}--\r\n".encode())

@@ -729,8 +729,8 @@ CREATE TABLE IF NOT EXISTS app.ai_client_clarifications (
   completeness_score numeric(6,4) NOT NULL DEFAULT 0
     CHECK (completeness_score >= 0 AND completeness_score <= 1),
   remaining_gaps text[] NOT NULL DEFAULT ARRAY[]::text[],
-  status text NOT NULL DEFAULT 'sent_sandbox' CHECK (status IN (
-    'draft','sent_sandbox','partially_answered',
+  status text NOT NULL DEFAULT 'sent' CHECK (status IN (
+    'draft','sent','sent_sandbox','delivery_failed','partially_answered',
     'resolved_closed','opted_out','escalated_dispute'
   )),
   actor uuid NOT NULL REFERENCES app.users(id),
@@ -998,6 +998,57 @@ def ensure_extended_schema(conn: Connection) -> None:
     """Ensure all 0039 and 0040 tables, indexes, RLS policies, and grants exist."""
     conn.execute(text(_EARLY_0039_TABLES_SQL))
     conn.execute(text(_LATE_0039_AND_0040_TABLES_SQL))
+    conn.execute(
+        text(
+            """
+            DO $$
+            DECLARE
+              cname text;
+            BEGIN
+              IF NOT EXISTS (
+                SELECT 1
+                FROM pg_constraint con
+                JOIN pg_class rel ON rel.oid = con.conrelid
+                JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                WHERE nsp.nspname = 'app'
+                  AND rel.relname = 'ai_client_clarifications'
+                  AND con.contype = 'c'
+                  AND pg_get_constraintdef(con.oid) LIKE '%delivery_failed%'
+              ) THEN
+                FOR cname IN
+                  SELECT con.conname
+                  FROM pg_constraint con
+                  JOIN pg_class rel ON rel.oid = con.conrelid
+                  JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
+                  WHERE nsp.nspname = 'app'
+                    AND rel.relname = 'ai_client_clarifications'
+                    AND con.contype = 'c'
+                    AND pg_get_constraintdef(con.oid) LIKE '%status%'
+                LOOP
+                  EXECUTE format(
+                    'ALTER TABLE app.ai_client_clarifications DROP CONSTRAINT %I',
+                    cname
+                  );
+                END LOOP;
+                ALTER TABLE app.ai_client_clarifications
+                  ALTER COLUMN status SET DEFAULT 'sent',
+                  ADD CONSTRAINT ai_client_clarifications_status_check CHECK (
+                    status IN (
+                      'draft',
+                      'sent',
+                      'sent_sandbox',
+                      'delivery_failed',
+                      'partially_answered',
+                      'resolved_closed',
+                      'opted_out',
+                      'escalated_dispute'
+                    )
+                  );
+              END IF;
+            END $$;
+            """
+        )
+    )
     conn.execute(text(_INDEXES_SQL))
     extra_roles = _resolve_runtime_roles(conn)
     for table_name, policy_name in _RLS_TABLES:

@@ -1,6 +1,18 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
+import { TimezoneSelect } from "../components/timezone-select";
+import {
+  AUTOMATION_PAGE_CONFIG,
+  type AutomationPageMeta,
+  type AutomationTabId,
+} from "./automation-routes";
+
+export {
+  AUTOMATION_PAGE_CONFIG,
+  type AutomationPageMeta,
+  type AutomationTabId,
+};
 import {
   Badge,
   Button,
@@ -228,6 +240,7 @@ export function MultichannelReminders({
   const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [targetLabel, setTargetLabel] = useState("");
   const [recipientKey, setRecipientKey] = useState("ap-finance-owner");
+  const [recipientEmail, setRecipientEmail] = useState("");
   const [channel, setChannel] = useState<
     "auto" | "whatsapp" | "slack" | "email"
   >(channelFilter === "slack" ? "slack" : "whatsapp");
@@ -257,6 +270,7 @@ export function MultichannelReminders({
             ...(selectedDocId ? { target_id: selectedDocId } : {}),
             target_label: targetLabel,
             recipient_key: recipientKey,
+            recipient_email: recipientEmail.trim(),
             channel: overrideChannel || channel,
             template_name: "hello_world",
             custom_message: customMessage,
@@ -300,7 +314,7 @@ export function MultichannelReminders({
             email_fallback: true,
             quiet_start_hour: Number(fd.get("quiet_start_hour") || 22),
             quiet_end_hour: Number(fd.get("quiet_end_hour") || 7),
-            timezone: "Asia/Karachi",
+            timezone: String(fd.get("timezone") || b.timezone || "UTC"),
             locale: "en_US",
             max_attempts: Number(fd.get("max_attempts") || 3),
             opted_out: fd.get("opted_out") === "on",
@@ -762,6 +776,14 @@ export function MultichannelReminders({
               <option value="auto">Contact's preferred order</option>
             </select>
           </Field>
+          <Field label="Recipient email (for Email delivery)">
+            <input
+              type="email"
+              value={recipientEmail}
+              onChange={(e) => setRecipientEmail(e.target.value)}
+              placeholder="e.g. billing@client.com"
+            />
+          </Field>
         </div>
         <Field label="Message">
           <textarea
@@ -784,6 +806,13 @@ export function MultichannelReminders({
             onClick={() => dispatchMutation.mutate("slack")}
           >
             Send on Slack
+          </Button>
+          <Button
+            variant="secondary"
+            busy={dispatchMutation.isPending}
+            onClick={() => dispatchMutation.mutate("email")}
+          >
+            Send by email
           </Button>
           <Button
             variant="secondary"
@@ -854,6 +883,18 @@ export function MultichannelReminders({
                 placeholder="e.g. #finance-alerts"
               />
             </Field>
+            <Field label="Email address">
+              <input
+                name="email_address"
+                type="email"
+                placeholder="e.g. ap@vendor.com"
+              />
+            </Field>
+            <TimezoneSelect
+              name="timezone"
+              label="Contact timezone"
+              defaultValue={b.timezone}
+            />
             <Field label="Quiet hours start (0-23)">
               <input
                 name="quiet_start_hour"
@@ -6104,176 +6145,48 @@ export function P4GroupConsolidationHub() {
   );
 }
 
-type AutomationTabId =
-  | "reminders"
-  | "portals"
-  | "payments"
-  | "sla"
-  | "payouts"
-  | "voice"
-  | "encryption"
-  | "ai-benchmarks"
-  | "accounting-expansion"
-  | "enterprise-sso"
-  | "p4-operations"
-  | "p4-migrations"
-  | "p4-bulk-ingestion"
-  | "p4-disaster-recovery"
-  | "p4-inventory"
-  | "p4-group-consolidation";
-
-const TAB_DETAILS: Record<
-  AutomationTabId,
-  { eyebrow: string; title: string; description: string; group: string }
-> = {
-  reminders: {
-    eyebrow: "PAYMENTS & REMINDERS",
-    title: "Reminders",
-    description:
-      "Connect WhatsApp and Slack separately, then send polite follow-ups for missing receipts, overdue bills, and pending approvals.",
-    group: "workflows",
-  },
-  portals: {
-    eyebrow: "PAYMENTS & REMINDERS",
-    title: "Supplier portals",
-    description:
-      "Connect utility, software, and vendor portals so new invoices are imported automatically as draft bills for your review.",
-    group: "workflows",
-  },
-  payments: {
-    eyebrow: "PAYMENTS & REMINDERS",
-    title: "Supplier payments",
-    description:
-      "Prepare supplier payouts and require owner or accountant approval with a verification code before any money leaves your account.",
-    group: "workflows",
-  },
-  sla: {
-    eyebrow: "PAYMENTS & REMINDERS",
-    title: "Daily reconciliation",
-    description:
-      "See every open bank transaction, missing receipt, and unapproved draft in one daily checklist.",
-    group: "workflows",
-  },
-  payouts: {
-    eyebrow: "BANK FEEDS & DOCUMENTS",
-    title: "Bank feed & payouts",
-    description:
-      "Import bank feed transactions and split merchant payouts into gross sales, fees, refunds, and net bank deposits.",
-    group: "documents",
-  },
-  voice: {
-    eyebrow: "BANK FEEDS & DOCUMENTS",
-    title: "Voice notes",
-    description:
-      "Turn quick spoken notes or uploaded audio memos into reviewable bill and invoice drafts.",
-    group: "documents",
-  },
-  "ai-benchmarks": {
-    eyebrow: "BANK FEEDS & DOCUMENTS",
-    title: "Document scanning",
-    description:
-      "Test how invoice and receipt scanning handles multiple languages, rotated photos, and blurry receipts.",
-    group: "documents",
-  },
-  "accounting-expansion": {
-    eyebrow: "BANK FEEDS & DOCUMENTS",
-    title: "Revenue & payroll",
-    description:
-      "Create monthly contract revenue schedules, split payroll into taxes and benefits, and resolve short-paid invoices.",
-    group: "documents",
-  },
-  "p4-inventory": {
-    eyebrow: "INVENTORY & GROUP",
-    title: "Inventory",
-    description:
-      "Track stock across warehouses, add shipping or customs costs, and record cost of goods sold automatically.",
-    group: "operations",
-  },
-  "p4-group-consolidation": {
-    eyebrow: "INVENTORY & GROUP",
-    title: "Group reporting",
-    description:
-      "Combine financial statements across multiple companies and currencies while removing internal group transactions.",
-    group: "operations",
-  },
-  "p4-bulk-ingestion": {
-    eyebrow: "INVENTORY & GROUP",
-    title: "Bulk document import",
-    description:
-      "Import large historical archives of invoices and receipts in the background without slowing down daily work.",
-    group: "operations",
-  },
-  "p4-migrations": {
-    eyebrow: "INVENTORY & GROUP",
-    title: "Data migration",
-    description:
-      "Run background updates across historical records while verifying that your trial balance stays in balance.",
-    group: "operations",
-  },
-  "p4-operations": {
-    eyebrow: "SECURITY & WORKSPACE",
-    title: "Usage limits",
-    description:
-      "Manage daily document limits, storage allowances, and monthly AI spending caps for your workspace.",
-    group: "security",
-  },
-  "p4-disaster-recovery": {
-    eyebrow: "SECURITY & WORKSPACE",
-    title: "Disaster recovery",
-    description:
-      "Verify regional backup readiness and test switching regions safely with zero lost accounting entries.",
-    group: "security",
-  },
-  encryption: {
-    eyebrow: "SECURITY & WORKSPACE",
-    title: "Data encryption",
-    description:
-      "Manage and rotate the dedicated encryption key protecting stored credentials in this workspace.",
-    group: "security",
-  },
-  "enterprise-sso": {
-    eyebrow: "SECURITY & WORKSPACE",
-    title: "Single sign-on & region",
-    description:
-      "Connect your company identity provider and choose the geographic region where workspace data is stored.",
-    group: "security",
-  },
-};
-
 const TAB_GROUPS: Record<
-  string,
+  AutomationPageMeta["group"],
   ReadonlyArray<readonly [AutomationTabId, string]>
 > = {
-  workflows: [
-    ["reminders", "Reminders"],
-    ["portals", "Supplier portals"],
-    ["payments", "Supplier payments"],
-    ["sla", "Daily reconciliation"],
-  ],
-  documents: [
-    ["payouts", "Bank feed & payouts"],
-    ["voice", "Voice notes"],
-    ["ai-benchmarks", "Document scanning"],
-    ["accounting-expansion", "Revenue & payroll"],
-  ],
-  operations: [
-    ["p4-inventory", "Inventory"],
-    ["p4-group-consolidation", "Group reporting"],
-    ["p4-bulk-ingestion", "Bulk import"],
-    ["p4-migrations", "Data migration"],
-  ],
-  security: [
-    ["p4-operations", "Usage limits"],
-    ["p4-disaster-recovery", "Disaster recovery"],
-    ["encryption", "Data encryption"],
-    ["enterprise-sso", "Single sign-on & region"],
-  ],
+  workflows: (["reminders", "portals", "payments", "sla"] as const).map(
+    (id) => [id, AUTOMATION_PAGE_CONFIG[id].shortLabel] as const,
+  ),
+  documents: (
+    ["payouts", "voice", "ai-benchmarks", "accounting-expansion"] as const
+  ).map((id) => [id, AUTOMATION_PAGE_CONFIG[id].shortLabel] as const),
+  operations: (
+    [
+      "p4-inventory",
+      "p4-group-consolidation",
+      "p4-bulk-ingestion",
+      "p4-migrations",
+    ] as const
+  ).map((id) => [id, AUTOMATION_PAGE_CONFIG[id].shortLabel] as const),
+  security: (
+    [
+      "p4-operations",
+      "p4-disaster-recovery",
+      "encryption",
+      "enterprise-sso",
+    ] as const
+  ).map((id) => [id, AUTOMATION_PAGE_CONFIG[id].shortLabel] as const),
 };
+
+const WORKSPACE_GOVERNANCE_SUBTABS: ReadonlyArray<
+  readonly [AutomationTabId, string]
+> = (["p4-operations", "encryption", "enterprise-sso"] as const).map(
+  (id) => [id, AUTOMATION_PAGE_CONFIG[id].shortLabel] as const,
+);
 
 export function P3AutomationHub({
   initialTab = "reminders",
+  standalone = false,
+  onRouteChange,
 }: {
   initialTab?: AutomationTabId;
+  standalone?: boolean;
+  onRouteChange?: (path: string) => void;
 }) {
   const [tab, setTab] = useState<AutomationTabId>(initialTab);
   useEffect(() => {
@@ -6282,34 +6195,23 @@ export function P3AutomationHub({
   const handleTabChange = (nextTab: string) => {
     const validTab = nextTab as AutomationTabId;
     setTab(validTab);
-    if (typeof window !== "undefined") {
-      const tabRoutes: Record<AutomationTabId, string> = {
-        reminders: "/reminders",
-        portals: "/supplier-portals",
-        payments: "/supplier-payments",
-        sla: "/reconciliation-sla",
-        payouts: "/payout-reconciliation",
-        voice: "/voice-instructions",
-        encryption: "/encryption-keys",
-        "ai-benchmarks": "/ai-benchmarks",
-        "accounting-expansion": "/accounting-expansion",
-        "enterprise-sso": "/enterprise-sso",
-        "p4-operations": "/usage-limits",
-        "p4-migrations": "/data-migration",
-        "p4-bulk-ingestion": "/bulk-import",
-        "p4-disaster-recovery": "/disaster-recovery",
-        "p4-inventory": "/inventory",
-        "p4-group-consolidation": "/group-reporting",
-      };
-      const targetPath = tabRoutes[validTab];
-      if (targetPath) {
+    const targetPath = AUTOMATION_PAGE_CONFIG[validTab]?.route;
+    if (targetPath) {
+      if (onRouteChange) {
+        onRouteChange(targetPath);
+      } else if (typeof window !== "undefined") {
         window.history.replaceState(null, "", targetPath);
       }
     }
   };
 
-  const activeMeta = TAB_DETAILS[tab] || TAB_DETAILS.reminders;
+  const activeMeta =
+    AUTOMATION_PAGE_CONFIG[tab] || AUTOMATION_PAGE_CONFIG.reminders;
   const groupItems = TAB_GROUPS[activeMeta.group] || TAB_GROUPS.workflows;
+  const standaloneItems =
+    standalone && activeMeta.standaloneSubgroup === "workspace-governance"
+      ? WORKSPACE_GOVERNANCE_SUBTABS
+      : null;
 
   return (
     <>
@@ -6318,28 +6220,42 @@ export function P3AutomationHub({
         title={activeMeta.title}
         description={activeMeta.description}
       />
-      <SectionTabs
-        id="automation-categories"
-        label="Tool categories"
-        value={activeMeta.group}
-        onChange={(nextGroup) => {
-          const first = TAB_GROUPS[nextGroup]?.[0]?.[0];
-          if (first) handleTabChange(first);
-        }}
-        items={[
-          ["workflows", "Payments & reminders"],
-          ["documents", "Bank feeds & documents"],
-          ["operations", "Inventory & group"],
-          ["security", "Security & workspace"],
-        ]}
-      />
-      <SectionTabs
-        id="automation-sections"
-        label="Section tools"
-        value={tab}
-        onChange={handleTabChange}
-        items={groupItems}
-      />
+      {!standalone && (
+        <>
+          <SectionTabs
+            id="automation-categories"
+            label="Tool categories"
+            value={activeMeta.group}
+            onChange={(nextGroup) => {
+              const first =
+                TAB_GROUPS[nextGroup as AutomationPageMeta["group"]]?.[0]?.[0];
+              if (first) handleTabChange(first);
+            }}
+            items={[
+              ["workflows", "Payments & reminders"],
+              ["documents", "Bank feeds & documents"],
+              ["operations", "Inventory & group"],
+              ["security", "Security & workspace"],
+            ]}
+          />
+          <SectionTabs
+            id="automation-sections"
+            label="Section tools"
+            value={tab}
+            onChange={handleTabChange}
+            items={groupItems}
+          />
+        </>
+      )}
+      {standaloneItems && (
+        <SectionTabs
+          id="workspace-governance-sections"
+          label="Workspace governance"
+          value={tab}
+          onChange={handleTabChange}
+          items={standaloneItems}
+        />
+      )}
       {tab === "reminders" && <MultichannelReminders />}
       {tab === "portals" && <SupplierPortalConnectors />}
       {tab === "payments" && <HumanApprovedSupplierPayments />}

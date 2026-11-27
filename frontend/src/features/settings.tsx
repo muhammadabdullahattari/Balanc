@@ -12,6 +12,7 @@ import {
 import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result, clearSession } from "../api/runtime";
+import { formatTimezoneWithOffset } from "../components/timezone-select";
 import {
   Badge,
   Button,
@@ -182,7 +183,7 @@ export function Settings({ initialSection }: { initialSection?: string } = {}) {
               <dt>Accounting basis</dt>
               <dd>{humanize(b.basis)}</dd>
               <dt>Timezone</dt>
-              <dd>{b.timezone}</dd>
+              <dd>{formatTimezoneWithOffset(b.timezone)}</dd>
               <dt>Jurisdiction</dt>
               <dd>{b.jurisdiction}</dd>
               <dt>Fiscal year starts</dt>

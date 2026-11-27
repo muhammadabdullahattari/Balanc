@@ -51,6 +51,7 @@ import {
 } from "./api/runtime";
 import { Button, ErrorNotice, Loading, Modal } from "./components/ui";
 import { Auth } from "./features/auth";
+import { AUTOMATION_PAGE_CONFIG } from "./features/automation-routes";
 import { BusinessContext, AccessContext } from "./features/context";
 const BusinessChooser = lazy(() =>
   import("./features/onboarding").then((m) => ({ default: m.BusinessChooser })),
@@ -623,7 +624,15 @@ function Workspace() {
                       );
                     })
                   ) : (
-                    <details open={group.paths.includes(location.pathname)}>
+                    <details
+                      open={
+                        group.paths.includes(location.pathname) ||
+                        (group.title === "Advanced" &&
+                          ["/encryption-keys", "/enterprise-sso"].includes(
+                            location.pathname,
+                          ))
+                      }
+                    >
                       <summary>
                         {group.title}
                         <ChevronDown size={14} />
@@ -670,6 +679,9 @@ function Workspace() {
                 <span className="divider">/</span>
                 <strong>
                   {navigation.find((n) => n.to === location.pathname)?.label ||
+                    Object.values(AUTOMATION_PAGE_CONFIG).find(
+                      (m) => m.route === location.pathname,
+                    )?.title ||
                     "Settings"}
                 </strong>
               </div>
@@ -788,72 +800,162 @@ function Workspace() {
                   />
                   <Route
                     path="/reminders"
-                    element={<P3AutomationHub initialTab="reminders" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="reminders"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/supplier-portals"
-                    element={<P3AutomationHub initialTab="portals" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="portals"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/supplier-payments"
-                    element={<P3AutomationHub initialTab="payments" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="payments"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/reconciliation-sla"
-                    element={<P3AutomationHub initialTab="sla" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="sla"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/payout-reconciliation"
-                    element={<P3AutomationHub initialTab="payouts" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="payouts"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/voice-instructions"
-                    element={<P3AutomationHub initialTab="voice" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="voice"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/encryption-keys"
-                    element={<P3AutomationHub initialTab="encryption" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="encryption"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/ai-benchmarks"
-                    element={<P3AutomationHub initialTab="ai-benchmarks" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="ai-benchmarks"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/accounting-expansion"
                     element={
-                      <P3AutomationHub initialTab="accounting-expansion" />
+                      <P3AutomationHub
+                        initialTab="accounting-expansion"
+                        standalone
+                        onRouteChange={navigate}
+                      />
                     }
                   />
                   <Route
                     path="/enterprise-sso"
-                    element={<P3AutomationHub initialTab="enterprise-sso" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="enterprise-sso"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/usage-limits"
-                    element={<P3AutomationHub initialTab="p4-operations" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="p4-operations"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/data-migration"
-                    element={<P3AutomationHub initialTab="p4-migrations" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="p4-migrations"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/bulk-import"
-                    element={<P3AutomationHub initialTab="p4-bulk-ingestion" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="p4-bulk-ingestion"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/disaster-recovery"
                     element={
-                      <P3AutomationHub initialTab="p4-disaster-recovery" />
+                      <P3AutomationHub
+                        initialTab="p4-disaster-recovery"
+                        standalone
+                        onRouteChange={navigate}
+                      />
                     }
                   />
                   <Route
                     path="/inventory"
-                    element={<P3AutomationHub initialTab="p4-inventory" />}
+                    element={
+                      <P3AutomationHub
+                        initialTab="p4-inventory"
+                        standalone
+                        onRouteChange={navigate}
+                      />
+                    }
                   />
                   <Route
                     path="/group-reporting"
                     element={
-                      <P3AutomationHub initialTab="p4-group-consolidation" />
+                      <P3AutomationHub
+                        initialTab="p4-group-consolidation"
+                        standalone
+                        onRouteChange={navigate}
+                      />
                     }
                   />
                   <Route path="/settings" element={<Settings />} />

@@ -42,11 +42,14 @@ class BusinessCreate(Schema):
     @field_validator("timezone")
     @classmethod
     def timezone_supported(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Use an IANA timezone")
         try:
-            ZoneInfo(value)
+            ZoneInfo(cleaned)
         except (ValueError, ZoneInfoNotFoundError):
             raise ValueError("Use an IANA timezone") from None
-        return value
+        return cleaned
 
 
 class InviteCreate(Schema):

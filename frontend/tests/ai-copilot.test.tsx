@@ -244,4 +244,240 @@ describe("AI accounting assistant UI", () => {
 
     getSpy.mockRestore();
   });
+
+  it("shows visible inline microphone error on denied permission and starts live recording when permitted", async () => {
+    window.localStorage.clear();
+    queryClient.clear();
+    const getSpy = vi.spyOn(api, "GET").mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+      data: {
+        foundation: {
+          wave: "W0_TO_W6_ACTIVE",
+          groq_configured: true,
+          active_provider: "groq",
+          llm_model: "llama-3.3-70b-versatile",
+          stt_model: "whisper-large-v3-turbo",
+          tts_mode: "browser_speech_synthesis",
+          livekit_enabled: false,
+          livekit_mode: "groq_whisper_and_browser_tts",
+          business_currency: "USD",
+          business_basis: "accrual",
+          business_version: 2,
+          policy_version: 1,
+          read_only_tools_enforced: true,
+          prompt_injection_shield_active: true,
+          human_approval_required: true,
+        },
+        runs: [],
+        tool_audit_logs: [],
+        memories: [],
+        reconciliation_investigations: [],
+        client_clarifications: [],
+        voice_sessions: [],
+        contract_verifications: [],
+        cash_scenarios: [],
+      },
+    } as never);
+
+    const stopTrack = vi.fn();
+    const getUserMediaMock = vi
+      .fn()
+      .mockRejectedValueOnce(
+        Object.assign(new Error("Permission denied"), {
+          name: "NotAllowedError",
+        }),
+      )
+      .mockResolvedValueOnce({
+        getTracks: () => [{ stop: stopTrack }],
+      });
+
+    class FakeMediaRecorder {
+      static isTypeSupported = (mime: string) => mime === "audio/webm";
+      state = "inactive";
+      mimeType = "audio/webm";
+      ondataavailable: ((ev: { data: Blob }) => void) | null = null;
+      onerror: ((ev: unknown) => void) | null = null;
+      onstop: (() => void) | null = null;
+      start() {
+        this.state = "recording";
+        this.ondataavailable?.({
+          data: new Blob(["voice-bytes-test"], { type: "audio/webm" }),
+        });
+      }
+      stop() {
+        this.state = "inactive";
+        this.onstop?.();
+      }
+    }
+
+    Object.defineProperty(navigator, "mediaDevices", {
+      configurable: true,
+      value: { getUserMedia: getUserMediaMock },
+    });
+    Object.defineProperty(globalThis, "MediaRecorder", {
+      configurable: true,
+      value: FakeMediaRecorder,
+    });
+
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AccessContext.Provider
+            value={{
+              user_id: "d1c40361-f7c0-47c2-8df2-c4acb6ebfab6",
+              role: "owner",
+              active: true,
+              can_post: true,
+              can_invite: true,
+              version: 1,
+            }}
+          >
+            <BusinessContext.Provider value={mockBusiness}>
+              <AICopilotHub initialTab="ai06-voice" />
+            </BusinessContext.Provider>
+          </AccessContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const recordBtn = await screen.findByRole("button", {
+      name: /Record with microphone/i,
+    });
+    await user.click(recordBtn);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toMatch(/Microphone access was denied/i);
+
+    await user.click(recordBtn);
+    expect(await screen.findByText(/Recording live/i)).toBeInTheDocument();
+
+    const stopButtons = screen.getAllByRole("button", {
+      name: /Stop recording/i,
+    });
+    await user.click(stopButtons[0]);
+
+    await waitFor(() => {
+      expect(stopTrack).toHaveBeenCalled();
+    });
+
+    getSpy.mockRestore();
+  });
+
+  it("persists a voice recording reply by recording ID and only re-fetches on explicit Regenerate reply", async () => {
+    window.localStorage.clear();
+    queryClient.clear();
+    const getSpy = vi.spyOn(api, "GET").mockResolvedValue({
+      response: new Response(null, { status: 200 }),
+      data: {
+        foundation: {
+          wave: "W0_TO_W6_ACTIVE",
+          groq_configured: true,
+          active_provider: "groq",
+          llm_model: "llama-3.3-70b-versatile",
+          stt_model: "whisper-large-v3-turbo",
+          tts_mode: "browser_speech_synthesis",
+          livekit_enabled: false,
+          livekit_mode: "groq_whisper_and_browser_tts",
+          business_currency: "USD",
+          business_basis: "accrual",
+          business_version: 2,
+          policy_version: 1,
+          read_only_tools_enforced: true,
+          prompt_injection_shield_active: true,
+          human_approval_required: true,
+        },
+        runs: [],
+        tool_audit_logs: [],
+        memories: [],
+        reconciliation_investigations: [],
+        client_clarifications: [],
+        voice_sessions: [],
+        contract_verifications: [],
+        cash_scenarios: [],
+      },
+    } as never);
+
+    let callCount = 0;
+    const postSpy = vi.spyOn(api, "POST").mockImplementation((async (
+      _url: string,
+      opts?: { body?: Record<string, unknown> },
+    ) => {
+      callCount += 1;
+      return {
+        response: new Response(null, { status: 201 }),
+        data: {
+          id: `sess-${callCount}`,
+          recording_id: String(opts?.body?.recording_id || "rec_fixed"),
+          raw_transcript: "Record bill from K-Electric for 850.00 USD",
+          corrected_transcript: "Record bill from K-Electric for 850.00 USD",
+          extracted_intent: "prepare_supplier_bill_draft",
+          extracted_entities: {
+            party_name: "K-Electric",
+            amount: callCount === 1 ? "850.00" : "900.00",
+            currency: "USD",
+            accounting_date: "2026-11-27",
+          },
+          uncertain_fields: [],
+          tts_readback_text: `Reply version ${callCount}: K-Electric bill`,
+          status: "transcribed_needs_confirmation",
+        },
+      };
+    }) as never);
+
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter>
+          <AccessContext.Provider
+            value={{
+              user_id: "d1c40361-f7c0-47c2-8df2-c4acb6ebfab6",
+              role: "owner",
+              active: true,
+              can_post: true,
+              can_invite: true,
+              version: 1,
+            }}
+          >
+            <BusinessContext.Provider value={mockBusiness}>
+              <AICopilotHub initialTab="ai06-voice" />
+            </BusinessContext.Provider>
+          </AccessContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    const input = await screen.findByLabelText(
+      /What would you like to record\?/i,
+    );
+    await user.type(input, "Record bill from K-Electric for 850.00 USD");
+
+    const submitBtn = screen.getByRole("button", {
+      name: /Understand my instruction/i,
+    });
+    await user.click(submitBtn);
+
+    expect(
+      await screen.findByText(/Reply version 1: K-Electric bill/i),
+    ).toBeInTheDocument();
+    expect(callCount).toBe(1);
+
+    // Submitting the exact same recording again loads the persisted reply without mutating or calling POST
+    await user.click(submitBtn);
+    expect(
+      screen.getByText(/Reply version 1: K-Electric bill/i),
+    ).toBeInTheDocument();
+    expect(callCount).toBe(1);
+
+    // Explicit Regenerate reply sends regenerate: true and updates the stored reply
+    const regenBtn = screen.getByRole("button", { name: /Regenerate reply/i });
+    await user.click(regenBtn);
+    expect(
+      await screen.findByText(/Reply version 2: K-Electric bill/i),
+    ).toBeInTheDocument();
+    expect(callCount).toBe(2);
+
+    postSpy.mockRestore();
+    getSpy.mockRestore();
+  });
 });
