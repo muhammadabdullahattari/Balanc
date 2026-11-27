@@ -1,10 +1,14 @@
 # LedgerPilot P3 and P4 feature implementation plan
 
-## Detailed AI delivery addendum — 25 November 2026
+## Implementation & Verification Status — 27 November 2026
 
-Use [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md) for AI-01–AI-10 and W0–W6 sequencing. This accepted planning scope extends the package work below; it does not certify implementation or replace P3/P4 identifiers. P3 supplies the application capabilities; P4 remains responsible for separately measured enterprise capacity, migration and regional resilience. The addendum explicitly covers model execution, deterministic financial validation, human approval, retrieval isolation, evaluation and feature-specific inputs.
+All P3 (`P3-A` through `P3-K`), P4 (`P4-A` through `P4-E2`), W0 + `AI-01`..`AI-10`, and LangGraph Financial Audit application workflows, migrations (`0039`–`0042`), APIs, and plain-language responsive web screens are implemented and verified in local and CI suites (`296` live-PostgreSQL backend integration tests, `82` frontend unit/API tests, `14` Playwright multi-viewport Chromium checks; commit `c7b8858`, CI Run `45971565380`). See:
+- [P3_P4_AI_and_Audit_Implementation_Record.md](P3_P4_AI_and_Audit_Implementation_Record.md) — Complete schema, endpoint, UI, and test record.
+- [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md) — W0 and AI-01–AI-10 implementation tracker.
+- [financial-audit-langgraph.md](financial-audit-langgraph.md) — LangGraph financial audit workflow and rule guide.
+- [ADR-021](architecture/ADR-021-p3-multichannel-reminders-portal-totp-and-approved-payments.md) and [ADR-022](architecture/ADR-022-trustworthy-ai-langgraph-audit-and-ux-hardening.md) — Architecture decisions.
 
-Updated 18 November 2026. This plan expands the accepted P3/P4 scope in Next_Phases_Implementation_Plan.md. Package labels remain stable. The order below follows technical dependencies rather than alphabetical package labels. This document schedules future work and makes no claim that it is implemented.
+*Note:* Funded multi-region physical load testing (millions of pages/day hardware validation) and external third-party provider contracts/domain verifications remain operational deployment gates distinct from code completion.
 
 ## Shared delivery method
 

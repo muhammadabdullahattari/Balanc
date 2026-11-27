@@ -1,8 +1,8 @@
 # LedgerPilot Next Phases Implementation Plan
 
-## AI delivery track — added 25 November 2026
+## Implementation status update — 27 November 2026
 
-The [ten-feature AI plan](AI_Features_Implementation_Plan.md) is the detailed P3 extension for AI-01–AI-10. Follow W0 foundations -> W1 impact/memory/evidence -> W2 reconciliation -> W3 clarification -> W4 close/scenarios/portfolio -> W5 voice/contracts -> W6 verification and controlled release. This track preserves existing product-release and engineering-phase numbering. Its tracker is planned/unverified; use its requirement and approval checklist before dependent implementation. Enterprise-scale acceptance remains in P4.
+W0 + `AI-01`..`AI-10`, the 13-node LangGraph Financial Audit engine, P3 (`P3-A`..`P3-K`), P4 (`P4-A`..`P4-E2`), plain-language UI hygiene, searchable IANA timezone selection, same-origin microphone capture, persisted voice replies, real confirmed email delivery, and scoped `Advanced` navigation are implemented and verified through schema revision **`0042`** (commit `c7b8858`, CI Run `45971565380`). See [P3_P4_AI_and_Audit_Implementation_Record.md](P3_P4_AI_and_Audit_Implementation_Record.md), [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md), and [financial-audit-langgraph.md](financial-audit-langgraph.md).
 
 Deployment is deferred at the user's request. The immediate work is a local P2 preparation track using synthetic data and the existing React, FastAPI and PostgreSQL stack. Phase 9 deployment and Phase 10 hosted acceptance resume when the user is ready. The numbered engineering phases and the P1–P4 product releases use separate labels.
 

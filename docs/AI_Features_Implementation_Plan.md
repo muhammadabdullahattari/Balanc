@@ -1,6 +1,6 @@
 # Balanc: ten differentiated AI features — implementation plan
 
-Date: 25 November 2026. Status: planned; no feature is marked implemented or verified by this document.
+Date: 27 November 2026. Status: implemented and verified in local and CI environments (migrations `0040` and `0042`, commit `c7b8858`); see [P3_P4_AI_and_Audit_Implementation_Record.md](P3_P4_AI_and_Audit_Implementation_Record.md) and [ADR-022](architecture/ADR-022-trustworthy-ai-langgraph-audit-and-ux-hardening.md). Hosted external provider credentials remain operator-configured per environment.
 
 ## Scope and relationship to existing plans
 
@@ -221,20 +221,21 @@ LangGraph/LangChain, PostgreSQL and suitable open-source model/runtime candidate
 
 ## Implementation tracker
 
-Updated 26 November 2026: W0 Foundation and AI-01 through AI-10 are implemented end-to-end across PostgreSQL RLS migration `0040_w0_ai_features_foundation.py`, provider-agnostic Groq LLM/Whisper adapter (`backend/src/ledgerpilot/ai/adapter.py`), strictly read-only tenant-scoped tools (`backend/src/ledgerpilot/ai/tools.py`), FastAPI endpoints (`backend/src/ledgerpilot/ai/router.py`), accessible web UI (`frontend/src/features/ai-copilot.tsx`), and automated unit/PostgreSQL/UI test suites (`backend/tests/test_ai_features_w0_to_w6.py`, `frontend/tests/ai-copilot.test.tsx`).
+Updated 27 November 2026: W0 Foundation and AI-01 through AI-10 are implemented and verified end-to-end across PostgreSQL RLS migrations `0040_w0_ai_features_foundation.py` and `0042_clarification_delivery_status.py`, provider-agnostic Groq LLM/Whisper adapter (`backend/src/ledgerpilot/ai/adapter.py`), strictly read-only tenant-scoped tools (`backend/src/ledgerpilot/ai/tools.py`), FastAPI endpoints (`backend/src/ledgerpilot/ai/router.py`), plain-language accessible web UI (`frontend/src/features/ai-copilot.tsx`, `frontend/src/components/voice-recorder.ts`), LangGraph Financial Audit integration (`backend/src/ledgerpilot/audit/`, `0041_financial_audit_runs.py`), and automated unit/PostgreSQL/Playwright test suites (`backend/tests/test_ai_features_w0_to_w6.py`, `backend/tests/test_six_issues_regressions.py`, `frontend/tests/ai-copilot.test.tsx`, `frontend/tests/no-internal-labels.test.tsx`).
 
-- [x] W0 foundation and real evaluation; AI-10 run/provenance foundation (`0040_w0_ai_features_foundation.py`, `ai/adapter.py`, `ai/tools.py`).
+- [x] W0 foundation, operator pause/budget caps (`POST .../ai/controls`, `app.ai_operator_controls`), dataset evaluation provenance registry (`POST .../ai/datasets/evaluate`, `app.ai_evaluation_datasets`), and AI-10 run/provenance foundation (`0040_w0_ai_features_foundation.py`, `ai/adapter.py`, `ai/tools.py`).
 - [x] AI-01 reconciliation detective (`POST /api/v1/businesses/{business_id}/ai/reconciliation-detective`, `app.ai_reconciliation_investigations`).
 - [x] AI-02 financial impact preview (`POST /api/v1/businesses/{business_id}/ai/impact-preview`).
-- [x] AI-03 closed-loop clarification (`POST /api/v1/businesses/{business_id}/ai/clarifications`, `POST .../reply`, `app.ai_client_clarifications`).
+- [x] AI-03 closed-loop clarification with real confirmed email delivery (`deliver_workspace_email`, `0042_clarification_delivery_status.py`, `status='sent'`, `502 ERR_EMAIL_DELIVERY_FAILED` on provider failure, `POST /api/v1/businesses/{business_id}/ai/clarifications`, `POST .../reply`, `app.ai_client_clarifications`).
 - [x] AI-04 approved business memory (`POST /api/v1/businesses/{business_id}/ai/memories`, `POST .../decision`, `app.ai_accounting_memories`).
 - [x] AI-05 continuous close assistant (`POST /api/v1/businesses/{business_id}/ai/close-assistant`).
-- [x] AI-06 multilingual voice accounting (`POST /api/v1/businesses/{business_id}/ai/voice-session`, `POST .../confirm`, `app.ai_voice_accounting_sessions` + optional LiveKit token).
+- [x] AI-06 multilingual voice accounting with `Permissions-Policy: microphone=(self)`, browser MIME negotiation, live recording timer & inline mic error states, Whisper `temperature=0`, deterministic SHA-256 `recording_id` reply caching (`localStorage` + PostgreSQL) with explicit **Regenerate reply**, and draft confirmation (`POST /api/v1/businesses/{business_id}/ai/voice-session`, `POST .../confirm`, `app.ai_voice_accounting_sessions` + optional LiveKit token).
 - [x] AI-07 contract/invoice/payment verification (`POST /api/v1/businesses/{business_id}/ai/contract-verification`, `app.ai_contract_verifications`).
 - [x] AI-08 cash-flow scenarios (`POST /api/v1/businesses/{business_id}/ai/cash-scenarios`, `app.ai_cash_scenarios`).
 - [x] AI-09 portfolio work planner (`POST /api/v1/businesses/{business_id}/ai/portfolio-planner`).
-- [x] AI-10 complete evidence UI/export and lifecycle (`GET /api/v1/businesses/{business_id}/ai/overview`, `POST .../ai/runs/{run_id}/decision`, `app.ai_runs`, `app.ai_tool_audit_logs`).
-- [x] W6 final regression, accountant acceptance and controlled release evidence (`backend/tests/test_ai_features_w0_to_w6.py`, `frontend/tests/ai-copilot.test.tsx`).
+- [x] AI-10 complete evidence UI, content-hash approval guard (`POST .../ai/runs/{run_id}/decision`), and redacted freshness-checked evidence export (`GET .../ai/runs/{run_id}/export`, `app.ai_runs`, `app.ai_tool_audit_logs`).
+- [x] LangGraph Financial Audit engine (`0041_financial_audit_runs.py`, `backend/src/ledgerpilot/audit/`, `/financial-audit` UI) — see [financial-audit-langgraph.md](financial-audit-langgraph.md).
+- [x] W6 final regression, plain-language UI hygiene gate (`no-internal-labels.test.tsx`), Playwright multi-viewport verification, and 10/10 CI gate (`c7b8858`, CI Run `45971565380`).
 
 ## Technical reference points
 

@@ -2,7 +2,7 @@
 
 LedgerPilot is a responsive web finance office for small businesses. The first release is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
 
-Backend: [foundation](docs/phase-2-backend-foundation.md), [business modules](docs/phase-3-business-modules.md) and [local verification](docs/phase-4-backend-verification.md). Web implementation and acceptance: [Phase 5](docs/phase-5-responsive-frontend.md). Governing status: [implementation tracker](docs/Implementation_Plan.md).
+Backend: [foundation](docs/phase-2-backend-foundation.md), [business modules](docs/phase-3-business-modules.md) and [local verification](docs/phase-4-backend-verification.md). Web implementation and acceptance: [Phase 5](docs/phase-5-responsive-frontend.md). Governing status: [implementation tracker](docs/Implementation_Plan.md) and [P3, P4, AI & Audit record](docs/P3_P4_AI_and_Audit_Implementation_Record.md).
 
 ## Prerequisites
 
@@ -100,6 +100,12 @@ Posted journals must be balanced, immutable, idempotent, auditable, and scoped t
 ## Financial audit (LangGraph + RAG + Groq polishing)
 
 LedgerPilot provides a read-only **Financial Audit** engine (`backend/src/ledgerpilot/audit/` and `/financial-audit` in the web client) supporting **monthly** (`YYYY-MM`), **yearly** (fiscal or calendar year), **emergency / on-demand** (earliest record or custom `start_date` through `end_date`, sync or `run_async` background job), and **auto-triggered** audits whenever a Balance Sheet is generated or an accounting period is locked/packaged. All math, balance sheet reconciliations, opening/closing continuities, subledger tie-outs, banking/payment rule checks, and anomaly detections run deterministically in `Decimal` tools, enriched with tenant-scoped RAG policy citations and polished into plain English via `GROQ_API_KEY` (with automatic numeric-hallucination rejection and deterministic template fallback). See [Financial Audit & LangGraph Workflow](docs/financial-audit-langgraph.md) for the full architecture diagram, API examples, and guide to adding new rules.
+
+## AI accounting assistant, enterprise automation & email configuration
+
+- **AI Accounting Assistant (`/ai-assistant`, `backend/src/ledgerpilot/ai/`):** Implements W0 Foundation and AI-01 through AI-10 with strictly read-only RLS-scoped tools, content-hash-bound human approvals, redacted evidence exports, monthly AI budget/pause controls, entry impact previews, bank matching, client document requests, saved accounting rules, multilingual English/Urdu voice entry (`Permissions-Policy: microphone=(self)` + deterministic SHA-256 `recording_id` reply caching), contract verification, 13-week cash-flow scenarios, and month-end readiness checks. See [AI Features Plan & Tracker](docs/AI_Features_Implementation_Plan.md) and [ADR-022](docs/architecture/ADR-022-trustworthy-ai-langgraph-audit-and-ux-hardening.md).
+- **Manage & Advanced Operations (`frontend/src/features/p3-automation.tsx`, `backend/src/ledgerpilot/workspace/p3_automation.py`):** Separated WhatsApp Cloud API and Slack connectors, 32-char TOTP supplier portal connectors, step-up approved supplier payments, usage limits, zero-downtime data migrations, background bulk imports, regional disaster-recovery drills, FIFO/weighted-average warehouse inventory, and multi-entity group consolidation, scoped cleanly via `frontend/src/features/automation-routes.ts`. Full summary: [P3, P4, AI & Audit Implementation Record](docs/P3_P4_AI_and_Audit_Implementation_Record.md).
+- **Hosted outbound email delivery (`backend/src/ledgerpilot/identity/mail.py`):** Client document requests and email reminders only mark sends as `sent` after provider confirmation (`502` on failure). On cloud hosts that block outbound TCP port `587` (such as Railway), configure an HTTPS email API key (`BREVO_API_KEY` + `BREVO_FROM`, `RESEND_API_KEY` + verified `RESEND_FROM`, or `SENDGRID_API_KEY` + `SENDGRID_FROM`).
 
 ## Local identity mailbox
 

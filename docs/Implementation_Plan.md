@@ -1,14 +1,19 @@
 # LedgerPilot Implementation Plan
 
-## AI scope addendum — 25 November 2026
+## P3, P4, AI Assistant, LangGraph Financial Audit & UX Hardening — 27 November 2026
 
-Added [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md) as the detailed plan and tracker for ten differentiated AI features, AI-01–AI-10. Delivery waves W0–W6 extend P3 and preserve current phase/package IDs and architecture. Includes dependencies, proposed data/API/UI responsibilities, required user inputs, local/open-source options, evaluation, approval and rollout gates. This is a documentation update only; no implementation, benchmark or release completion is asserted. Related cross-references are recorded in the P3 and consolidated next-phase plans.
+Implemented, verified, and deployed end-to-end across `main` and `p3-features` (schema head **`0042`**, OpenAPI **`280` paths**, commit `c7b8858`, GitHub Actions CI Run `45971565380` **`10/10` jobs passing**):
+
+- **W0 & AI-01 through AI-10 (`0040` & `0042`, `backend/src/ledgerpilot/ai/`, `/ai-assistant`):** Provider-agnostic Groq LLM/Whisper adapter, strictly read-only RLS-scoped accounting tools, prompt-injection sanitization, content-hash-bound approvals, redacted evidence exports, operator pause/budget caps, dataset evaluation provenance registry, real confirmed clarification emails, and deterministic SHA-256 `recording_id` voice reply persistence. Detailed tracker: [AI_Features_Implementation_Plan.md](AI_Features_Implementation_Plan.md).
+- **LangGraph Financial Audit Engine (`0041`, `backend/src/ledgerpilot/audit/`, `/financial-audit`):** 13-node `StateGraph(AuditState)` supporting monthly, yearly (fiscal/calendar), emergency/on-demand (sync or `BackgroundJob` async), and auto-triggered audits (on Balance Sheet generation, period lock, and close-package preparation) with 6 deterministic `Decimal` `@tool` checks, tenant-scoped TF-IDF RAG retrieval, and numeric-verified Groq plain-language polishing. Architecture & API guide: [financial-audit-langgraph.md](financial-audit-langgraph.md).
+- **P3 & P4 Automation and Enterprise Modules (`0039` & `0040`, `backend/src/ledgerpilot/workspace/p3_automation.py`, `frontend/src/features/p3-automation.tsx`):** Separated WhatsApp Cloud API & Slack connectors, 32-char RFC 6238 TOTP supplier portal connectors, human-approved supplier payments with beneficiary-swap invalidation, 1-day reconciliation SLA, merchant payout gross-to-net reconciliation, voice-note drafts, OCR/cost benchmarks, contract revenue & payroll schedules, tenant envelope encryption, enterprise SSO & residency, workspace usage limits, online ledger migrations, isolated bulk document import, regional DR failover drills, FIFO/weighted-average inventory & landed cost, and multi-entity group consolidation.
+- **Production UX, Media, Timezone & Email Hardening:** Same-origin microphone capture (`Permissions-Policy: microphone=(self)`) with live timer and accessible error alerts, responsive `.form-grid` and zero-overflow layouts across desktop/tablet/mobile, searchable IANA `TimezoneSelect` (`UTC±HH:MM`) with `ZoneInfo` backend validation, confirmed-only `deliver_workspace_email()` (`502` error surfacing on unconfirmed sends), scoped standalone `Advanced` sidebar routes (`automation-routes.ts`), and automated plain-language UI regression checks (`no-internal-labels.test.tsx`). Full record: [P3_P4_AI_and_Audit_Implementation_Record.md](P3_P4_AI_and_Audit_Implementation_Record.md) and [ADR-022](architecture/ADR-022-trustworthy-ai-langgraph-audit-and-ux-hardening.md).
 
 ## Sequenced engineering delivery from project setup to production
 
-**Plan version:** 2.30
+**Plan version:** 2.40
 **Status:** Governing implementation sequence  
-**Date:** 16 November 2026
+**Date:** 27 November 2026
 **Scope:** Responsive web SaaS; deployed to Railway and Vercel. Product source: updated LedgerPilot Complete SRS.
 
 ## 1. Review and sequencing decision

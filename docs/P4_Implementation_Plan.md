@@ -22,3 +22,16 @@ Collect measured P2/P3 traffic and document volumes, customer commitments, suppo
 Funded infrastructure, 24/7 or explicitly bounded operational coverage, legal approvals and tested rollback/recovery are required. Publish only measured capacity, availability, migration and recovery results with workload, region, date and test methodology. Revalidate targets as the architecture or customer workload changes.
 
 See [feature-by-feature delivery plan](P3_P4_Feature_Implementation_Plan.md) for the full implementation order, dependencies and acceptance checks.
+
+## Application & Schema Implementation Record — 27 November 2026
+
+All P4 application modules, RLS-enforced PostgreSQL tables (`0040_w0_ai_features_foundation.py`), FastAPI endpoints (`/api/v1/businesses/{business_id}/p4/*`), and scoped standalone `Advanced` sidebar pages (`frontend/src/features/automation-routes.ts`, `frontend/src/features/p3-automation.tsx`) are implemented and verified in local and CI suites:
+
+- **P4-D (`Usage limits` — `/usage-limits`):** `app.workspace_operational_quotas` — daily document-page allowances, storage quotas, monthly AI spending caps, alert thresholds, noisy-neighbor spike testing, plus scoped governance sub-tabs for **Data encryption** and **Single sign-on & region**.
+- **P4-B (`Data migration` — `/data-migration`):** `app.online_ledger_migrations` — expand/backfill/verify/contract background updates across journal lines, journals, invoices/bills, and bank rows with pre/post trial-balance tie-out verification and pause/complete/undo transitions.
+- **P4-A (`Bulk import` — `/bulk-import`):** `app.bulk_ingestion_batches` — isolated background vs. live-priority document queues, per-tenant concurrency slots, foreground latency monitoring, and batch cancellation.
+- **P4-C (`Disaster recovery` — `/disaster-recovery`):** `app.regional_dr_drills` — primary/standby region topology, monotonic fencing tokens preventing split-brain writes, failover/failback drills, and ledger/evidence consistency digests.
+- **P4-E1 (`Inventory` — `/inventory`):** `app.inventory_items` & `app.inventory_movements` — warehouse stock tracking, FIFO layer and weighted-average costing, landed shipping/customs cost allocation, negative-stock guards, low-stock alerts, and automatic COGS review drafts on sale.
+- **P4-E2 (`Group reporting` — `/group-reporting`):** `app.consolidation_entities` & `app.consolidation_runs` — multi-subsidiary ownership, closing/average FX rate translation (CTA), minority/NCI share calculation, and intercompany receivable/payable & revenue/expense eliminations.
+
+Full verification details are recorded in [P3_P4_AI_and_Audit_Implementation_Record.md](P3_P4_AI_and_Audit_Implementation_Record.md). Funded multi-region infrastructure load certification remains a separate operational gate.
