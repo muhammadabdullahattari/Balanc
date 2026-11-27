@@ -16,7 +16,7 @@ from test_phase2_integration import (
 )
 
 from ledgerpilot.ai.adapter import GroqModelAdapter
-from ledgerpilot.config import Settings
+from ledgerpilot.config import Settings, get_settings
 from ledgerpilot.identity.mail import deliver_workspace_email, format_mail_error_for_user
 from ledgerpilot.local_setup import FileSettings
 from ledgerpilot.shared.security_headers import security_headers
