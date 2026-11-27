@@ -205,6 +205,7 @@ async def test_clarification_email_and_voice_session_stability_end_to_end(
         from ledgerpilot.main import create_app
 
         live_app = create_app(live_mail_settings)
+        live_app.dependency_overrides[get_settings] = lambda: live_mail_settings
         async with (
             live_app.router.lifespan_context(live_app),
             httpx.AsyncClient(
