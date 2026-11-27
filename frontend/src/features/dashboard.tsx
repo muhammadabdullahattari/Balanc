@@ -11,6 +11,10 @@ import {
 } from "lucide-react";
 import { api, result, keys } from "../api/runtime";
 import {
+  ChartErrorBoundary,
+  IncomeExpenseLineChart,
+} from "../components/report-charts";
+import {
   Badge,
   Empty,
   ErrorNotice,
@@ -239,6 +243,22 @@ export function Dashboard() {
                         Expenses
                       </span>
                     </div>
+                    {d.trend.length > 1 && (
+                      <ChartErrorBoundary>
+                        <IncomeExpenseLineChart
+                          title="Net balance trajectory"
+                          currency={d.currency}
+                          series={d.trend.map((t) => ({
+                            period_label: t.start_date.slice(0, 7),
+                            income: t.income,
+                            expense: t.expense,
+                            net_profit: String(
+                              (Number(t.income) - Number(t.expense)).toFixed(2),
+                            ),
+                          }))}
+                        />
+                      </ChartErrorBoundary>
+                    )}
                     <details className="chart-data">
                       <summary>View exact figures</summary>
                       <div

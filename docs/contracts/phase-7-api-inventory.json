@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 295,
-  "distinct_operations": 252,
+  "call_sites": 301,
+  "distinct_operations": 258,
   "operations": [
     {
       "file": "App.tsx",
@@ -679,6 +679,21 @@
       "path": "/api/v1/businesses/{business_id}/audits"
     },
     {
+      "file": "features/financial-audit.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audits/visuals"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/audits/{audit_id}/export"
+    },
+    {
+      "file": "features/financial-audit.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/audits/{audit_id}/email"
+    },
+    {
       "file": "features/google-signin.tsx",
       "method": "GET",
       "path": "/api/v1/auth/google/config"
@@ -1282,6 +1297,21 @@
       "file": "features/reports.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/reports/balance-sheet"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/visuals"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/visual-export"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/reports/email-visual"
     },
     {
       "file": "features/reports.tsx",

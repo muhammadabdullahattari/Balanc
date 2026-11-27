@@ -110,6 +110,10 @@ def handle_report_export(
 ) -> dict[str, Any]:
     if business_id is None:
         raise ValueError("Report export requires business_id")
+    if created_by is not None:
+        from ledgerpilot.database import set_context
+
+        set_context(db, created_by, business_id)
     report_type = payload["report_type"]
     parameters = payload.get("parameters", {})
     fmt = payload.get("format", "json")

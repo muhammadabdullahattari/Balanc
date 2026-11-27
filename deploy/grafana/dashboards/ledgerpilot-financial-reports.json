@@ -1,0 +1,485 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#1f7a5c", "mode": "fixed" },
+          "decimals": 2,
+          "mappings": [],
+          "noValue": "No data for this period",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "#1f7a5c", "value": null }]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total_income$/", "values": false },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT total_income FROM app.grafana_kpi_summary('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date);",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Income ($currency)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#b86b2b", "mode": "fixed" },
+          "decimals": 2,
+          "noValue": "No data for this period",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [{ "color": "#b86b2b", "value": null }]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total_expense$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT total_expense FROM app.grafana_kpi_summary('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date);",
+          "refId": "A"
+        }
+      ],
+      "title": "Total Expenses ($currency)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "noValue": "No data for this period",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#b3353e", "value": null },
+              { "color": "#1f7a5c", "value": 0 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^net_balance$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT net_balance FROM app.grafana_kpi_summary('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date);",
+          "refId": "A"
+        }
+      ],
+      "title": "Net Profit / Deficit ($currency)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 2,
+          "noValue": "No data for this period",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#b3353e", "value": null },
+              { "color": "#274b7a", "value": 0 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^cash_balance$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT cash_balance FROM app.grafana_kpi_summary('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date);",
+          "refId": "A"
+        }
+      ],
+      "title": "Cash Balance ($currency)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 16,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "always"
+          },
+          "decimals": 2,
+          "noValue": "No data for this period",
+          "unit": "currencyUSD"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "income" },
+            "properties": [
+              { "id": "displayName", "value": "Income" },
+              { "id": "color", "value": { "fixedColor": "#1f7a5c", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "expense" },
+            "properties": [
+              { "id": "displayName", "value": "Expenses" },
+              { "id": "color", "value": { "fixedColor": "#b86b2b", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "net_profit" },
+            "properties": [
+              { "id": "displayName", "value": "Net Profit" },
+              { "id": "color", "value": { "fixedColor": "#274b7a", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": {
+        "legend": { "calcs": ["sum"], "displayMode": "table", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT bucket_time AS \"time\", income, expense, net_profit FROM app.grafana_income_expense_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, CASE WHEN '$period_mode' = 'yearly' THEN 'year' ELSE 'month' END);",
+          "refId": "A"
+        }
+      ],
+      "title": "Income vs. Expenses Over Time ($currency)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#274b7a", "mode": "fixed" },
+          "decimals": 2,
+          "min": 0,
+          "noValue": "No data for this period",
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": {
+        "barWidth": 0.72,
+        "groupWidth": 0.7,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "orientation": "horizontal",
+        "showValue": "always",
+        "xField": "category_label"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT category_label, amount FROM app.grafana_category_breakdown('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$account_kind', 6);",
+          "refId": "A"
+        }
+      ],
+      "title": "Category Breakdown — $account_kind ($currency)",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 2,
+          "min": 0,
+          "noValue": "No data for this period",
+          "unit": "currencyUSD"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "income" },
+            "properties": [
+              { "id": "displayName", "value": "Income" },
+              { "id": "color", "value": { "fixedColor": "#1f7a5c", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "expense" },
+            "properties": [
+              { "id": "displayName", "value": "Expenses" },
+              { "id": "color", "value": { "fixedColor": "#b86b2b", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "id": 7,
+      "options": {
+        "barWidth": 0.8,
+        "groupWidth": 0.72,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "orientation": "vertical",
+        "showValue": "auto",
+        "stacking": "none",
+        "xField": "period_label"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT period_label, income, expense FROM app.grafana_income_expense_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, CASE WHEN '$period_mode' = 'yearly' THEN 'year' ELSE 'month' END);",
+          "refId": "A"
+        }
+      ],
+      "title": "Period Comparison ($period_mode, $currency)",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 22,
+            "lineWidth": 2,
+            "thresholdsStyle": { "mode": "area" }
+          },
+          "decimals": 2,
+          "noValue": "No data for this period",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#b3353e", "value": null },
+              { "color": "#274b7a", "value": 0 }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "id": 8,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT bucket_time AS \"time\", sum(cash_delta) OVER (ORDER BY bucket_time ASC) AS \"Running Cash Change\" FROM app.grafana_income_expense_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, CASE WHEN '$period_mode' = 'yearly' THEN 'year' ELSE 'month' END);",
+          "refId": "A"
+        }
+      ],
+      "title": "Cash Flow & Running Balance Trend ($currency)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#274b7a", "mode": "fixed" },
+          "decimals": 2,
+          "min": 0,
+          "noValue": "No data for this period",
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 20 },
+      "id": 9,
+      "options": {
+        "barWidth": 0.65,
+        "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false },
+        "orientation": "vertical",
+        "showValue": "always",
+        "xField": "section"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT section, amount FROM app.grafana_balance_sheet_summary('$business_id'::uuid, $__timeTo()::date);",
+          "refId": "A"
+        }
+      ],
+      "title": "Balance Sheet: Assets vs. Liabilities vs. Equity ($currency)",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#4c638a", "mode": "fixed" },
+          "decimals": 2,
+          "min": 0,
+          "noValue": "No data for this period",
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 20 },
+      "id": 10,
+      "options": {
+        "barWidth": 0.7,
+        "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false },
+        "orientation": "horizontal",
+        "showValue": "always",
+        "xField": "item_label"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT item_label, amount FROM app.grafana_top_items('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, 8);",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Accounts & Transactions by Amount ($currency)",
+      "type": "barchart"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": ["ledgerpilot", "financial-reports"],
+  "templating": {
+    "list": [
+      {
+        "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+        "definition": "SELECT id::text AS __value, name AS __text FROM app.grafana_businesses();",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Workspace",
+        "multi": false,
+        "name": "business_id",
+        "options": [],
+        "query": "SELECT id::text AS __value, name AS __text FROM app.grafana_businesses();",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": { "selected": true, "text": "monthly", "value": "monthly" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Period Mode",
+        "multi": false,
+        "name": "period_mode",
+        "options": [
+          { "selected": true, "text": "monthly", "value": "monthly" },
+          { "selected": false, "text": "yearly", "value": "yearly" },
+          { "selected": false, "text": "custom", "value": "custom" }
+        ],
+        "query": "monthly,yearly,custom",
+        "type": "custom"
+      },
+      {
+        "current": { "selected": true, "text": "expense", "value": "expense" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Account Category",
+        "multi": false,
+        "name": "account_kind",
+        "options": [
+          { "selected": true, "text": "expense", "value": "expense" },
+          { "selected": false, "text": "income", "value": "income" },
+          { "selected": false, "text": "asset", "value": "asset" },
+          { "selected": false, "text": "liability", "value": "liability" },
+          { "selected": false, "text": "equity", "value": "equity" }
+        ],
+        "query": "expense,income,asset,liability,equity",
+        "type": "custom"
+      },
+      {
+        "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+        "definition": "SELECT currency FROM app.grafana_businesses() WHERE id = '$business_id'::uuid;",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Currency",
+        "multi": false,
+        "name": "currency",
+        "options": [],
+        "query": "SELECT currency FROM app.grafana_businesses() WHERE id = '$business_id'::uuid;",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": { "from": "now-1y", "to": "now" },
+  "timezone": "browser",
+  "title": "LedgerPilot Financial Reports",
+  "uid": "lp-financial-reports",
+  "version": 1
+}

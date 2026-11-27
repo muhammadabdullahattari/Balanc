@@ -114,6 +114,7 @@ jobs:
           docker compose -f docker-compose.yml config --quiet
           docker compose -f docker-compose.documents.yml config --quiet
           docker compose -f docker-compose.performance.yml config --quiet
+          POSTGRES_PASSWORD=ci-placeholder-pg-password GRAFANA_DB_PASSWORD=ci-placeholder-ro-password GRAFANA_ADMIN_PASSWORD=ci-placeholder-admin-pass docker compose -f docker-compose.yml -f docker-compose.grafana.yml config --quiet
       - name: Check Prometheus alert rules syntax
         run: |
           docker run --rm -v "${{ github.workspace }}/deploy/prometheus:/etc/prometheus" --entrypoint promtool prom/prometheus:v2.54.1 check rules /etc/prometheus/alerts.yml

@@ -4,7 +4,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import ROUND_HALF_EVEN, Decimal
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
@@ -862,12 +862,92 @@ def generate_report_export(
     db: Session, bid: UUID, report_type: str, parameters: dict[str, Any], fmt: str = "json"
 ) -> dict[str, Any]:
     """Generate exported report data for queued asynchronous export jobs."""
+    import base64
     import csv
     import io
     import json
 
+    if fmt in {"pdf", "html"}:
+        from ledgerpilot.config import get_settings
+        from ledgerpilot.reports import visuals
+
+        settings = get_settings()
+        fmt_lit: Literal["pdf", "html"] = "html" if fmt == "html" else "pdf"
+        theme_lit: Literal["light", "dark"] = (
+            "dark" if parameters.get("theme") == "dark" else "light"
+        )
+        if report_type == "financial-audit":
+            raw_aid = parameters.get("audit_id")
+            if not raw_aid:
+                latest = db.scalar(
+                    select(text("id"))
+                    .select_from(text("app.financial_audit_runs"))
+                    .where(text("business_id = :b"))
+                    .params(b=bid)
+                    .order_by(text("created_at DESC"))
+                    .limit(1)
+                )
+                if not latest:
+                    raise DomainError("ERR_NOT_FOUND", "No financial audit run available.", 404)
+                raw_aid = str(latest)
+            built = visuals.build_audit_visual_export(
+                db,
+                settings,
+                bid,
+                UUID(str(raw_aid)),
+                fmt=fmt_lit,
+                theme=theme_lit,
+            )
+        else:
+            end_dt = (
+                date.fromisoformat(parameters["as_of"])
+                if parameters.get("as_of")
+                else (
+                    date.fromisoformat(parameters["end"]) if parameters.get("end") else date.today()
+                )
+            )
+            start_dt = (
+                date.fromisoformat(parameters["start"])
+                if parameters.get("start")
+                else (
+                    date(end_dt.year, 1, 1)
+                    if report_type == "yearly-summary"
+                    else end_dt.replace(day=1)
+                )
+            )
+            basis_val: Literal["cash", "accrual"] = (
+                "cash" if parameters.get("basis") == "cash" else "accrual"
+            )
+            built = visuals.build_financial_visual_export(
+                db,
+                settings,
+                bid,
+                report_type=report_type,
+                start=start_dt,
+                end=end_dt,
+                basis=basis_val,
+                fmt=fmt_lit,
+                theme=theme_lit,
+            )
+        raw_bytes: bytes = built["bytes"]
+        if fmt == "pdf":
+            return {
+                "content_base64": base64.b64encode(raw_bytes).decode("ascii"),
+                "content_type": built["content_type"],
+                "filename": built["filename"],
+                "size_bytes": len(raw_bytes),
+                "visual_source": built["visual_source"],
+            }
+        return {
+            "content": raw_bytes.decode("utf-8"),
+            "content_type": built["content_type"],
+            "filename": built["filename"],
+            "size_bytes": len(raw_bytes),
+            "visual_source": built["visual_source"],
+        }
+
     data: Any = None
-    if report_type == "profit-loss":
+    if report_type in {"profit-loss", "monthly-summary", "yearly-summary"}:
         start_date = (
             date.fromisoformat(parameters["start"])
             if parameters.get("start")

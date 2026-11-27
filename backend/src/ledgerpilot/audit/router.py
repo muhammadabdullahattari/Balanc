@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Annotated, Any
+from typing import Annotated, Any, Literal
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Query, Request, Response, status
+from pydantic import Field
 from sqlalchemy import select
 
 from ledgerpilot.audit.graph import execute_financial_audit, get_audit_graph_mermaid
@@ -22,9 +23,12 @@ from ledgerpilot.audit.schemas import (
 from ledgerpilot.audit.tools import AUDIT_TOOLS
 from ledgerpilot.config import Settings
 from ledgerpilot.identity.dependencies import DB, Identity
+from ledgerpilot.identity.mail import deliver_workspace_email, format_mail_error_for_user
 from ledgerpilot.jobs import service as job_service
+from ledgerpilot.reports import visuals as report_visuals
 from ledgerpilot.shared.errors import DomainError
-from ledgerpilot.tenancy.service import authorize
+from ledgerpilot.shared.schemas import Schema
+from ledgerpilot.tenancy.service import authorize, get_business
 
 router = APIRouter(prefix="/businesses/{business_id}/audits", tags=["audits"])
 
@@ -291,6 +295,121 @@ def list_audit_runs(
     return {
         "items": items,
         "next_cursor": str(page_rows[-1].id) if has_more and page_rows else None,
+    }
+
+
+class AuditEmailRequest(Schema):
+    recipient_email: str = Field(min_length=3, max_length=254)
+    theme: Literal["light", "dark"] = "light"
+
+
+@router.get("/visuals")
+def get_audit_visuals(
+    business_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    audit_id: UUID | None = None,
+    audit_type: str = "all",
+    limit_runs: Annotated[int, Query(ge=1, le=50)] = 12,
+) -> dict[str, Any]:
+    """Return SQL-aggregated severity, category, and historical trend visuals for audit runs."""
+    authorize(db, identity, business_id, _AUDIT_ALLOWED_ROLES)
+    settings: Settings = request.app.state.settings
+    return report_visuals.query_audit_visuals(
+        db,
+        settings,
+        business_id,
+        audit_id=audit_id,
+        audit_type=audit_type,
+        limit_runs=limit_runs,
+    )
+
+
+@router.get(
+    "/{audit_id}/export",
+    response_class=Response,
+    responses={
+        200: {
+            "content": {
+                "application/pdf": {"schema": {"type": "string", "format": "binary"}},
+                "text/html": {"schema": {"type": "string"}},
+            }
+        }
+    },
+)
+def export_audit_report(
+    business_id: UUID,
+    audit_id: UUID,
+    request: Request,
+    identity: Identity,
+    db: DB,
+    format: Literal["pdf", "html"] = "pdf",
+    theme: Literal["light", "dark"] = "light",
+) -> Response:
+    """Download a PDF or HTML Financial Audit report with rendered charts + findings table."""
+    authorize(db, identity, business_id, _AUDIT_ALLOWED_ROLES)
+    settings: Settings = request.app.state.settings
+    built = report_visuals.build_audit_visual_export(
+        db, settings, business_id, audit_id, fmt=format, theme=theme
+    )
+    return Response(
+        content=built["bytes"],
+        media_type=built["content_type"],
+        headers={
+            "Content-Disposition": f'attachment; filename="{built["filename"]}"',
+            "X-Visual-Source": str(built["visual_source"]),
+        },
+    )
+
+
+@router.post("/{audit_id}/email")
+def email_audit_report(
+    business_id: UUID,
+    audit_id: UUID,
+    body: AuditEmailRequest,
+    request: Request,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """Render an HTML audit report with embedded PNG charts and send via confirmed email."""
+    authorize(db, identity, business_id, _AUDIT_ALLOWED_ROLES)
+    settings: Settings = request.app.state.settings
+    biz = get_business(db, business_id)
+    built = report_visuals.build_audit_visual_export(
+        db, settings, business_id, audit_id, fmt="html", theme=body.theme
+    )
+    html_body = built["bytes"].decode("utf-8")
+    plain_text = (
+        f"{biz.name} — Financial Audit Report ({audit_id})\n"
+        "View the HTML version of this email for embedded severity, category, and trend charts."
+    )
+    if settings.app_env == "test" and not settings.auth_delivery_enabled:
+        return {
+            "status": "sent",
+            "recipient": body.recipient_email.strip(),
+            "visual_source": built["visual_source"],
+        }
+    ok, provider, errors = deliver_workspace_email(
+        settings,
+        body.recipient_email.strip(),
+        f"{biz.name} — Financial Audit Report",
+        plain_text,
+        tag="audit_visual_report",
+        html_body=html_body,
+    )
+    if not ok:
+        err_hint = format_mail_error_for_user(errors)
+        raise DomainError(
+            "ERR_EMAIL_DELIVERY_FAILED",
+            f"Could not email audit report to {body.recipient_email.strip()}. {err_hint}",
+            502,
+        )
+    return {
+        "status": "sent",
+        "provider": provider,
+        "recipient": body.recipient_email.strip(),
+        "visual_source": built["visual_source"],
     }
 
 

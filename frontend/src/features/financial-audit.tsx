@@ -2,6 +2,14 @@ import { useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { api, keys, queryClient, result } from "../api/runtime";
 import {
+  ChartErrorBoundary,
+  GrafanaEmbedBanner,
+  GrafanaIframePanel,
+  type GrafanaStatusInfo,
+  HorizontalBarBreakdown,
+  VisualExportBar,
+} from "../components/report-charts";
+import {
   Badge,
   Button,
   Empty,
@@ -15,6 +23,17 @@ import {
   humanize,
 } from "../components/ui";
 import { useBusiness } from "./context";
+
+function triggerAuditDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
 
 type ManualMode = "monthly" | "yearly" | "emergency";
 
@@ -78,6 +97,8 @@ export function FinancialAudit() {
   const [cursor, setCursor] = useState<string | undefined>();
   const [filterMode, setFilterMode] = useState<string>("");
   const [selectedAuditId, setSelectedAuditId] = useState<string | undefined>();
+  const [showLiveGrafana, setShowLiveGrafana] = useState(false);
+  const [emailNotice, setEmailNotice] = useState("");
 
   const runsQuery = useQuery({
     queryKey: [...keys.business(b.id), "financial-audits", filterMode, cursor],
@@ -162,6 +183,68 @@ export function FinancialAudit() {
   });
 
   const activeReport = runAudit.data ?? detailQuery.data;
+
+  const auditVisualsQuery = useQuery({
+    queryKey: [
+      ...keys.business(b.id),
+      "financial-audit-visuals",
+      activeReport?.id,
+      filterMode,
+    ],
+    enabled: Boolean(activeReport?.id),
+    retry: false,
+    queryFn: ({ signal }) =>
+      result(
+        api.GET("/api/v1/businesses/{business_id}/audits/visuals", {
+          signal,
+          params: {
+            path,
+            query: {
+              audit_id: activeReport?.id,
+              audit_type: filterMode || "all",
+            },
+          },
+        }),
+      ),
+  });
+
+  const downloadAuditMutation = useMutation({
+    mutationFn: async (fmt: "pdf" | "html") => {
+      if (!activeReport) return;
+      const res = await api.GET(
+        "/api/v1/businesses/{business_id}/audits/{audit_id}/export",
+        {
+          params: {
+            path: { business_id: b.id, audit_id: activeReport.id },
+            query: { format: fmt, theme: "light" },
+          },
+          parseAs: "blob",
+        },
+      );
+      if (!res.response.ok || !res.data) {
+        throw new Error("Could not export audit report.");
+      }
+      triggerAuditDownload(
+        res.data as Blob,
+        `financial-audit-${activeReport.period_end}.${fmt}`,
+      );
+    },
+  });
+
+  const emailAuditMutation = useMutation({
+    mutationFn: (recipientEmail: string) =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/audits/{audit_id}/email", {
+          params: {
+            path: { business_id: b.id, audit_id: activeReport!.id },
+          },
+          body: { recipient_email: recipientEmail, theme: "light" },
+        }),
+      ),
+    onSuccess: (_res, recipientEmail) => {
+      setEmailNotice(`Visual audit report sent to ${recipientEmail}.`);
+    },
+  });
 
   return (
     <>
@@ -403,6 +486,194 @@ export function FinancialAudit() {
               </strong>
             </div>
           </div>
+
+          <ChartErrorBoundary>
+            {(() => {
+              const rawVis = auditVisualsQuery.data as
+                Record<string, unknown> | undefined;
+              const grafanaInfo =
+                rawVis &&
+                typeof rawVis.grafana === "object" &&
+                rawVis.grafana !== null
+                  ? (rawVis.grafana as GrafanaStatusInfo)
+                  : undefined;
+              const embedUrls = grafanaInfo?.embed_urls || {};
+              const exportBase = `/api/v1/businesses/${b.id}/audits/${activeReport.id}/export`;
+
+              const rawSev = rawVis?.by_severity ?? rawVis?.severity_bars;
+              const sevBars = Array.isArray(rawSev)
+                ? (
+                    rawSev as Array<{
+                      severity: string;
+                      count: number;
+                    }>
+                  ).map((s) => ({
+                    label: s.severity,
+                    value: s.count,
+                    tone:
+                      s.severity === "Critical"
+                        ? ("danger" as const)
+                        : s.severity === "High" || s.severity === "Medium"
+                          ? ("warn" as const)
+                          : ("good" as const),
+                  }))
+                : [
+                    {
+                      label: "Critical",
+                      value: activeReport.severity_summary.critical,
+                      tone: "danger" as const,
+                    },
+                    {
+                      label: "High",
+                      value: activeReport.severity_summary.high,
+                      tone: "warn" as const,
+                    },
+                    {
+                      label: "Medium",
+                      value: activeReport.severity_summary.medium,
+                      tone: "warn" as const,
+                    },
+                    {
+                      label: "Low",
+                      value: activeReport.severity_summary.low,
+                      tone: "good" as const,
+                    },
+                  ];
+
+              const catCounts: Record<string, number> = {};
+              for (const f of activeReport.findings || []) {
+                const key = humanize(f.category);
+                catCounts[key] = (catCounts[key] || 0) + 1;
+              }
+              const rawCat = rawVis?.by_category ?? rawVis?.category_bars;
+              const catBars = Array.isArray(rawCat)
+                ? (
+                    rawCat as Array<{
+                      category: string;
+                      count: number;
+                    }>
+                  ).map((c) => ({
+                    label: c.category,
+                    value: c.count,
+                  }))
+                : Object.entries(catCounts).map(([label, value]) => ({
+                    label,
+                    value,
+                  }));
+
+              const rawTimeline = rawVis?.issues_over_time ?? rawVis?.timeline;
+              const timelineBars = Array.isArray(rawTimeline)
+                ? (
+                    rawTimeline as Array<{
+                      period_label?: string;
+                      period_end?: string;
+                      audit_type: string;
+                      total: number;
+                      critical: number;
+                    }>
+                  ).map((t) => ({
+                    label: `${t.period_label || t.period_end} (${MODE_LABELS[t.audit_type] || humanize(t.audit_type)})`,
+                    value: t.total,
+                    tone: t.critical > 0 ? ("danger" as const) : undefined,
+                  }))
+                : (runsQuery.data?.items || []).slice(0, 8).map((r) => ({
+                    label: `${r.period_end} (${MODE_LABELS[r.audit_type] || humanize(r.audit_type)})`,
+                    value: r.severity_summary.total,
+                    tone:
+                      r.severity_summary.critical > 0
+                        ? ("danger" as const)
+                        : undefined,
+                  }));
+
+              return (
+                <div
+                  className="visual-report-block"
+                  style={{ marginTop: "1rem" }}
+                >
+                  <GrafanaEmbedBanner
+                    grafana={grafanaInfo}
+                    showLiveGrafana={showLiveGrafana}
+                    onToggleLiveGrafana={setShowLiveGrafana}
+                  />
+                  <VisualExportBar
+                    downloadPdfUrl={`${exportBase}?format=pdf`}
+                    downloadHtmlUrl={`${exportBase}?format=html`}
+                    onDownloadPdf={() => downloadAuditMutation.mutate("pdf")}
+                    onDownloadHtml={() => downloadAuditMutation.mutate("html")}
+                    downloadBusy={downloadAuditMutation.isPending}
+                    onSendEmail={(addr) => {
+                      setEmailNotice("");
+                      emailAuditMutation.mutate(addr);
+                    }}
+                    emailBusy={emailAuditMutation.isPending}
+                    emailNotice={emailNotice}
+                  />
+                  <ErrorNotice error={emailAuditMutation.error} />
+                  <div className="visual-grid">
+                    {showLiveGrafana && embedUrls["5"] ? (
+                      <GrafanaIframePanel
+                        title="Audit issues by severity"
+                        src={embedUrls["5"]}
+                        fallback={
+                          <HorizontalBarBreakdown
+                            title="Audit issues by severity"
+                            items={sevBars}
+                            isCount
+                          />
+                        }
+                      />
+                    ) : (
+                      <HorizontalBarBreakdown
+                        title="Audit issues by severity"
+                        items={sevBars}
+                        isCount
+                      />
+                    )}
+                    {showLiveGrafana && embedUrls["6"] ? (
+                      <GrafanaIframePanel
+                        title="Issues by category"
+                        src={embedUrls["6"]}
+                        fallback={
+                          <HorizontalBarBreakdown
+                            title="Issues by category"
+                            items={catBars.length > 0 ? catBars : []}
+                            isCount={catBars.length > 0}
+                            emptyText="No issues found for this period"
+                          />
+                        }
+                      />
+                    ) : (
+                      <HorizontalBarBreakdown
+                        title="Issues by category"
+                        items={catBars.length > 0 ? catBars : []}
+                        isCount={catBars.length > 0}
+                        emptyText="No issues found for this period"
+                      />
+                    )}
+                    {showLiveGrafana && embedUrls["7"] ? (
+                      <GrafanaIframePanel
+                        title="Audit issues over time"
+                        src={embedUrls["7"]}
+                        fallback={
+                          <HorizontalBarBreakdown
+                            title="Audit issues over time"
+                            items={timelineBars}
+                            isCount
+                          />
+                        }
+                      />
+                    ) : (
+                      <HorizontalBarBreakdown
+                        title="Audit issues over time"
+                        items={timelineBars}
+                        isCount
+                      />
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+          </ChartErrorBoundary>
 
           <div style={{ marginTop: "1rem" }}>
             <h3>Executive summary</h3>

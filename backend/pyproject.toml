@@ -27,6 +27,8 @@ dependencies = [
     "celery>=5.7.0",
     "langgraph>=0.2.60",
     "langchain-core>=0.3.30",
+    "matplotlib>=3.11.2",
+    "reportlab>=5.1.2",
 ]
 
 [dependency-groups]
@@ -62,6 +64,10 @@ mypy_path = "src"
 packages = ["ledgerpilot"]
 strict = true
 plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = ["reportlab.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 # Avoid expanded argument dumps containing connection credentials on failures.

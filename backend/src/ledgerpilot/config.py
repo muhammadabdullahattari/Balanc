@@ -136,6 +136,13 @@ class Settings(BaseSettings):
     ocr_enabled: bool = False
     ocr_service_url: str = "http://127.0.0.1:8071/extract"
     ocr_service_token: SecretStr | None = None
+    grafana_url: str = ""
+    grafana_public_url: str = ""
+    grafana_api_token: SecretStr | None = None
+    grafana_default_theme: Literal["light", "dark"] = "light"
+    grafana_embed_enabled: bool = False
+    grafana_render_timeout_seconds: float = Field(default=6.0, ge=1.0, le=30.0)
+    grafana_render_cache_ttl_seconds: int = Field(default=60, ge=0, le=3600)
     google_client_id: str | None = Field(
         default=None, pattern=r"^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$"
     )

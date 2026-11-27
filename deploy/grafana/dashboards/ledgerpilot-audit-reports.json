@@ -1,0 +1,337 @@
+{
+  "annotations": { "list": [] },
+  "editable": false,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#1f7a5c", "value": null },
+              { "color": "#b86b2b", "value": 1 },
+              { "color": "#b3353e", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 0 },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^total_count$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(total_count, 0) AS total_count FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type') ORDER BY run_time DESC LIMIT 1;",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Audit Findings",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#1f7a5c", "value": null },
+              { "color": "#b3353e", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 0 },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^critical_count$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(critical_count, 0) AS critical_count FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type') ORDER BY run_time DESC LIMIT 1;",
+          "refId": "A"
+        }
+      ],
+      "title": "Critical Audit Issues",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "decimals": 0,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "#1f7a5c", "value": null },
+              { "color": "#b86b2b", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 0 },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^high_count$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT coalesce(high_count, 0) AS high_count FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type') ORDER BY run_time DESC LIMIT 1;",
+          "refId": "A"
+        }
+      ],
+      "title": "High-Priority Issues",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#274b7a", "mode": "fixed" },
+          "decimals": 0,
+          "noValue": "0"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 0 },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "/^runs_checked$/", "values": false }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*)::integer AS runs_checked FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type');",
+          "refId": "A"
+        }
+      ],
+      "title": "Audits Completed in Period",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "decimals": 0,
+          "min": 0,
+          "noValue": "No audit findings for this period"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Critical" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#b3353e", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "High" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#b86b2b", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Medium" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#4c638a", "mode": "fixed" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Low" },
+            "properties": [{ "id": "color", "value": { "fixedColor": "#1f7a5c", "mode": "fixed" } }]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 4 },
+      "id": 5,
+      "options": {
+        "barWidth": 0.65,
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "orientation": "vertical",
+        "showValue": "always",
+        "xField": "severity_level"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH latest AS (SELECT * FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type') ORDER BY run_time DESC LIMIT 1) SELECT 'Critical' AS severity_level, coalesce((SELECT critical_count FROM latest), 0) AS findings UNION ALL SELECT 'High', coalesce((SELECT high_count FROM latest), 0) UNION ALL SELECT 'Medium', coalesce((SELECT medium_count FROM latest), 0) UNION ALL SELECT 'Low', coalesce((SELECT low_count FROM latest), 0);",
+          "refId": "A"
+        }
+      ],
+      "title": "Audit Findings by Severity",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "fixedColor": "#274b7a", "mode": "fixed" },
+          "decimals": 0,
+          "min": 0,
+          "noValue": "No audit findings for this period"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 4 },
+      "id": 6,
+      "options": {
+        "barWidth": 0.68,
+        "legend": { "displayMode": "hidden", "placement": "bottom", "showLegend": false },
+        "orientation": "horizontal",
+        "showValue": "always",
+        "xField": "category"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH latest_run AS (SELECT findings FROM app.financial_audit_runs WHERE business_id = '$business_id'::uuid AND period_end >= $__timeFrom()::date AND period_start <= $__timeTo()::date AND ('$audit_type' = 'all' OR audit_type = '$audit_type') ORDER BY created_at DESC LIMIT 1) SELECT coalesce(f->>'category', 'general') AS category, count(*)::integer AS issue_count FROM latest_run, jsonb_array_elements(latest_run.findings) AS f GROUP BY 1 ORDER BY 2 DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Audit Findings by Category",
+      "type": "barchart"
+    },
+    {
+      "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": { "drawStyle": "bars", "fillOpacity": 85 },
+          "decimals": 0,
+          "min": 0,
+          "noValue": "No audit history in this period"
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "critical_count" },
+            "properties": [
+              { "id": "displayName", "value": "Critical" },
+              { "id": "color", "value": { "fixedColor": "#b3353e", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "high_count" },
+            "properties": [
+              { "id": "displayName", "value": "High" },
+              { "id": "color", "value": { "fixedColor": "#b86b2b", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "medium_count" },
+            "properties": [
+              { "id": "displayName", "value": "Medium" },
+              { "id": "color", "value": { "fixedColor": "#4c638a", "mode": "fixed" } }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "low_count" },
+            "properties": [
+              { "id": "displayName", "value": "Low" },
+              { "id": "color", "value": { "fixedColor": "#1f7a5c", "mode": "fixed" } }
+            ]
+          }
+        ]
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 12 },
+      "id": 7,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT run_time AS \"time\", critical_count, high_count, medium_count, low_count FROM app.grafana_audit_series('$business_id'::uuid, $__timeFrom()::date, $__timeTo()::date, '$audit_type');",
+          "refId": "A"
+        }
+      ],
+      "title": "Audit Issues Over Time ($audit_type)",
+      "type": "timeseries"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": ["ledgerpilot", "financial-audit"],
+  "templating": {
+    "list": [
+      {
+        "datasource": { "type": "postgres", "uid": "ledgerpilot-postgres-ro" },
+        "definition": "SELECT id::text AS __value, name AS __text FROM app.grafana_businesses();",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Workspace",
+        "multi": false,
+        "name": "business_id",
+        "options": [],
+        "query": "SELECT id::text AS __value, name AS __text FROM app.grafana_businesses();",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": { "selected": true, "text": "all", "value": "all" },
+        "hide": 0,
+        "includeAll": false,
+        "label": "Audit Type",
+        "multi": false,
+        "name": "audit_type",
+        "options": [
+          { "selected": true, "text": "all", "value": "all" },
+          { "selected": false, "text": "monthly", "value": "monthly" },
+          { "selected": false, "text": "yearly", "value": "yearly" },
+          { "selected": false, "text": "emergency", "value": "emergency" },
+          { "selected": false, "text": "auto_balance_sheet", "value": "auto_balance_sheet" },
+          { "selected": false, "text": "auto_period_close", "value": "auto_period_close" }
+        ],
+        "query": "all,monthly,yearly,emergency,auto_balance_sheet,auto_period_close",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": { "from": "now-1y", "to": "now" },
+  "timezone": "browser",
+  "title": "LedgerPilot Financial Audit Reports",
+  "uid": "lp-audit-reports",
+  "version": 1
+}
