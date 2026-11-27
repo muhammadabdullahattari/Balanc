@@ -180,6 +180,7 @@ def prepare(
         )
     )
     record(db, identity.user.id, "close.package_prepared", business_id, identifier)
+    db.flush()
     from ledgerpilot.audit.triggers import trigger_auto_audit
 
     trigger_auto_audit(

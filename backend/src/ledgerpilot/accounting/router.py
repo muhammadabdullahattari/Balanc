@@ -233,6 +233,12 @@ def lock_period(
         business_id,
         period.id,
     )
+    db.flush()
+    response_payload: dict[str, object] = {
+        "id": str(period.id),
+        "locked": period.locked,
+        "version": period.version,
+    }
     if data.locked:
         from ledgerpilot.audit.triggers import trigger_auto_audit
 
@@ -246,7 +252,7 @@ def lock_period(
             end_date=period.end_date,
             trigger_resource_id=str(period.id),
         )
-    return {"id": str(period.id), "locked": period.locked, "version": period.version}
+    return response_payload
 
 
 @router.post("/journals", status_code=201, response_model=Identifier)
