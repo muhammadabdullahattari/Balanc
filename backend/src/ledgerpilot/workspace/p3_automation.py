@@ -3032,9 +3032,11 @@ def approve_and_execute_supplier_payment(
             SELECT id, bill_id, bill_reference, supplier_name, beneficiary_id,
                    beneficiary_version, beneficiary_fingerprint, amount, currency,
                    rail, idempotency_key, state, requires_dual_approval,
-                   prepared_by, first_approved_by, provider_reference, remittance_advice
+                   prepared_by, first_approved_by, provider_reference, remittance_advice,
+                   execution_lease_token, lease_expires_at
             FROM app.supplier_payment_executions
             WHERE business_id = :bid AND id = :pid
+            FOR UPDATE
             """
             ),
             {"bid": business_id, "pid": payment_id},
@@ -3045,14 +3047,25 @@ def approve_and_execute_supplier_payment(
     if not pay:
         raise DomainError("ERR_NOT_FOUND", "Supplier payment draft not found.", 404)
 
-    if pay["state"] == "settled_posted":
+    if pay["state"] in {"settled_posted", "settled_unposted"}:
         return {
             "id": str(payment_id),
             "idempotent_replay": True,
-            "state": "settled_posted",
+            "state": pay["state"],
             "provider_reference": pay["provider_reference"],
             "remittance_advice": pay["remittance_advice"],
         }
+
+    if (
+        pay["state"] == "executing"
+        and pay.get("lease_expires_at") is not None
+        and pay["lease_expires_at"] > datetime.now(UTC)
+    ):
+        raise DomainError(
+            "ERR_CONFLICT",
+            "This supplier payment is currently executing under an active lease; do not send twice.",
+            409,
+        )
 
     if pay["state"] == "invalidated":
         raise DomainError(
@@ -3210,6 +3223,21 @@ def approve_and_execute_supplier_payment(
     curr = pay["currency"]
     rail = pay["rail"]
 
+    lease_token = f"lease-{payment_id}-{uuid4().hex[:12]}"
+    db.execute(
+        text(
+            """
+            UPDATE app.supplier_payment_executions
+            SET state = 'executing',
+                execution_lease_token = :ltok,
+                lease_expires_at = clock_timestamp() + interval '5 minutes'
+            WHERE business_id = :bid AND id = :pid
+            """
+        ),
+        {"ltok": lease_token, "bid": business_id, "pid": payment_id},
+    )
+    db.flush()
+
     if rail == "stripe_live":
         provider_ref, provider_payload = _execute_live_stripe_supplier_settlement(
             settings=settings,
@@ -3221,22 +3249,24 @@ def approve_and_execute_supplier_payment(
             idempotency_key=pay["idempotency_key"],
         )
     elif rail == "ach_nacha":
-        provider_ref = f"ACH-NACHA-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        provider_ref = f"ACH-FILE-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
         provider_payload = {
-            "mode": "ach_nacha_settlement",
+            "mode": "ach_nacha_file_export",
+            "delivery_mode": "file_export_only_not_transmitted",
+            "lease_token": lease_token,
             "routing": ben["routing_or_swift"],
             "account_masked": ben["account_number_masked"],
-            "status": "settled",
+            "status": "export_prepared",
         }
     else:
-        provider_ref = (
-            f"SWIFT-MT103-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
-        )
+        provider_ref = f"WIRE-FILE-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
         provider_payload = {
-            "mode": "swift_mt103_wire",
+            "mode": "wire_instruction_export",
+            "delivery_mode": "file_export_only_not_transmitted",
+            "lease_token": lease_token,
             "swift_bic": ben["routing_or_swift"],
             "account_masked": ben["account_number_masked"],
-            "status": "settled",
+            "status": "export_prepared",
         }
 
     remittance = _build_remittance_advice(
@@ -3390,11 +3420,12 @@ def approve_and_execute_supplier_payment(
     except Exception:
         settlement_journal_id = None
 
+    final_state = "settled_posted" if settlement_journal_id is not None else "settled_unposted"
     db.execute(
         text(
             """
             UPDATE app.supplier_payment_executions
-            SET state = 'settled_posted',
+            SET state = :fstate,
                 final_approved_by = :actor,
                 step_up_verified = true,
                 step_up_method = 'totp_step_up_verified',
@@ -3403,11 +3434,13 @@ def approve_and_execute_supplier_payment(
                 remittance_advice = :remit,
                 bill_id = COALESCE(:lbid, bill_id),
                 settlement_journal_id = COALESCE(:sjid, settlement_journal_id),
+                lease_expires_at = NULL,
                 executed_at = clock_timestamp()
             WHERE business_id = :bid AND id = :pid
             """
         ),
         {
+            "fstate": final_state,
             "actor": _actor_id(user),
             "pref": provider_ref,
             "ppayload": json.dumps(provider_payload),
@@ -5121,6 +5154,23 @@ def destroy_tenant_encryption_key(
             422,
         )
 
+    active_holds = int(
+        db.execute(
+            text(
+                "SELECT count(*) FROM app.legal_holds "
+                "WHERE business_id = :bid AND released_at IS NULL"
+            ),
+            {"bid": business_id},
+        ).scalar_one()
+        or 0
+    )
+    if active_holds > 0:
+        raise DomainError(
+            "ERR_LEGAL_HOLD",
+            "An active legal hold blocks cryptographic key destruction for this workspace.",
+            409,
+        )
+
     _ensure_initial_tenant_dek(db, settings, business_id, _actor_id(user))
     active = (
         db.execute(
@@ -5146,9 +5196,19 @@ def destroy_tenant_encryption_key(
         )
 
     now_iso = datetime.now(UTC).isoformat()
-    cert_hash = hashlib.sha256(
-        f"CRYPTO-SHRED:{business_id}:v{active['key_version']}:{active['dek_fingerprint_sha256']}:{_actor_id(user)}:{now_iso}:{payload.reason.strip()}".encode()
-    ).hexdigest()
+    cert_body = (
+        f"CRYPTO-SHRED:{business_id}:v{active['key_version']}:"
+        f"{active['dek_fingerprint_sha256']}:{_actor_id(user)}:{now_iso}:{payload.reason.strip()}"
+    ).encode()
+    cert_hash = hashlib.sha256(cert_body).hexdigest()
+    cert_sig_hex = ""
+    if settings.export_signing_private_key is not None:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+        priv = Ed25519PrivateKey.from_private_bytes(
+            bytes.fromhex(settings.export_signing_private_key.get_secret_value())
+        )
+        cert_sig_hex = priv.sign(cert_body).hex()
 
     shredded_portals = len(
         db.execute(
@@ -5230,6 +5290,8 @@ def destroy_tenant_encryption_key(
         "provably_unrecoverable": True,
         "shredded_records_count": int(shredded_portals + shredded_ded_channels + shredded_channels),
         "destruction_certificate_sha256": cert_hash,
+        "destruction_signature_hex": cert_sig_hex,
+        "legal_hold_checked": True,
         "destroyed_at": now_iso,
     }
 
@@ -5284,9 +5346,13 @@ def list_ai_ocr_and_cost_benchmarks(
         .mappings()
         .all()
     )
+    from ledgerpilot.ai.cost_ledger import summarize_business_page_costs
+
+    live_cost = summarize_business_page_costs(db, business_id)
     return {
         "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
         "is_simulated_baseline": True,
+        "live_cost_ledger": live_cost,
         "summary": {
             "provenance_mode": "SIMULATED_SYNTHETIC_FIXTURE",
             "is_simulated_baseline": True,
@@ -6479,7 +6545,10 @@ def list_p4_bulk_ingestion_batches(
         .mappings()
         .all()
     )
+    from ledgerpilot.documents.fair_share_queue import queue_depth_summary
+
     total_admitted = sum(int(r["total_pages"]) for r in rows if r["status"] != "cancelled")
+    q_depths = queue_depth_summary(db, business_id)
     return {
         "cell_telemetry": {
             "live_lane_status": "ISOLATED_HEALTHY",
@@ -6489,6 +6558,7 @@ def list_p4_bulk_ingestion_batches(
             "foreground_p95_slo_ms": 120.0,
             "observed_foreground_p95_ms": 42.5,
             "total_pages_processed_workspace": total_admitted,
+            **q_depths,
         },
         "batches": [
             {
@@ -6578,6 +6648,32 @@ def submit_p4_bulk_ingestion_batch(
             "actor": _actor_id(user),
         },
     )
+    from ledgerpilot.documents.fair_share_queue import (
+        LaneKind,
+        complete_leased_job,
+        enqueue_ingestion_job,
+        lease_next_fair_share_job,
+    )
+
+    queue_lane: LaneKind = "live" if payload.worker_lane == "live_priority" else "bulk"
+    q_job_id = enqueue_ingestion_job(
+        db,
+        business_id=business_id,
+        lane=queue_lane,
+        page_count=min(payload.total_pages, 500_000),
+        batch_id=bid_batch,
+        payload={"batch_reference": payload.batch_reference.strip()},
+    )
+    if batch_status == "completed":
+        leased = lease_next_fair_share_job(
+            db,
+            business_id=business_id,
+            prefer_lane=queue_lane,
+            max_bulk_inflight_per_tenant=effective_slots,
+        )
+        if leased and leased["id"] == str(q_job_id):
+            complete_leased_job(db, business_id=business_id, job_id=q_job_id)
+
     _record_p3_audit(
         db,
         actor_user_id=_actor_id(user),
@@ -6754,6 +6850,9 @@ def run_p4_regional_dr_drill(
             422,
         )
 
+    import time
+
+    drill_t0 = time.perf_counter()
     max_fence = int(
         db.execute(
             text(
@@ -6772,18 +6871,20 @@ def run_p4_regional_dr_drill(
         ).scalar_one()
         or 0
     )
-    ev_cnt = 0
-    try:
-        with db.begin_nested():
-            ev_cnt = int(
-                db.execute(
-                    text("SELECT count(*) FROM app.evidence_files WHERE business_id = :bid"),
-                    {"bid": business_id},
-                ).scalar_one()
-                or 0
-            )
-    except Exception:
-        ev_cnt = 0
+    ev_row = (
+        db.execute(
+            text(
+                "SELECT count(*) AS cnt, "
+                "coalesce(string_agg(content_hash, ',' ORDER BY id), '') AS hashes "
+                "FROM app.evidence WHERE business_id = :bid"
+            ),
+            {"bid": business_id},
+        )
+        .mappings()
+        .one()
+    )
+    ev_cnt = int(ev_row["cnt"] or 0)
+    ev_hashes = str(ev_row["hashes"] or "")
 
     debits, credits, _ = _compute_ledger_trial_totals(db, business_id)
     active_cell = (
@@ -6799,8 +6900,9 @@ def run_p4_regional_dr_drill(
         )
     )
     digest = hashlib.sha256(
-        f"P4C-DR:{business_id}:fence_{next_fence}:{active_cell}:journals_{journal_cnt}:ev_{ev_cnt}:dr_{debits}:cr_{credits}".encode()
+        f"P4C-DR:{business_id}:fence_{next_fence}:{active_cell}:journals_{journal_cnt}:ev_{ev_cnt}:{ev_hashes}:dr_{debits}:cr_{credits}".encode()
     ).hexdigest()
+    achieved_rto = max(1, round(time.perf_counter() - drill_t0))
 
     did = uuid4()
     db.execute(
@@ -6814,7 +6916,7 @@ def run_p4_regional_dr_drill(
               consistency_digest_sha256, status, actor
             ) VALUES (
               :id, :bid, :pcell, :scell, :acell, :mode,
-              :fence, true, 14,
+              :fence, true, :rto,
               0, 60, 0,
               :jcnt, :ecnt,
               :digest, :st, :actor
@@ -6829,6 +6931,7 @@ def run_p4_regional_dr_drill(
             "acell": active_cell,
             "mode": payload.drill_mode,
             "fence": next_fence,
+            "rto": achieved_rto,
             "jcnt": journal_cnt,
             "ecnt": ev_cnt,
             "digest": digest,

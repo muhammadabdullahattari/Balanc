@@ -21,6 +21,7 @@ from ledgerpilot.shared.errors import DomainError
 SCAN_DEADLINE_SECONDS = 10.0
 CHUNK_SIZE = 65536
 CHUNKED_MAGIC = b"LPENC1"
+ENVELOPE_MAGIC = b"LPENV1"
 
 logger = logging.getLogger(__name__)
 
@@ -405,3 +406,80 @@ def exists(settings: Settings, key: str) -> bool:
     if settings.evidence_storage_backend == "s3":
         return exists_in_s3(settings, key)
     return False
+
+
+def wrap_tenant_dek(settings: Settings, raw_dek: bytes) -> str:
+    """Wrap a per-tenant Fernet DEK using the master KEK."""
+    return cipher(settings).encrypt(raw_dek).decode("ascii")
+
+
+def unwrap_tenant_dek(settings: Settings, wrapped_dek_ciphertext: str) -> bytes:
+    """Unwrap a per-tenant Fernet DEK; raises ERR_KEY_SHREDDED if destroyed or empty."""
+    if not wrapped_dek_ciphertext or wrapped_dek_ciphertext == "SHREDDED":
+        raise DomainError(
+            "ERR_KEY_SHREDDED",
+            "Tenant encryption key has been destroyed; ciphertext is unrecoverable.",
+            410,
+        )
+    try:
+        return cipher(settings).decrypt(wrapped_dek_ciphertext.encode("ascii"))
+    except InvalidToken:
+        raise DomainError(
+            "ERR_KEY_SHREDDED",
+            "Tenant encryption key could not be unwrapped.",
+            410,
+        ) from None
+
+
+def put_tenant_envelope(
+    settings: Settings,
+    bid: UUID,
+    eid: UUID,
+    content: bytes,
+    wrapped_dek_ciphertext: str,
+    *,
+    region_cell: str | None = None,
+) -> tuple[str, str]:
+    """G2: Encrypt evidence bytes under a tenant-specific DEK (`LPENV1`)."""
+    raw_dek = unwrap_tenant_dek(settings, wrapped_dek_ciphertext)
+    tenant_cipher = Fernet(raw_dek)
+    key = f"cells/{region_cell}/{bid}/{eid}.bin" if region_cell else f"{bid}/{eid}.bin"
+    target = path(settings, key)
+    target.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    digest = hashlib.sha256(content).hexdigest()
+    enc_payload = tenant_cipher.encrypt(content)
+    blob = ENVELOPE_MAGIC + struct.pack("!I", len(enc_payload)) + enc_payload
+    target.write_bytes(blob)
+    if settings.evidence_storage_backend == "s3":
+        upload_to_s3(settings, key, target)
+    return key, digest
+
+
+def get_tenant_envelope(
+    settings: Settings,
+    key: str,
+    wrapped_dek_ciphertext: str,
+    expected_hash: str,
+) -> bytes:
+    """G2: Decrypt a tenant-DEK envelope blob; fails provably once the tenant DEK is shredded."""
+    raw_dek = unwrap_tenant_dek(settings, wrapped_dek_ciphertext)
+    tenant_cipher = Fernet(raw_dek)
+    target = path(settings, key)
+    if not target.exists():
+        raise DomainError("ERR_STORAGE_UNAVAILABLE", "Evidence blob not found.", 503)
+    raw = target.read_bytes()
+    if not raw.startswith(ENVELOPE_MAGIC):
+        raise DomainError("ERR_INTEGRITY", "Invalid tenant envelope header.", 503)
+    (enc_len,) = struct.unpack("!I", raw[len(ENVELOPE_MAGIC) : len(ENVELOPE_MAGIC) + 4])
+    enc_payload = raw[len(ENVELOPE_MAGIC) + 4 : len(ENVELOPE_MAGIC) + 4 + enc_len]
+    try:
+        plain = tenant_cipher.decrypt(enc_payload)
+    except InvalidToken:
+        raise DomainError(
+            "ERR_KEY_SHREDDED",
+            "Tenant DEK mismatch or shredded; ciphertext is cryptographically unrecoverable.",
+            410,
+        ) from None
+    if hashlib.sha256(plain).hexdigest() != expected_hash:
+        raise DomainError("ERR_INTEGRITY", "Evidence integrity check failed.", 503)
+    return plain

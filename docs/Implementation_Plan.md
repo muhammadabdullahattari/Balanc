@@ -491,3 +491,7 @@ Verify package versions and provider terms when implementing:
 ## Implemented-system audit — 5 November 2026
 
 Fresh cross-cutting review recorded in [system audit](system-audit-2026-11-05.md). Its seven findings were subsequently remediated and locally verified under the user's authorization; see [the implementation record](deployment-audit-fixes.md) and [final results](contracts/deployment-audit-results.json). Phase 9 must apply the documented persistent storage/proxy configuration and validate it on the actual host. Production load, off-host restore, penetration testing and Phase 10 manual accessibility/browser checks are not claimed complete.
+
+## Brief Gap Closure (Phases A–H) — 27 November 2026
+
+All 38 work packages (`A1`–`A7`, `B1`–`B5`, `C1`–`C2`, `D1`–`D4`, `E1`–`E7`, `F1`–`F3`, `G1`–`G7`, `H1`–`H3`) from [Brief_Gap_Implementation_Plan.md](Brief_Gap_Implementation_Plan.md) are implemented across schema migrations `0044`–`0045`, backend modules, OpenAPI contracts, React UI routes, evaluation/load/chaos harnesses, and runbook documentation. See [Brief_Gap_Implementation_Plan.md](Brief_Gap_Implementation_Plan.md) for the full package-by-package verification matrix.

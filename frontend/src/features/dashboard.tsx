@@ -60,6 +60,23 @@ export function Dashboard() {
         }),
       ),
   });
+  const executiveSummary = useQuery({
+    queryKey: [...keys.business(b.id), "dashboard-executive-summary", end],
+    retry: false,
+    queryFn: ({ signal }) =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/dashboard/executive-summary",
+          {
+            signal,
+            params: {
+              path: { business_id: b.id },
+              query: { as_of: end },
+            },
+          },
+        ),
+      ),
+  });
   const d = dashboard.data;
   const max = d
     ? Math.max(
@@ -296,6 +313,98 @@ export function Dashboard() {
               </section>
               <WorkspaceShortcuts />
             </div>
+            {(() => {
+              const exec = executiveSummary.data as
+                | {
+                    pending_decisions?: Array<{
+                      key: string;
+                      label: string;
+                      count: number;
+                      route: string;
+                    }>;
+                    due_soon_bills?: Array<{
+                      id: string;
+                      number: string;
+                      due_date: string;
+                      amount_due: string;
+                    }>;
+                    forecast_summary?: {
+                      available?: boolean;
+                      first_shortfall_week?: string | null;
+                      suggestions?: string[];
+                      weeks?: Array<{
+                        week: number;
+                        end_date: string;
+                        p10_cash: string;
+                        p50_cash: string;
+                        p90_cash: string;
+                      }>;
+                    };
+                  }
+                | undefined;
+              if (
+                !exec ||
+                (!Array.isArray(exec.pending_decisions) &&
+                  !exec.forecast_summary?.available)
+              ) {
+                return null;
+              }
+              const decisions = exec.pending_decisions || [];
+              const fc = exec.forecast_summary;
+              const lastWk = fc?.weeks?.[fc.weeks.length - 1];
+              return (
+                <div
+                  className="dashboard-grid"
+                  style={{ marginTop: "1.25rem" }}
+                >
+                  <section className="panel settings-section">
+                    <h2>Needs your decision</h2>
+                    {decisions.length === 0 ? (
+                      <p className="muted">
+                        Everything is caught up — no flagged items are waiting
+                        for human review right now.
+                      </p>
+                    ) : (
+                      <ul>
+                        {decisions.map((item) => (
+                          <li
+                            key={item.key}
+                            style={{ marginBottom: "0.45rem" }}
+                          >
+                            <Link to={item.route}>
+                              <strong>{item.count}</strong> · {item.label}
+                            </Link>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </section>
+                  {fc?.available && (
+                    <section className="panel settings-section">
+                      <h2>13-week cash outlook & suggestions</h2>
+                      {lastWk && (
+                        <p className="muted">
+                          Week {lastWk.week} projected range (estimated from
+                          payment history):{" "}
+                          <strong>{money(lastWk.p10_cash, d.currency)}</strong>{" "}
+                          to{" "}
+                          <strong>{money(lastWk.p90_cash, d.currency)}</strong>{" "}
+                          (median {money(lastWk.p50_cash, d.currency)}).
+                        </p>
+                      )}
+                      {Array.isArray(fc.suggestions) &&
+                        fc.suggestions.length > 0 && (
+                          <ul>
+                            {fc.suggestions.map((s, idx) => (
+                              <li key={idx}>{s}</li>
+                            ))}
+                          </ul>
+                        )}
+                    </section>
+                  )}
+                </div>
+              );
+            })()}
             <p className="report-footnote">
               Loaded{" "}
               {new Date(dashboard.dataUpdatedAt).toLocaleString("en", {

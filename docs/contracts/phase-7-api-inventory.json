@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 301,
-  "distinct_operations": 258,
+  "call_sites": 330,
+  "distinct_operations": 284,
   "operations": [
     {
       "file": "App.tsx",
@@ -509,6 +509,66 @@
       "path": "/api/v1/businesses/{business_id}/micro-close"
     },
     {
+      "file": "features/connectors-and-api.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/connectors"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/developer"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/accounts"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/bank-feeds/{connector_id}/sync"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/accounting/export"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/xero/import"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/ecommerce/{provider}/sync"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/connectors/cloud-drive/{provider}/sync"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/developer/api-keys"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/developer/api-keys/{key_id}/revoke"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/developer/webhooks"
+    },
+    {
+      "file": "features/connectors-and-api.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/developer/webhooks/{endpoint_id}/test"
+    },
+    {
       "file": "features/controlled-posting.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/bank-rules/controlled-posting/control"
@@ -532,6 +592,11 @@
       "file": "features/dashboard.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/dashboard"
+    },
+    {
+      "file": "features/dashboard.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/dashboard/executive-summary"
     },
     {
       "file": "features/directory.tsx",
@@ -752,6 +817,11 @@
       "file": "features/ledger.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/exports/journals.csv"
+    },
+    {
+      "file": "features/ledger.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/exports/evidence-pack.zip"
     },
     {
       "file": "features/ledger.tsx",
@@ -1224,6 +1294,46 @@
       "path": "/api/v1/businesses/{business_id}/projects/billable-drafts"
     },
     {
+      "file": "features/purchase-orders.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/purchase-orders"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/collections"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/purchase-orders"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/purchase-orders/match-bill"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/purchase-orders/matches/{match_id}/decide"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/collections/profile"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/collections/run-ladder"
+    },
+    {
+      "file": "features/purchase-orders.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/collections/tasks/{task_id}/complete"
+    },
+    {
       "file": "features/quickbooks-import.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/quickbooks/preview"
@@ -1247,6 +1357,21 @@
       "file": "features/quickbooks-import.tsx",
       "method": "POST",
       "path": "/api/v1/businesses/{business_id}/quickbooks/connect"
+    },
+    {
+      "file": "features/receipt-capture.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/projects"
+    },
+    {
+      "file": "features/receipt-capture.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/documents/fingerprints"
+    },
+    {
+      "file": "features/receipt-capture.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/documents/ingest"
     },
     {
       "file": "features/reconciliation.tsx",
@@ -1346,6 +1471,11 @@
     {
       "file": "features/reports.tsx",
       "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/reports/drilldown"
+    },
+    {
+      "file": "features/reports.tsx",
+      "method": "GET",
       "path": "/api/v1/businesses/{business_id}/reports/forecast/{report_id}/interval"
     },
     {
@@ -1402,6 +1532,21 @@
       "file": "features/rules.tsx",
       "method": "GET",
       "path": "/api/v1/businesses/{business_id}/accounts"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-rules"
+    },
+    {
+      "file": "features/rules.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions/dismiss"
     },
     {
       "file": "features/rules.tsx",

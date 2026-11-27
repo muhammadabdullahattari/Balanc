@@ -109,9 +109,10 @@ class FoundationMiddleware:
             )
             await response(scope, receive, send)
 
-        signed_webhook = (
-            request.method == "POST"
-            and request.url.path == f"{settings.api_v1_prefix}/billing/stripe/webhook"
+        signed_webhook = request.method == "POST" and (
+            request.url.path == f"{settings.api_v1_prefix}/billing/stripe/webhook"
+            or request.url.path == f"{settings.api_v1_prefix}/webhooks/inbound-email"
+            or request.url.path.startswith("/public/v1/")
         )
         if request.method not in {"GET", "HEAD", "OPTIONS"} and not signed_webhook:
             cookie = request.cookies.get(CSRF_COOKIE, "")

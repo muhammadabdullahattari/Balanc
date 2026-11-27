@@ -46,6 +46,27 @@ def execute(args: list[str], deadline: float) -> str:
 
 
 @lru_cache
+def installed_languages() -> str:
+    configured = os.environ.get("OCR_LANGUAGES", "").strip()
+    if configured:
+        return configured
+    available = ["eng"]
+    for extra in ("urd", "ara", "fra", "deu", "spa"):
+        if list(Path("/usr/share/tesseract-ocr").glob(f"*/tessdata/{extra}.traineddata")):
+            available.append(extra)
+    return "+".join(available)
+
+
+def detect_orientation(image: Path, deadline: float) -> int:
+    try:
+        osd = execute(["tesseract", str(image), "stdout", "--psm", "0"], deadline)
+        m = re.search(r"Rotate:\s*(\d+)", osd)
+        return int(m.group(1)) if m else 0
+    except Exception:
+        return 0
+
+
+@lru_cache
 def version() -> str:
     engine = execute(["tesseract", "--version"], time.monotonic() + 5).splitlines()[0]
     models = list(Path("/usr/share/tesseract-ocr").glob("*/tessdata/eng.traineddata"))
@@ -215,13 +236,16 @@ def parse(content: bytes, media_type: str) -> dict[str, Any]:
             images = sorted(root.glob("page-*.png"), key=lambda p: int(p.stem.split("-")[-1]))
         fields: list[dict[str, Any]] = []
         text = []
+        lang_spec = installed_languages()
+        rotations: list[int] = []
         for page_number, image in enumerate(images, 1):
             if not image_size_allowed(image):
                 return unsupported(
                     "Malformed image or image dimensions outside the 16-megapixel profile."
                 )
+            rotations.append(detect_orientation(image, deadline))
             tsv = execute(
-                ["tesseract", str(image), "stdout", "-l", "eng", "--psm", "3", "tsv"], deadline
+                ["tesseract", str(image), "stdout", "-l", lang_spec, "--psm", "3", "tsv"], deadline
             )
             rows = list(csv.DictReader(io.StringIO(tsv), delimiter="\t"))
             page = next((r for r in rows if r["level"] == "1"), None)
@@ -257,14 +281,13 @@ def parse(content: bytes, media_type: str) -> dict[str, Any]:
                 )
                 text.append(row["text"])
         if not fields:
-            return unsupported(
-                "No readable English text was found; manual review remains available."
-            )
+            return unsupported("No readable text was found; manual review remains available.")
         return {
             "status": "extracted",
             "model_version": version(),
-            "extractor_version": "local-ocr-v1",
-            "language": "eng",
+            "extractor_version": "local-ocr-v2-multilingual",
+            "language": lang_spec,
+            "detected_rotations": rotations,
             "confidence_kind": "uncalibrated_ocr_score",
             "raw_text": " ".join(text)[:200000],
             "fields": fields,

@@ -813,22 +813,43 @@ def export_key(business_id: UUID, request: Request, identity: Identity, db: DB) 
 )
 def evidence_pack(
     business_id: UUID,
-    start: date,
-    end: date,
     request: Request,
     identity: Identity,
     db: DB,
+    start: date | None = None,
+    end: date | None = None,
+    quarter: str | None = Query(default=None, pattern=r"^\d{4}-Q[1-4]$"),
+    full_quarter: bool = False,
 ) -> Response:
-    from ledgerpilot.workspace.exports import pack
+    from ledgerpilot.workspace.exports import pack, quarter_bounds
 
     authorize(db, identity, business_id)
-    body = pack(db, request.app.state.settings, business_id, start, end, identity)
+    if quarter is not None:
+        resolved_start, resolved_end = quarter_bounds(quarter)
+        is_full_quarter = True
+    elif start is not None and end is not None:
+        resolved_start, resolved_end = start, end
+        is_full_quarter = full_quarter
+    else:
+        raise DomainError("ERR_VALIDATION", "Provide either start and end dates or a quarter.", 422)
+
+    body = pack(
+        db,
+        request.app.state.settings,
+        business_id,
+        resolved_start,
+        resolved_end,
+        identity,
+        full_quarter=is_full_quarter,
+        quarter=quarter,
+    )
     record(db, identity.user.id, "export.evidence_pack", business_id)
+    fname = f"ledgerpilot-auditor-pack-{quarter}.zip" if quarter else "ledgerpilot-evidence.zip"
     return Response(
         body,
         media_type="application/zip",
         headers={
-            "Content-Disposition": 'attachment; filename="ledgerpilot-evidence.zip"',
+            "Content-Disposition": f'attachment; filename="{fname}"',
             "Cache-Control": "no-store",
         },
     )

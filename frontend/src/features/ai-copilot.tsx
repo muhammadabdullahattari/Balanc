@@ -791,6 +791,7 @@ export function AICopilotHub({
             precision_score: datasetPrecision,
             recall_score: datasetRecall,
             citation_validity_rate: datasetCitationRate,
+            run_live_harness: false,
             notes: "Quality check",
           },
         }),

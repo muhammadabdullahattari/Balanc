@@ -45,6 +45,131 @@ def correction_suggestions(business_id: UUID, identity: Identity, db: DB) -> dic
     return correction_rules(db, business_id)
 
 
+@router.post("/bank-rules/correction-suggestions/dismiss", status_code=200)
+def dismiss_correction_suggestion(
+    business_id: UUID,
+    body: dict[str, str],
+    identity: Identity,
+    db: DB,
+) -> dict[str, str]:
+    from uuid import uuid4
+
+    from sqlalchemy import text
+
+    authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper"})
+    descriptor = str(body.get("descriptor") or "").strip()
+    account_id_raw = str(body.get("account_id") or "").strip()
+    if not descriptor or not account_id_raw:
+        raise DomainError("ERR_VALIDATION", "Provide both descriptor and account_id.", 422)
+    acc_uuid = UUID(account_id_raw)
+    db.execute(
+        text(
+            """
+            INSERT INTO app.dismissed_rule_suggestions (
+              id, business_id, descriptor, account_id, dismissed_by
+            ) VALUES (:id, :bid, :desc, :aid, :uid)
+            ON CONFLICT (business_id, descriptor, account_id) DO NOTHING
+            """
+        ),
+        {
+            "id": uuid4(),
+            "bid": business_id,
+            "desc": descriptor,
+            "aid": acc_uuid,
+            "uid": identity.user.id,
+        },
+    )
+    record(db, identity.user.id, "bank_rule.suggestion_dismissed", business_id, acc_uuid)
+    return {"status": "dismissed", "descriptor": descriptor, "account_id": str(acc_uuid)}
+
+
+@router.post("/banking/match-proposals")
+def propose_bank_matches(
+    business_id: UUID,
+    body: dict[str, Any],
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """Propose 1..5 invoice/bill bundle, fee, FX, or partial matches for a bank movement."""
+    from sqlalchemy import text
+
+    from ledgerpilot.banking.matching import MatchCandidateDoc, find_best_document_match
+
+    authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper", "reviewer"})
+    biz = get_business(db, business_id)
+    stmt_amt = Decimal(str(body.get("amount") or "0"))
+    stmt_ccy = str(body.get("currency") or biz.currency).upper()
+
+    raw_candidates = body.get("open_documents")
+    candidates: list[MatchCandidateDoc] = []
+    if isinstance(raw_candidates, list):
+        for item in raw_candidates:
+            if isinstance(item, dict):
+                candidates.append(
+                    MatchCandidateDoc(
+                        document_id=str(item.get("document_id") or item.get("id") or ""),
+                        number=str(item.get("number") or ""),
+                        kind=str(item.get("kind") or "invoice"),
+                        outstanding=Decimal(str(item.get("outstanding") or "0")),
+                        currency=str(item.get("currency") or biz.currency),
+                        due_date=str(item.get("due_date") or ""),
+                    )
+                )
+    else:
+        rows = db.execute(
+            text(
+                """
+                SELECT td.id, td.number, td.kind, td.due_date, td.currency,
+                       td.total - coalesce((
+                         SELECT sum(al.amount) FROM app.allocations al
+                         WHERE al.business_id = td.business_id AND al.document_id = td.id
+                       ), 0) AS outstanding
+                FROM app.trade_documents td
+                WHERE td.business_id = :bid
+                  AND td.kind IN ('invoice', 'bill')
+                ORDER BY td.due_date ASC NULLS LAST, td.number ASC
+                LIMIT 60
+                """
+            ),
+            {"bid": business_id},
+        ).mappings()
+        for r in rows:
+            out_val = Decimal(str(r["outstanding"]))
+            if out_val > Decimal("0"):
+                candidates.append(
+                    MatchCandidateDoc(
+                        document_id=str(r["id"]),
+                        number=str(r["number"]),
+                        kind=str(r["kind"]),
+                        outstanding=out_val,
+                        currency=str(r["currency"] or biz.currency),
+                        due_date=str(r["due_date"] or ""),
+                    )
+                )
+
+    raw_rates = body.get("fx_rates") or {}
+    fx_rates = {str(k).upper(): Decimal(str(v)) for k, v in raw_rates.items()}
+    proposal = find_best_document_match(
+        stmt_amt, candidates, statement_currency=stmt_ccy, fx_rates=fx_rates
+    )
+    if proposal is None:
+        return {"matched": False, "proposal": None}
+    return {
+        "matched": True,
+        "proposal": {
+            "match_kind": proposal.match_kind,
+            "components": proposal.components,
+            "allocated_total": f"{proposal.allocated_total:.2f}",
+            "fee_amount": f"{proposal.fee_amount:.2f}",
+            "fx_gain_loss": f"{proposal.fx_gain_loss:.2f}",
+            "residual": f"{proposal.residual:.2f}",
+            "confidence": str(proposal.confidence),
+            "explanation": proposal.explanation,
+            "proposed_allocation": proposal.proposed_allocation,
+        },
+    }
+
+
 @router.post(
     "/bank-transactions/{row_id}/reclassifications",
     status_code=201,

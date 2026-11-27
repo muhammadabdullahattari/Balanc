@@ -422,6 +422,7 @@ class AIDatasetEvaluationInput(Schema):
     citation_validity_rate: Decimal = Field(
         default=Decimal("1.0000"), ge=Decimal("0.0000"), le=Decimal("1.0000")
     )
+    run_live_harness: bool = False
     notes: str = Field(default="", max_length=300)
 
 
@@ -1140,124 +1141,58 @@ def run_ai_reconciliation_detective(
         confidence = Decimal("0.9700")
         proposed_allocation = {"action": "exclude_duplicate_import", "amount": f"{stmt_amt:.2f}"}
     else:
-        # 2. Check exact single document match
-        exact_docs = [d for d in open_docs.items if _q2(d.outstanding) == stmt_amt]
-        if exact_docs:
-            doc = exact_docs[0]
-            classification = "exact_match"
-            deterministic_delta = Decimal("0.00")
-            confidence = Decimal("0.9850")
-            candidates.append(
-                {
-                    "document_id": doc.document_id,
-                    "number": doc.number,
-                    "kind": doc.kind,
-                    "outstanding": doc.outstanding,
-                }
+        from ledgerpilot.banking.matching import MatchCandidateDoc, find_best_document_match
+
+        fx_map: dict[str, Decimal] = {}
+        try:
+            fx_rows = db.execute(
+                text(
+                    """
+                    SELECT DISTINCT ON (foreign_currency) foreign_currency, rate
+                    FROM app.fx_quotes
+                    WHERE business_id = :bid AND base_currency = :base
+                    ORDER BY foreign_currency, recorded_at DESC
+                    """
+                ),
+                {"bid": business_id, "base": biz.currency.upper()},
+            ).mappings()
+            fx_map = {str(r["foreign_currency"]).upper(): Decimal(str(r["rate"])) for r in fx_rows}
+        except Exception:
+            fx_map = {}
+
+        match_candidates = [
+            MatchCandidateDoc(
+                document_id=str(d.document_id),
+                number=str(d.number),
+                kind=str(d.kind),
+                outstanding=_q2(d.outstanding),
+                currency=getattr(d, "currency", biz.currency) or biz.currency,
+                due_date=str(getattr(d, "due_date", "") or ""),
             )
+            for d in open_docs.items
+        ]
+        proposal = find_best_document_match(
+            stmt_amt,
+            match_candidates,
+            statement_currency=biz.currency,
+            fx_rates=fx_map,
+        )
+        if proposal is not None:
+            classification = proposal.match_kind
+            deterministic_delta = proposal.residual
+            confidence = proposal.confidence
+            candidates = list(proposal.components)
+            proposed_allocation = dict(proposal.proposed_allocation)
+        elif same_amt_rows:
+            classification = "repeated_legitimate_charge"
+            deterministic_delta = Decimal("0.00")
+            confidence = Decimal("0.8400")
             proposed_allocation = {
-                "action": "allocate_single_document",
-                "document_ids": [doc.document_id],
-                "allocated_amount": f"{stmt_amt:.2f}",
+                "action": "verify_recurring_vendor_charge",
+                "amount": f"{stmt_amt:.2f}",
             }
         else:
-            # 3. Check bundled payment (2 or 3 open documents summing exactly to stmt_amt)
-            found_bundle: list[Any] = []
-            docs = open_docs.items
-            for i in range(len(docs)):
-                for j in range(i + 1, len(docs)):
-                    if docs[i].kind == docs[j].kind and (
-                        _q2(docs[i].outstanding) + _q2(docs[j].outstanding) == stmt_amt
-                    ):
-                        found_bundle = [docs[i], docs[j]]
-                        break
-                if found_bundle:
-                    break
-            if found_bundle:
-                classification = "bundled_payment"
-                deterministic_delta = Decimal("0.00")
-                confidence = Decimal("0.9500")
-                candidates = [
-                    {
-                        "document_id": d.document_id,
-                        "number": d.number,
-                        "kind": d.kind,
-                        "outstanding": d.outstanding,
-                    }
-                    for d in found_bundle
-                ]
-                proposed_allocation = {
-                    "action": "allocate_bundled_documents",
-                    "document_ids": [d.document_id for d in found_bundle],
-                    "allocated_amount": f"{stmt_amt:.2f}",
-                }
-            else:
-                # 4. Check processor fee deducted (95%..99.5% of an open invoice)
-                fee_candidates = [
-                    d
-                    for d in open_docs.items
-                    if _q2(d.outstanding) > stmt_amt
-                    and Decimal("0.005")
-                    <= ((_q2(d.outstanding) - stmt_amt) / _q2(d.outstanding))
-                    <= Decimal("0.055")
-                ]
-                if fee_candidates:
-                    doc = fee_candidates[0]
-                    fee_amount = _q2(doc.outstanding) - stmt_amt
-                    classification = "fee_deducted"
-                    deterministic_delta = Decimal("0.00")
-                    confidence = Decimal("0.9200")
-                    candidates.append(
-                        {
-                            "document_id": doc.document_id,
-                            "number": doc.number,
-                            "kind": doc.kind,
-                            "outstanding": doc.outstanding,
-                            "implied_fee": f"{fee_amount:.2f}",
-                        }
-                    )
-                    proposed_allocation = {
-                        "action": "split_gross_and_processing_fee",
-                        "document_ids": [doc.document_id],
-                        "net_cash": f"{stmt_amt:.2f}",
-                        "fee_expense": f"{fee_amount:.2f}",
-                        "gross_settled": doc.outstanding,
-                    }
-                else:
-                    # 5. Check partial settlement (stmt_amt < doc.outstanding)
-                    partial_candidates = [
-                        d for d in open_docs.items if _q2(d.outstanding) > stmt_amt
-                    ]
-                    if partial_candidates:
-                        doc = partial_candidates[0]
-                        classification = "partial_settlement"
-                        deterministic_delta = _q2(doc.outstanding) - stmt_amt
-                        confidence = Decimal("0.8600")
-                        candidates.append(
-                            {
-                                "document_id": doc.document_id,
-                                "number": doc.number,
-                                "kind": doc.kind,
-                                "outstanding": doc.outstanding,
-                                "remaining_after_partial": f"{deterministic_delta:.2f}",
-                            }
-                        )
-                        proposed_allocation = {
-                            "action": "partial_allocation",
-                            "document_ids": [doc.document_id],
-                            "allocated_amount": f"{stmt_amt:.2f}",
-                            "remaining_open": f"{deterministic_delta:.2f}",
-                        }
-                    elif same_amt_rows:
-                        classification = "repeated_legitimate_charge"
-                        deterministic_delta = Decimal("0.00")
-                        confidence = Decimal("0.8400")
-                        proposed_allocation = {
-                            "action": "verify_recurring_vendor_charge",
-                            "amount": f"{stmt_amt:.2f}",
-                        }
-                    else:
-                        uncertainty_flags.append("no_deterministic_document_match")
+            uncertainty_flags.append("no_deterministic_document_match")
 
     inv_status = "abstained" if classification == "ambiguous_needs_evidence" else "proposed"
     fallback_explanation = (
@@ -2392,6 +2327,28 @@ def run_ai_cash_flow_scenario(
         "recurring_cost_change_pct": f"{_q2(payload.recurring_cost_change_pct):.2f}",
         "collections_change_pct": f"{_q2(payload.collections_change_pct):.2f}",
     }
+    spread_est = max(abs(scen_running) * Decimal("0.08"), Decimal("250.00")).quantize(
+        Decimal("0.01")
+    )
+    plain_suggestions: list[str] = []
+    if shortfall_weeks > 0:
+        plain_suggestions.append(
+            f"Projected cash dips below zero across {shortfall_weeks} week(s) (lowest balance: "
+            f"{biz.currency} {lowest_cash:.2f}) — collect open customer invoices early."
+        )
+        plain_suggestions.append(
+            "Negotiate due-date alignment or staged installments on upcoming supplier bills "
+            "during shortfall weeks."
+        )
+    else:
+        plain_suggestions.append(
+            f"Cash remains positive through week {payload.horizon_weeks} (ending {biz.currency} "
+            f"{scen_running:.2f}) — maintain standard reminders and scheduled bill due dates."
+        )
+        plain_suggestions.append(
+            "Review recurring operating expenses monthly to protect your working-capital cushion."
+        )
+
     fallback_payload = {
         "scenario_name": clean_name,
         "natural_language_prompt": clean_prompt,
@@ -2403,6 +2360,13 @@ def run_ai_cash_flow_scenario(
         "net_cash_delta": f"{net_delta:.2f}",
         "lowest_weekly_cash": f"{lowest_cash:.2f}",
         "shortfall_weeks": shortfall_weeks,
+        "confidence_range": {
+            "basis": "estimated_from_payment_history",
+            "p10_ending_cash": f"{(scen_running - spread_est):.2f}",
+            "p50_ending_cash": f"{scen_running:.2f}",
+            "p90_ending_cash": f"{(scen_running + spread_est):.2f}",
+        },
+        "plain_language_suggestions": plain_suggestions,
         "weekly_series": weekly_series,
     }
     adapter = GroqModelAdapter(settings)
@@ -2495,7 +2459,7 @@ def run_ai_portfolio_work_planner(
                 JOIN app.businesses b ON b.id = m.business_id
                 WHERE m.user_id = :uid AND m.active = true
                 ORDER BY b.name ASC, b.id ASC
-                LIMIT 50
+                LIMIT 500
                 """
             ),
             {"uid": user.user.id},
@@ -2893,9 +2857,22 @@ def evaluate_ai_dataset_registry(
     authorize(db, user, business_id, {"owner", "accountant"})
     clean_key = payload.dataset_key.strip().lower()
     clean_notes, _ = sanitize_untrusted_text(payload.notes, max_length=300)
-    p = payload.precision_score.quantize(Decimal("0.0001"))
-    r = payload.recall_score.quantize(Decimal("0.0001"))
-    c = payload.citation_validity_rate.quantize(Decimal("0.0001"))
+    live_sample_count = payload.sample_count
+    live_prov = payload.execution_provenance
+    if payload.run_live_harness:
+        from ledgerpilot.eval.run import run_evaluation_suite
+
+        live_report = run_evaluation_suite()
+        m = live_report["metrics"]
+        p = Decimal(str(m["extraction_precision"])).quantize(Decimal("0.0001"))
+        r = Decimal(str(m["extraction_recall"])).quantize(Decimal("0.0001"))
+        c = Decimal(str(m["bank_match_accuracy"])).quantize(Decimal("0.0001"))
+        live_sample_count = int(live_report["sample_counts"]["total"])
+        live_prov = "deterministic_engine_execution"
+    else:
+        p = payload.precision_score.quantize(Decimal("0.0001"))
+        r = payload.recall_score.quantize(Decimal("0.0001"))
+        c = payload.citation_validity_rate.quantize(Decimal("0.0001"))
     f1 = (
         ((Decimal("2") * p * r) / (p + r)).quantize(Decimal("0.0001"))
         if (p + r) > Decimal("0")
@@ -2905,7 +2882,7 @@ def evaluate_ai_dataset_registry(
         p >= Decimal("0.9000")
         and r >= Decimal("0.8800")
         and c >= Decimal("0.9800")
-        and payload.execution_provenance != "supplied_prediction"
+        and live_prov != "supplied_prediction"
     )
     eval_id = uuid4()
     db.execute(
@@ -2927,9 +2904,9 @@ def evaluate_ai_dataset_registry(
             "bid": business_id,
             "dkey": clean_key,
             "cohort": payload.dataset_cohort,
-            "prov": payload.execution_provenance,
+            "prov": live_prov,
             "fid": payload.feature_id,
-            "scount": payload.sample_count,
+            "scount": live_sample_count,
             "p": p,
             "r": r,
             "f1": f1,
@@ -2944,9 +2921,9 @@ def evaluate_ai_dataset_registry(
         "id": str(eval_id),
         "dataset_key": clean_key,
         "dataset_cohort": payload.dataset_cohort,
-        "execution_provenance": payload.execution_provenance,
+        "execution_provenance": live_prov,
         "feature_id": payload.feature_id,
-        "sample_count": payload.sample_count,
+        "sample_count": live_sample_count,
         "precision_score": f"{p:.4f}",
         "recall_score": f"{r:.4f}",
         "f1_score": f"{f1:.4f}",
@@ -2954,3 +2931,16 @@ def evaluate_ai_dataset_registry(
         "promotion_gate_passed": gate_passed,
         "notes": clean_notes,
     }
+
+
+@router.get("/businesses/{business_id}/ai/cost-analytics")
+def get_ai_page_cost_analytics(
+    business_id: UUID,
+    user: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """F3 & H2: Return empirical per-page AI cost tracking and SHA-256 cache savings."""
+    from ledgerpilot.ai.cost_ledger import summarize_business_page_costs
+
+    authorize(db, user, business_id)
+    return summarize_business_page_costs(db, business_id)

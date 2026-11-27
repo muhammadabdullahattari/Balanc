@@ -33,7 +33,7 @@ REAL = pytest.mark.skipif(
 def test_permissions_policy_allows_same_origin_microphone() -> None:
     headers = security_headers(Settings(), "https", "/api/v1/health")
     assert "microphone=(self)" in headers["Permissions-Policy"]
-    assert "camera=()" in headers["Permissions-Policy"]
+    assert "camera=(self)" in headers["Permissions-Policy"]
 
 
 def test_iana_timezone_validation_on_business_and_reminder_preferences() -> None:

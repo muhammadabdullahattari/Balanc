@@ -1,6 +1,7 @@
 import { EntryTools } from "./accountant-tools";
 import { LookupMore } from "./lookup-more";
 import { useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { api, result, keys, queryClient } from "../api/runtime";
 import {
@@ -21,9 +22,18 @@ import { today, useBusiness } from "./context";
 export function Ledger() {
   const b = useBusiness();
   const path = { business_id: b.id };
-  const [start, setStart] = useState(today(b.timezone).slice(0, 7) + "-01");
-  const [end, setEnd] = useState(today(b.timezone));
-  const [account, setAccount] = useState("");
+  const [searchParams] = useSearchParams();
+  const [start, setStart] = useState(
+    () => searchParams.get("start") || today(b.timezone).slice(0, 7) + "-01",
+  );
+  const [end, setEnd] = useState(
+    () => searchParams.get("end") || today(b.timezone),
+  );
+  const [account, setAccount] = useState(
+    () => searchParams.get("account") || "",
+  );
+  const currentYear = today(b.timezone).slice(0, 4);
+  const [selectedQuarter, setSelectedQuarter] = useState(`${currentYear}-Q4`);
   const [cursor, setCursor] = useState<string>();
   const [journal, setJournal] = useState<string>();
   const [reversal, setReversal] = useState<{
@@ -104,22 +114,36 @@ export function Ledger() {
       ),
   });
   const download = useMutation({
-    mutationFn: async (kind: "journal" | "evidence") => {
+    mutationFn: async (kind: "journal" | "evidence" | "quarter") => {
       const data = await result(
         kind === "journal"
           ? api.GET("/api/v1/businesses/{business_id}/exports/journals.csv", {
               params: { path, query: { start, end } },
               parseAs: "blob",
             })
-          : api.GET(
-              "/api/v1/businesses/{business_id}/exports/evidence-pack.zip",
-              { params: { path, query: { start, end } }, parseAs: "blob" },
-            ),
+          : kind === "quarter"
+            ? api.GET(
+                "/api/v1/businesses/{business_id}/exports/evidence-pack.zip",
+                {
+                  params: {
+                    path,
+                    query: { quarter: selectedQuarter, full_quarter: true },
+                  },
+                  parseAs: "blob",
+                },
+              )
+            : api.GET(
+                "/api/v1/businesses/{business_id}/exports/evidence-pack.zip",
+                { params: { path, query: { start, end } }, parseAs: "blob" },
+              ),
       );
       const url = URL.createObjectURL(data);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `ledgerpilot-${kind}-${start}-${end}.${kind === "journal" ? "csv" : "zip"}`;
+      a.download =
+        kind === "quarter"
+          ? `ledgerpilot-auditor-pack-${selectedQuarter}.zip`
+          : `ledgerpilot-${kind}-${start}-${end}.${kind === "journal" ? "csv" : "zip"}`;
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     },
@@ -137,6 +161,24 @@ export function Ledger() {
         description="Follow posted entries back to their journal, approval and source."
         actions={
           <>
+            <select
+              aria-label="Quarter auditor pack period"
+              value={selectedQuarter}
+              onChange={(e) => setSelectedQuarter(e.target.value)}
+              style={{ minWidth: "110px" }}
+            >
+              <option value={`${currentYear}-Q1`}>{currentYear} Q1</option>
+              <option value={`${currentYear}-Q2`}>{currentYear} Q2</option>
+              <option value={`${currentYear}-Q3`}>{currentYear} Q3</option>
+              <option value={`${currentYear}-Q4`}>{currentYear} Q4</option>
+            </select>
+            <Button
+              variant="secondary"
+              busy={download.isPending}
+              onClick={() => download.mutate("quarter")}
+            >
+              Export quarter auditor pack
+            </Button>
             <Button
               variant="secondary"
               busy={download.isPending}

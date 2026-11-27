@@ -2,6 +2,7 @@
 
 from datetime import date
 from decimal import Decimal, localcontext
+from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Query
@@ -304,6 +305,113 @@ def journal(business_id: UUID, journal_id: UUID, identity: Identity, db: DB) -> 
                 "position": line.position,
             }
             for line in repository.lines(db, business_id, journal_id)
+        ],
+    }
+
+
+@router.post("/journals/{journal_id}/line-evidence", status_code=201)
+def attach_journal_line_evidence(
+    business_id: UUID,
+    journal_id: UUID,
+    body: dict[str, Any],
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """Attach immutable line-level evidence provenance (document + region + model + approver)."""
+    import json
+    from uuid import uuid4
+
+    authorize(db, identity, business_id, {"owner", "accountant", "bookkeeper"})
+    item = repository.journal(db, business_id, journal_id)
+    if not item:
+        raise DomainError("ERR_NOT_FOUND", "Journal not found.", 404)
+
+    line_id = UUID(str(body["journal_line_id"]))
+    ev_id = UUID(str(body["evidence_id"]))
+    page = max(1, int(body.get("page") or 1))
+    region = body.get("region") if isinstance(body.get("region"), dict) else {}
+    model_version = str(body.get("model_version") or "manual-review")[:160]
+    field_name = str(body.get("extraction_field") or "amount")[:120]
+
+    link_id = uuid4()
+    db.execute(
+        text(
+            """
+            INSERT INTO app.journal_line_evidence (
+              id, business_id, journal_id, journal_line_id, evidence_id,
+              page, region, model_version, extraction_field, approved_by
+            ) VALUES (
+              :id, :bid, :jid, :lid, :eid,
+              :pg, CAST(:reg AS jsonb), :mv, :ef, :uid
+            )
+            """
+        ),
+        {
+            "id": link_id,
+            "bid": business_id,
+            "jid": journal_id,
+            "lid": line_id,
+            "eid": ev_id,
+            "pg": page,
+            "reg": json.dumps(region),
+            "mv": model_version,
+            "ef": field_name,
+            "uid": identity.user.id,
+        },
+    )
+    return {
+        "id": str(link_id),
+        "journal_id": str(journal_id),
+        "journal_line_id": str(line_id),
+        "evidence_id": str(ev_id),
+        "page": page,
+        "region": region,
+        "model_version": model_version,
+        "extraction_field": field_name,
+        "approved_by": str(identity.user.id),
+    }
+
+
+@router.get("/journals/{journal_id}/line-evidence")
+def list_journal_line_evidence(
+    business_id: UUID,
+    journal_id: UUID,
+    identity: Identity,
+    db: DB,
+) -> dict[str, Any]:
+    """Retrieve immutable line-level evidence links for a journal."""
+    authorize(db, identity, business_id)
+    rows = (
+        db.execute(
+            text(
+                """
+                SELECT id, journal_line_id, evidence_id, page, region,
+                       model_version, extraction_field, approved_by, created_at
+                FROM app.journal_line_evidence
+                WHERE business_id = :bid AND journal_id = :jid
+                ORDER BY created_at ASC
+                """
+            ),
+            {"bid": business_id, "jid": journal_id},
+        )
+        .mappings()
+        .all()
+    )
+    return {
+        "journal_id": str(journal_id),
+        "items": [
+            {
+                "id": str(r["id"]),
+                "journal_line_id": str(r["journal_line_id"]),
+                "evidence_id": str(r["evidence_id"]),
+                "page": int(r["page"]),
+                "region": dict(r["region"] or {}),
+                "model_version": str(r["model_version"]),
+                "extraction_field": str(r["extraction_field"]),
+                "approved_by": str(r["approved_by"]),
+                "created_at": r["created_at"].isoformat(),
+            }
+            for r in rows
         ],
     }
 

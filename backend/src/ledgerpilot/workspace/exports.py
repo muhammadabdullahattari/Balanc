@@ -66,6 +66,22 @@ def public_key(settings: Settings) -> dict[str, str]:
     }
 
 
+def quarter_bounds(quarter: str) -> tuple[date, date]:
+    """Convert 'YYYY-Q1'..'YYYY-Q4' into exact inclusive calendar quarter start/end dates."""
+    year_str, q_str = quarter.strip().upper().split("-Q")
+    year = int(year_str)
+    q_num = int(q_str)
+    if q_num == 1:
+        return date(year, 1, 1), date(year, 3, 31)
+    if q_num == 2:
+        return date(year, 4, 1), date(year, 6, 30)
+    if q_num == 3:
+        return date(year, 7, 1), date(year, 9, 30)
+    if q_num == 4:
+        return date(year, 10, 1), date(year, 12, 31)
+    raise DomainError("ERR_VALIDATION", "Quarter must be Q1 through Q4.", 422)
+
+
 def pack(
     db: Session,
     settings: Settings,
@@ -73,8 +89,17 @@ def pack(
     start: date,
     end: date,
     who: Principal,
+    *,
+    full_quarter: bool = False,
+    quarter: str | None = None,
 ) -> bytes:
+    from sqlalchemy import text
+
     from ledgerpilot.workspace.service import save_report
+
+    max_files = 2500 if full_quarter else 20
+    max_evidence_bytes = (250 * 1024 * 1024) if full_quarter else (5 * 1024 * 1024)
+    max_pack_bytes = (300 * 1024 * 1024) if full_quarter else (10 * 1024 * 1024)
 
     journal_ids = list(
         bounded_scalars(
@@ -122,7 +147,7 @@ def pack(
             db, select(Evidence).where(Evidence.business_id == bid, Evidence.id.in_(set(links)))
         )
     )
-    if len(evidence) > 20 or sum(e.size for e in evidence) > 5 * 1024 * 1024:
+    if len(evidence) > max_files or sum(e.size for e in evidence) > max_evidence_bytes:
         raise DomainError(
             "ERR_QUOTA", "The synchronous pilot pack supports 20 files / 5 MiB. Narrow dates.", 413
         )
@@ -136,7 +161,7 @@ def pack(
 
         def __setitem__(self, name: str, body: bytes) -> None:
             next_size = self.size - len(self.get(name, b"")) + len(body)
-            if next_size > 10 * 1024 * 1024:
+            if next_size > max_pack_bytes:
                 raise DomainError("ERR_QUOTA", "Narrow the pack to at most 10 MiB.", 413)
             super().__setitem__(name, body)
             self.size = next_size
@@ -148,7 +173,7 @@ def pack(
         output = io.BytesIO()
         for chunk in json.JSONEncoder(sort_keys=True, indent=2).iterencode(jsonable_encoder(value)):
             encoded = chunk.encode()
-            if files.size + output.tell() + len(encoded) > 10 * 1024 * 1024:
+            if files.size + output.tell() + len(encoded) > max_pack_bytes:
                 raise DomainError("ERR_QUOTA", "Narrow the pack to at most 10 MiB.", 413)
             output.write(encoded)
         files[name] = output.getvalue()
@@ -394,21 +419,69 @@ def pack(
         + "".join(index)
         + "</ul>"
     ).encode()
-    add_json(
-        "manifest.json",
-        {
-            "business_id": str(bid),
-            "start": start,
-            "end": end,
-            "files": {
-                name: {"sha256": hashlib.sha256(body).hexdigest(), "size": len(body)}
-                for name, body in sorted(files.items())
-            },
-            "verification_key": public_key(settings),
+    if full_quarter:
+        line_ev_rows: list[dict[str, Any]] = []
+        ai_run_rows: list[dict[str, Any]] = []
+        try:
+            with db.begin_nested():
+                if journal_ids:
+                    line_ev_rows = [
+                        dict(r)
+                        for r in db.execute(
+                            text(
+                                """
+                                SELECT id, journal_id, line_position, evidence_id,
+                                       page_number, bbox_left, bbox_top, bbox_right,
+                                       bbox_bottom, field_name, extracted_value, confidence
+                                FROM app.journal_line_evidence
+                                WHERE business_id = :bid
+                                ORDER BY created_at ASC
+                                LIMIT 5000
+                                """
+                            ),
+                            {"bid": bid},
+                        )
+                        .mappings()
+                        .all()
+                    ]
+                ai_run_rows = [
+                    dict(r)
+                    for r in db.execute(
+                        text(
+                            """
+                            SELECT id, feature_id, model_name, prompt_version, status,
+                                   confidence_score, approval_state, approved_by, created_at
+                            FROM app.ai_runs
+                            WHERE business_id = :bid
+                            ORDER BY created_at DESC
+                            LIMIT 1000
+                            """
+                        ),
+                        {"bid": bid},
+                    )
+                    .mappings()
+                    .all()
+                ]
+        except Exception:
+            pass
+        add_json("journal-line-evidence.json", line_ev_rows)
+        add_json("ai-audit-trail.json", ai_run_rows)
+
+    manifest_doc: dict[str, Any] = {
+        "business_id": str(bid),
+        "start": start,
+        "end": end,
+        "files": {
+            name: {"sha256": hashlib.sha256(body).hexdigest(), "size": len(body)}
+            for name, body in sorted(files.items())
         },
-    )
+        "verification_key": public_key(settings),
+    }
+    if quarter:
+        manifest_doc["quarter"] = quarter
+    add_json("manifest.json", manifest_doc)
     files["manifest.sig"] = signing_key(settings).sign(files["manifest.json"])
-    if sum(len(body) for body in files.values()) > 10 * 1024 * 1024:
+    if sum(len(body) for body in files.values()) > max_pack_bytes:
         raise DomainError(
             "ERR_QUOTA", "Pilot evidence packs are capped at 10 MiB before compression.", 413
         )

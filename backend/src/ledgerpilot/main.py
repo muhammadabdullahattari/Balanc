@@ -266,7 +266,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_origin_regex=r"^https://balanc(-[a-z0-9-]+)?\.vercel\.app$" if is_railway else None,
         allow_credentials=True,
         allow_methods=["GET", "POST", "PATCH"],
-        allow_headers=["Content-Type", "X-CSRF-Token", "X-Request-ID", "Range", "If-Match"],
+        allow_headers=[
+            "Content-Type",
+            "Authorization",
+            "X-CSRF-Token",
+            "X-Request-ID",
+            "Range",
+            "If-Match",
+        ],
         expose_headers=[
             "X-Request-ID",
             "Retry-After",
@@ -429,9 +436,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     application.include_router(evidence_router, prefix=configured.api_v1_prefix)
     from ledgerpilot.ai.router import router as ai_router
     from ledgerpilot.audit.router import router as financial_audit_router
+    from ledgerpilot.connectors.router import router as connectors_router
+    from ledgerpilot.public_api.router import mgmt_router as public_api_mgmt_router
+    from ledgerpilot.public_api.router import public_router
+    from ledgerpilot.purchases.router import router as purchases_router
     from ledgerpilot.workspace.p3_automation import router as p3_automation_router
 
     application.include_router(p3_automation_router, prefix=configured.api_v1_prefix)
+    application.include_router(purchases_router, prefix=configured.api_v1_prefix)
+    application.include_router(connectors_router, prefix=configured.api_v1_prefix)
+    application.include_router(public_api_mgmt_router, prefix=configured.api_v1_prefix)
+    application.include_router(public_router)
     application.include_router(ai_router, prefix=configured.api_v1_prefix)
     application.include_router(financial_audit_router, prefix=configured.api_v1_prefix)
     application.include_router(observability_router)

@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from ledgerpilot.accounting.models import Account, Journal
@@ -55,6 +55,22 @@ def correction_rules(db: Session, bid: UUID) -> dict[str, Any]:
             continue
         descriptions.setdefault(normalized, description[:120])
         groups[key].append(str(correction.id))
+    dismissed_pairs: set[tuple[str, str]] = set()
+    try:
+        dismissed_rows = db.execute(
+            text(
+                """
+                SELECT descriptor, account_id::text AS account_id
+                FROM app.dismissed_rule_suggestions
+                WHERE business_id = :bid
+                """
+            ),
+            {"bid": bid},
+        ).mappings()
+        dismissed_pairs = {(str(r["descriptor"]), str(r["account_id"])) for r in dismissed_rows}
+    except Exception:
+        dismissed_pairs = set()
+
     return {
         "items": [
             {
@@ -67,7 +83,7 @@ def correction_rules(db: Session, bid: UUID) -> dict[str, Any]:
                 "active": False,
             }
             for (merchant, account), ids in sorted(groups.items())
-            if len(ids) >= 2
+            if len(ids) >= 2 and (merchant, account) not in dismissed_pairs
         ],
         "minimum_distinct_transactions": 2,
         "automatic_activation": False,

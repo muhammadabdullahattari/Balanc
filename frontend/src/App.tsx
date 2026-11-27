@@ -141,6 +141,26 @@ const FinancialAudit = lazy(() =>
     default: m.FinancialAudit,
   })),
 );
+const ReceiptCapture = lazy(() =>
+  import("./features/receipt-capture").then((m) => ({
+    default: m.ReceiptCapture,
+  })),
+);
+const PurchaseOrdersAndCollections = lazy(() =>
+  import("./features/purchase-orders").then((m) => ({
+    default: m.PurchaseOrdersAndCollections,
+  })),
+);
+const PortfolioTriage = lazy(() =>
+  import("./features/portfolio-triage").then((m) => ({
+    default: m.PortfolioTriage,
+  })),
+);
+const ConnectorsAndApi = lazy(() =>
+  import("./features/connectors-and-api").then((m) => ({
+    default: m.ConnectorsAndApi,
+  })),
+);
 const navigation = [
   { to: "/ai-assistant", label: "AI assistant", icon: CheckSquare },
   { to: "/financial-audit", label: "Financial audit", icon: CheckSquare },
@@ -963,6 +983,28 @@ function Workspace() {
                     path="/settings/billing"
                     element={<Settings initialSection="billing" />}
                   />
+                  <Route path="/capture" element={<ReceiptCapture />} />
+                  <Route
+                    path="/purchase-orders"
+                    element={
+                      <PurchaseOrdersAndCollections initialSection="po" />
+                    }
+                  />
+                  <Route
+                    path="/collections"
+                    element={
+                      <PurchaseOrdersAndCollections initialSection="collections" />
+                    }
+                  />
+                  <Route path="/portfolio" element={<PortfolioTriage />} />
+                  <Route
+                    path="/connectors"
+                    element={<ConnectorsAndApi initialTab="connectors" />}
+                  />
+                  <Route
+                    path="/developer-api"
+                    element={<ConnectorsAndApi initialTab="developer" />}
+                  />
                   <Route
                     path="*"
                     element={
@@ -1104,6 +1146,36 @@ function Workspace() {
                       label: "Group reporting",
                       hint: "Page",
                       run: () => navigate("/group-reporting"),
+                    },
+                    {
+                      id: "/capture",
+                      label: "Snap a mobile receipt",
+                      hint: "Page",
+                      run: () => navigate("/capture"),
+                    },
+                    {
+                      id: "/purchase-orders",
+                      label: "Purchase orders and price checks",
+                      hint: "Page",
+                      run: () => navigate("/purchase-orders"),
+                    },
+                    {
+                      id: "/collections",
+                      label: "Customer follow-up and call queue",
+                      hint: "Page",
+                      run: () => navigate("/collections"),
+                    },
+                    {
+                      id: "/connectors",
+                      label: "Connected feeds, Xero, Shopify and cloud folders",
+                      hint: "Page",
+                      run: () => navigate("/connectors"),
+                    },
+                    {
+                      id: "/developer-api",
+                      label: "Developer API keys and webhooks",
+                      hint: "Page",
+                      run: () => navigate("/developer-api"),
                     },
                     {
                       id: "/settings",

@@ -23,6 +23,7 @@ import {
   ErrorNotice,
   Field,
   Loading,
+  Modal,
   money,
   PageHeading,
   SectionTabs,
@@ -85,6 +86,10 @@ export function Reports() {
   );
   const [showLiveGrafana, setShowLiveGrafana] = useState(false);
   const [emailNotice, setEmailNotice] = useState("");
+  const [drilldownTarget, setDrilldownTarget] = useState<{
+    accountId: string;
+    accountName: string;
+  } | null>(null);
   const [bank, setBank] = useState("");
   const [scenario, setScenario] = useState("baseline");
   const stress = b.p2_insights_available && scenario === "stress";
@@ -269,6 +274,46 @@ export function Reports() {
           params: { path, query: { start, end } },
         }),
       ),
+  });
+  const drilldownQuery = useQuery({
+    queryKey: [
+      ...keys.business(b.id),
+      "report-drilldown",
+      drilldownTarget?.accountId,
+      tab,
+      start,
+      end,
+    ],
+    enabled: Boolean(drilldownTarget?.accountId),
+    retry: false,
+    queryFn: async ({ signal }) =>
+      (await result(
+        api.GET("/api/v1/businesses/{business_id}/reports/drilldown", {
+          signal,
+          params: {
+            path,
+            query: {
+              account_id: drilldownTarget!.accountId,
+              start: ["balance", "trial"].includes(tab) ? "1900-01-01" : start,
+              end,
+              limit: 100,
+            },
+          },
+        }),
+      )) as unknown as {
+        line_count: number;
+        total_debit: string;
+        total_credit: string;
+        items: Array<{
+          line_id: string;
+          accounting_date: string;
+          memo: string;
+          source_kind: string;
+          debit: string;
+          credit: string;
+          evidence_ids: string[];
+        }>;
+      },
   });
   const report =
     tab === "tax"
@@ -849,7 +894,25 @@ export function Reports() {
                     { label: "Classification", render: (r) => r.kind },
                     {
                       label: "Amount",
-                      render: (r) => money(r.amount, b.currency),
+                      render: (r) => (
+                        <button
+                          type="button"
+                          className="button ghost"
+                          style={{
+                            padding: "0.15rem 0.45rem",
+                            fontWeight: 600,
+                          }}
+                          title={`Inspect source entries for ${r.name}`}
+                          onClick={() =>
+                            setDrilldownTarget({
+                              accountId: r.account_id,
+                              accountName: `${r.code} · ${r.name}`,
+                            })
+                          }
+                        >
+                          {money(r.amount, b.currency)}
+                        </button>
+                      ),
                     },
                   ]}
                 />
@@ -921,8 +984,21 @@ export function Reports() {
                     },
                     {
                       label: "Closing",
-                      render: (r) =>
-                        money(r.closing_debit_minus_credit, b.currency),
+                      render: (r) => (
+                        <button
+                          type="button"
+                          className="button ghost"
+                          style={{ padding: "0.15rem 0.45rem" }}
+                          onClick={() =>
+                            setDrilldownTarget({
+                              accountId: r.account_id,
+                              accountName: r.name,
+                            })
+                          }
+                        >
+                          {money(r.closing_debit_minus_credit, b.currency)}
+                        </button>
+                      ),
                     },
                     {
                       label: "Source balance",
@@ -979,11 +1055,39 @@ export function Reports() {
                     },
                     {
                       label: "Debit",
-                      render: (r) => money(r.debit, b.currency),
+                      render: (r) => (
+                        <button
+                          type="button"
+                          className="button ghost"
+                          style={{ padding: "0.15rem 0.45rem" }}
+                          onClick={() =>
+                            setDrilldownTarget({
+                              accountId: r.account_id,
+                              accountName: `${r.code} · ${r.name}`,
+                            })
+                          }
+                        >
+                          {money(r.debit, b.currency)}
+                        </button>
+                      ),
                     },
                     {
                       label: "Credit",
-                      render: (r) => money(r.credit, b.currency),
+                      render: (r) => (
+                        <button
+                          type="button"
+                          className="button ghost"
+                          style={{ padding: "0.15rem 0.45rem" }}
+                          onClick={() =>
+                            setDrilldownTarget({
+                              accountId: r.account_id,
+                              accountName: `${r.code} · ${r.name}`,
+                            })
+                          }
+                        >
+                          {money(r.credit, b.currency)}
+                        </button>
+                      ),
                     },
                   ]}
                 />
@@ -1114,6 +1218,79 @@ export function Reports() {
           </>
         )}
       </section>
+      <Modal
+        open={Boolean(drilldownTarget)}
+        onClose={() => setDrilldownTarget(null)}
+        title={
+          drilldownTarget
+            ? `Source entries · ${drilldownTarget.accountName}`
+            : "Source entries"
+        }
+        description="Every report figure traces directly to immutable posted ledger lines and linked source documents."
+      >
+        <ErrorNotice error={drilldownQuery.error} />
+        {drilldownQuery.isPending ? (
+          <Loading />
+        ) : drilldownQuery.data ? (
+          <>
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                flexWrap: "wrap",
+                gap: "0.5rem",
+                marginBottom: "0.75rem",
+              }}
+            >
+              <span className="muted">
+                {drilldownQuery.data.line_count} posted line(s) · Debits{" "}
+                {money(drilldownQuery.data.total_debit, b.currency)} · Credits{" "}
+                {money(drilldownQuery.data.total_credit, b.currency)}
+              </span>
+              <a
+                className="button secondary"
+                href={`/ledger?account=${drilldownTarget?.accountId || ""}&start=${start}&end=${end}`}
+              >
+                Open in Ledger
+              </a>
+            </div>
+            <Table
+              caption="Source ledger entries behind report figure"
+              rows={drilldownQuery.data.items || []}
+              rowKey={(item) => item.line_id}
+              emptyText="No posted ledger lines in this date range."
+              columns={[
+                { label: "Date", render: (item) => item.accounting_date },
+                { label: "Memo", render: (item) => item.memo || "—" },
+                {
+                  label: "Source",
+                  render: (item) => item.source_kind.replaceAll("_", " "),
+                },
+                {
+                  label: "Debit",
+                  render: (item) => money(item.debit, b.currency),
+                },
+                {
+                  label: "Credit",
+                  render: (item) => money(item.credit, b.currency),
+                },
+                {
+                  label: "Documents",
+                  render: (item) =>
+                    item.evidence_ids.length > 0 ? (
+                      <Badge tone="good">
+                        {item.evidence_ids.length} linked
+                      </Badge>
+                    ) : (
+                      "—"
+                    ),
+                },
+              ]}
+            />
+          </>
+        ) : null}
+      </Modal>
     </>
   );
 }

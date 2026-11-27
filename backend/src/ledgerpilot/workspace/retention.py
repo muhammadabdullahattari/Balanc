@@ -91,7 +91,7 @@ class HoldRead(Schema):
 
 
 class RetentionState(Schema):
-    default_years: int | None = None
+    default_years: int = 10
     clock: str = "record_date"
     policies: list[PolicyRead]
     holds: list[HoldRead]
@@ -273,12 +273,11 @@ def preview(
         .order_by(RetentionPolicy.version.desc())
         .limit(1)
     )
-    until = None
-    if policy is not None:
-        try:
-            until = data.record_date.replace(year=data.record_date.year + policy.years)
-        except ValueError:  # February 29: retain through March 1 in non-leap years.
-            until = date(data.record_date.year + policy.years, 3, 1)
+    effective_years = policy.years if policy is not None else 10
+    try:
+        until = data.record_date.replace(year=data.record_date.year + effective_years)
+    except ValueError:  # February 29: retain through March 1 in non-leap years.
+        until = date(data.record_date.year + effective_years, 3, 1)
     holds = list(
         db.scalars(
             select(LegalHold.id).where(
@@ -293,6 +292,6 @@ def preview(
         policy_id=policy.id if policy else None,
         policy_version=policy.version if policy else 0,
         active_hold_ids=holds,
-        retention_elapsed=until is not None and data.as_of >= until,
-        eligible_for_disposal_review=until is not None and data.as_of >= until and not holds,
+        retention_elapsed=data.as_of >= until,
+        eligible_for_disposal_review=policy is not None and data.as_of >= until and not holds,
     )

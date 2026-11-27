@@ -217,7 +217,7 @@ def portfolio(
     assignee: UUID | None = None,
     minimum: int = Query(0, ge=0),
     offset: int = Query(0, ge=0),
-    limit: int = Query(25, ge=1, le=100),
+    limit: int = Query(25, ge=1, le=500),
 ) -> list[dict[str, object]]:
     from ledgerpilot.shared.errors import DomainError
 

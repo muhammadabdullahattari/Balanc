@@ -2057,9 +2057,14 @@ def preview_quickbooks(
         }
     quickbooks_config(settings)
     tokens = json.loads(encryption(settings).decrypt(current["tokens"].encode()))
+    qbo_base = (
+        "https://quickbooks.api.intuit.com"
+        if settings.qbo_environment == "production"
+        else "https://sandbox-quickbooks.api.intuit.com"
+    )
     result = provider(
         "GET",
-        f"https://sandbox-quickbooks.api.intuit.com/v3/company/{current['realm_id']}/query",
+        f"{qbo_base}/v3/company/{current['realm_id']}/query",
         headers={"Authorization": f"Bearer {tokens['access_token']}", "Accept": "application/json"},
         params={"query": f"SELECT * FROM {entity} ORDERBY Id STARTPOSITION {start} MAXRESULTS 100"},
     )
@@ -2467,9 +2472,14 @@ def fetch_qb_pages(
         query = (
             f"SELECT * FROM {entity}{where} ORDERBY Id STARTPOSITION {start} MAXRESULTS {page_size}"
         )
+        qbo_host = (
+            "https://quickbooks.api.intuit.com"
+            if get_settings().qbo_environment == "production"
+            else "https://sandbox-quickbooks.api.intuit.com"
+        )
         res = provider_fn(
             "GET",
-            f"https://sandbox-quickbooks.api.intuit.com/v3/company/{realm_id}/query",
+            f"{qbo_host}/v3/company/{realm_id}/query",
             headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
             params={"query": query},
         )

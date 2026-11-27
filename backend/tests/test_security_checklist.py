@@ -45,7 +45,7 @@ def protected_headers(response: httpx.Response) -> None:
     assert response.headers["Referrer-Policy"] == "no-referrer"
     assert response.headers["Cache-Control"] == "no-store"
     assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
-    assert "camera=()" in response.headers["Permissions-Policy"]
+    assert "camera=(self)" in response.headers["Permissions-Policy"]
 
 
 async def test_hosted_headers_cover_success_cors_rejections_errors_and_hidden_docs() -> None:
@@ -112,7 +112,9 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
         ("/health/live", "get"),
         ("/health/ready", "get"),
         ("/metrics", "get"),
+        ("/public/v1/openapi.json", "get"),
         ("/api/v1/billing/stripe/webhook", "post"),
+        ("/api/v1/webhooks/inbound-email", "post"),
         ("/api/v1/auth/csrf", "get"),
         ("/api/v1/auth/google/config", "get"),
         *(
@@ -130,6 +132,13 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
             ]
         ),
     }
+    pat_protected = {
+        ("/public/v1/accounts", "get"),
+        ("/public/v1/journals", "get"),
+        ("/public/v1/reports/profit-loss", "get"),
+        ("/public/v1/reports/balance-sheet", "get"),
+        ("/public/v1/drafts", "post"),
+    }
     seen = set()
     private = 0
     for path, operations in spec["paths"].items():
@@ -138,12 +147,18 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
                 continue
             if (path, method) in public:
                 seen.add((path, method))
+            elif (path, method) in pat_protected:
+                assert operation.get("security") == [{"PersonalAccessToken": []}], (path, method)
             else:
                 assert operation.get("security") == [{"BrowserSession": []}], (path, method)
                 private += 1
     assert seen == public and private > 100
-    # No generic prompt/tool executor or inbound payment webhook exists in P1.
-    assert {p for p in spec["paths"] if "webhook" in p} == {"/api/v1/billing/stripe/webhook"}
+    assert {p for p in spec["paths"] if "webhook" in p} == {
+        "/api/v1/billing/stripe/webhook",
+        "/api/v1/webhooks/inbound-email",
+        "/api/v1/businesses/{business_id}/developer/webhooks",
+        "/api/v1/businesses/{business_id}/developer/webhooks/{endpoint_id}/test",
+    }
     assert {p for p in spec["paths"] if "/execute" in p} <= {
         "/api/v1/businesses/{business_id}/retention/cleanup/requests/{request_id}/execute"
     }

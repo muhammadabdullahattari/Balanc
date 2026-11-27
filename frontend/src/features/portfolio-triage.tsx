@@ -31,15 +31,17 @@ export function PortfolioTriage() {
     "exceptions" | "status" | "severity" | "assignee"
   >("exceptions");
   const [status, setStatus] = useState<"all" | "clear" | "open">("all");
+  const [pageSize, setPageSize] = useState<number>(25);
+  const [filterText, setFilterText] = useState("");
   const [offset, page] = useState(0),
     [selected, select] = useState("");
   const rows = useQuery({
-    queryKey: ["portfolio", sort, status, offset],
+    queryKey: ["portfolio", sort, status, offset, pageSize],
     queryFn: ({ signal }) =>
       result(
         api.GET("/api/v1/portfolio", {
           signal,
-          params: { query: { sort, status, offset, limit: 25 } },
+          params: { query: { sort, status, offset, limit: pageSize } },
         }),
       ),
   });
@@ -83,6 +85,27 @@ export function PortfolioTriage() {
             ))}
           </select>
         </Field>
+        <Field label="Workspaces per page">
+          <select
+            value={String(pageSize)}
+            onChange={(e) => {
+              setPageSize(Number(e.target.value));
+              page(0);
+            }}
+          >
+            <option value="25">25 workspaces</option>
+            <option value="100">100 workspaces</option>
+            <option value="250">250 workspaces (full practice)</option>
+          </select>
+        </Field>
+        <Field label="Quick search">
+          <input
+            type="search"
+            value={filterText}
+            onChange={(e) => setFilterText(e.target.value)}
+            placeholder="Filter displayed businesses…"
+          />
+        </Field>
       </div>
       {rows.isPending ? <Loading /> : <ErrorNotice error={rows.error} />}
       {rows.data?.length === 0 && (
@@ -92,34 +115,42 @@ export function PortfolioTriage() {
       )}
       {rows.data && rows.data.length > 0 && (
         <div className="portfolio-chip-grid">
-          {rows.data.map((r) => (
-            <Button
-              key={r.business_id}
-              variant="secondary"
-              className={
-                selected === r.business_id ? "portfolio-chip-active" : ""
-              }
-              onClick={() => select(r.business_id)}
-            >
-              {r.business_name}: {r.exceptions} exceptions
-            </Button>
-          ))}
+          {rows.data
+            .filter(
+              (r) =>
+                !filterText.trim() ||
+                r.business_name
+                  .toLowerCase()
+                  .includes(filterText.trim().toLowerCase()),
+            )
+            .map((r) => (
+              <Button
+                key={r.business_id}
+                variant="secondary"
+                className={
+                  selected === r.business_id ? "portfolio-chip-active" : ""
+                }
+                onClick={() => select(r.business_id)}
+              >
+                {r.business_name}: {r.exceptions} exceptions
+              </Button>
+            ))}
         </div>
       )}
       <div className="p3-actions-row">
         <Button
           variant="secondary"
           disabled={!offset}
-          onClick={() => page(offset - 25)}
+          onClick={() => page(Math.max(0, offset - pageSize))}
         >
-          Previous 25
+          Previous {pageSize}
         </Button>
         <Button
           variant="secondary"
-          disabled={rows.data?.length !== 25}
-          onClick={() => page(offset + 25)}
+          disabled={rows.data?.length !== pageSize}
+          onClick={() => page(offset + pageSize)}
         >
-          Next 25
+          Next {pageSize}
         </Button>
       </div>
       {selected && (

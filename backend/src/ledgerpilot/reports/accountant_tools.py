@@ -178,6 +178,94 @@ def insight(business_id: UUID, data: Question, identity: Identity, db: DB) -> An
         words,
     )
     if not period or not (profit or expenses or requested or comparison or drill or drivers):
+        # Natural-language causal variance question (e.g. "why is my profit lower this month?")
+        is_causal_why = any(
+            w in words
+            for w in ("why", "lower", "drop", "dropped", "fell", "decreased", "changed", "higher")
+        ) and any(
+            m in words for m in ("profit", "income", "revenue", "expense", "expenses", "margin")
+        )
+        if is_causal_why:
+            nl_start, nl_end = period if period else (data.as_of.replace(day=1), data.as_of)
+            span_days = max(1, (nl_end - nl_start).days + 1)
+            prior_end = nl_start - timedelta(days=1)
+            prior_start = prior_end - timedelta(days=span_days - 1)
+            cur_rep = service.financial(
+                db, business_id, nl_start, nl_end, data.basis, "profit-loss"
+            )
+            prv_rep = service.financial(
+                db, business_id, prior_start, prior_end, data.basis, "profit-loss"
+            )
+            evidence.append(save_report(db, identity, business_id, cur_rep)["report_id"])
+            evidence.append(save_report(db, identity, business_id, prv_rep)["report_id"])
+
+            cur_net = Decimal(cur_rep["net_profit"])
+            prv_net = Decimal(prv_rep["net_profit"])
+            net_diff = cur_net - prv_net
+            ccy = cur_rep["currency"]
+
+            acc_deltas: defaultdict[str, Decimal] = defaultdict(Decimal)
+            acc_labels: dict[str, str] = {}
+            for rep, sgn in ((cur_rep, 1), (prv_rep, -1)):
+                for it in rep["items"]:
+                    factor = -1 if it["kind"] == "expense" else 1
+                    aid = str(it["account_id"])
+                    acc_deltas[aid] += Decimal(it["amount"]) * sgn * factor
+                    acc_labels[aid] = f"{it['code']} {it['name']}"
+
+            top_drivers = sorted(
+                (k for k in acc_deltas if acc_deltas[k] != Decimal("0")),
+                key=lambda k: (-abs(acc_deltas[k]), k),
+            )[:3]
+            driver_text = (
+                "; ".join(f"{acc_labels[k]} ({acc_deltas[k]:+.2f} {ccy})" for k in top_drivers)
+                if top_drivers
+                else "no account-level variance recorded"
+            )
+
+            top_docs = (
+                db.execute(
+                    text(
+                        """
+                        SELECT kind, number, total, accounting_date
+                        FROM app.trade_documents
+                        WHERE business_id = :b AND accounting_date BETWEEN :s AND :e
+                        ORDER BY total DESC
+                        LIMIT 3
+                        """
+                    ),
+                    {"b": business_id, "s": nl_start, "e": nl_end},
+                )
+                .mappings()
+                .all()
+            )
+            doc_citations = (
+                " Notable source documents in period: "
+                + ", ".join(
+                    f"{d['kind']} {d['number']} "
+                    f"({Decimal(str(d['total'])):.2f} {ccy} on {d['accounting_date']})"
+                    for d in top_docs
+                )
+                + "."
+                if top_docs
+                else ""
+            )
+
+            direction = (
+                "decreased"
+                if net_diff < 0
+                else ("increased" if net_diff > 0 else "remained unchanged")
+            )
+            return Answer(
+                answer=(
+                    f"Net profit from {nl_start} through {nl_end} is {cur_net:.2f} {ccy} "
+                    f"({direction} by {abs(net_diff):.2f} {ccy} vs {prior_start} through "
+                    f"{prior_end}: {prv_net:.2f} {ccy}). Top variance drivers: "
+                    f"{driver_text}.{doc_citations}"
+                ),
+                report_ids=evidence,
+            )
+
         return Answer(
             answer="Ask about net profit last month, your top debtor, or monthly expenses.",
             report_ids=[],

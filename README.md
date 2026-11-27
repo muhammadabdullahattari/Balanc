@@ -2,7 +2,7 @@
 
 LedgerPilot is a responsive web finance office for small businesses. The first release is web-only: a modular FastAPI backend, React/TypeScript/Vite frontend, and PostgreSQL. No native mobile application is included.
 
-Backend: [foundation](docs/phase-2-backend-foundation.md), [business modules](docs/phase-3-business-modules.md) and [local verification](docs/phase-4-backend-verification.md). Web implementation and acceptance: [Phase 5](docs/phase-5-responsive-frontend.md). Governing status: [implementation tracker](docs/Implementation_Plan.md) and [P3, P4, AI & Audit record](docs/P3_P4_AI_and_Audit_Implementation_Record.md).
+Backend: [foundation](docs/phase-2-backend-foundation.md), [business modules](docs/phase-3-business-modules.md) and [local verification](docs/phase-4-backend-verification.md). Web implementation and acceptance: [Phase 5](docs/phase-5-responsive-frontend.md). Governing status: [implementation tracker](docs/Implementation_Plan.md), [P3, P4, AI & Audit record](docs/P3_P4_AI_and_Audit_Implementation_Record.md), [Brief Gap Plan (Phases A–H)](docs/Brief_Gap_Implementation_Plan.md), [AI Benchmarks](docs/benchmarks/README.md), and [End-to-End Demo Script](docs/demo/script.md).
 
 ## Prerequisites
 

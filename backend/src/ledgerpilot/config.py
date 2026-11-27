@@ -143,6 +143,20 @@ class Settings(BaseSettings):
     grafana_embed_enabled: bool = False
     grafana_render_timeout_seconds: float = Field(default=6.0, ge=1.0, le=30.0)
     grafana_render_cache_ttl_seconds: int = Field(default=60, ge=0, le=3600)
+    qbo_environment: Literal["sandbox", "production"] = "sandbox"
+    plaid_client_id: str = ""
+    plaid_secret: SecretStr | None = None
+    plaid_environment: Literal["sandbox", "development", "production"] = "sandbox"
+    xero_client_id: str = ""
+    xero_client_secret: SecretStr | None = None
+    shopify_client_id: str = ""
+    shopify_client_secret: SecretStr | None = None
+    square_access_token: SecretStr | None = None
+    inbound_email_webhook_secret: SecretStr | None = None
+    inbound_email_domain: str = "in.ledgerpilot.app"
+    google_drive_client_id: str = ""
+    dropbox_app_key: str = ""
+    cell_database_urls_json: str = "{}"
     google_client_id: str | None = Field(
         default=None, pattern=r"^[A-Za-z0-9_-]+\.apps\.googleusercontent\.com$"
     )

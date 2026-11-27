@@ -43,9 +43,55 @@ export function Rules() {
         }),
       ),
   });
+  const suggestions = useQuery({
+    queryKey: [...keys.business(b.id), "rule-correction-suggestions"],
+    retry: false,
+    queryFn: ({ signal }) =>
+      result(
+        api.GET(
+          "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions",
+          { signal, params: { path } },
+        ),
+      ),
+  });
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: keys.business(b.id) });
   };
+  const acceptSuggestion = useMutation({
+    mutationFn: (item: {
+      descriptor: string;
+      suggested_contains: string;
+      account_id: string;
+    }) =>
+      result(
+        api.POST("/api/v1/businesses/{business_id}/bank-rules", {
+          params: { path },
+          body: {
+            name: `Learned: ${item.descriptor.slice(0, 60)}`,
+            contains: item.suggested_contains.slice(0, 120),
+            account_id: item.account_id,
+            priority: 100,
+          },
+        }),
+      ),
+    onSuccess: refresh,
+  });
+  const dismissSuggestion = useMutation({
+    mutationFn: (item: { descriptor: string; account_id: string }) =>
+      result(
+        api.POST(
+          "/api/v1/businesses/{business_id}/bank-rules/correction-suggestions/dismiss",
+          {
+            params: { path },
+            body: {
+              descriptor: item.descriptor,
+              account_id: item.account_id,
+            },
+          },
+        ),
+      ),
+    onSuccess: refresh,
+  });
   const create = useMutation({
     mutationFn: (form: HTMLFormElement) => {
       const v = new FormData(form);
@@ -124,6 +170,64 @@ export function Rules() {
         />
       )}
       <ErrorNotice error={rules.error || accounts.error || create.error} />
+      {Array.isArray(suggestions.data?.items) &&
+        suggestions.data.items.length > 0 && (
+          <section
+            className="panel settings-section"
+            aria-label="Suggested from your corrections"
+          >
+            <h2>Suggested from your corrections</h2>
+            <p className="muted">
+              You reclassified matching bank entries at least twice. Create an
+              inactive rule to review affected rows before activation, or
+              dismiss suggestions you do not want.
+            </p>
+            <Table
+              caption="Suggested category rules from repeated corrections"
+              rows={suggestions.data.items}
+              rowKey={(s) => `${s.descriptor}:${s.account_id}`}
+              columns={[
+                {
+                  label: "Merchant pattern",
+                  render: (s) => <strong>{s.suggested_contains}</strong>,
+                },
+                {
+                  label: "Target account",
+                  render: (s) =>
+                    accounts.data?.items.find((a) => a.id === s.account_id)
+                      ?.name || s.account_id,
+                },
+                {
+                  label: "Repeated corrections",
+                  render: (s) => <Badge>{s.sample_count} entries</Badge>,
+                },
+                {
+                  label: "Actions",
+                  render: (s) => (
+                    <div className="p4-inline-actions">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        busy={acceptSuggestion.isPending}
+                        onClick={() => acceptSuggestion.mutate(s)}
+                      >
+                        Create inactive rule
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        busy={dismissSuggestion.isPending}
+                        onClick={() => dismissSuggestion.mutate(s)}
+                      >
+                        Dismiss
+                      </Button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
+          </section>
+        )}
       <section className="panel">
         {rules.data?.items.length ? (
           <Table

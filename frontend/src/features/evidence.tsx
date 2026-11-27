@@ -3,6 +3,10 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { Download, Upload, FileText } from "lucide-react";
 import { api, keys, queryClient, result } from "../api/runtime";
 import {
+  DocumentViewer,
+  type HighlightRegion,
+} from "../components/document-viewer";
+import {
   Badge,
   Button,
   Empty,
@@ -21,6 +25,7 @@ export function Evidence() {
   const path = { business_id: b.id };
   const [cursor, setCursor] = useState<string | undefined>();
   const [selected, setSelected] = useState<string>();
+  const [selectedRegionId, setSelectedRegionId] = useState<string>();
   const [annotationCursor, setAnnotationCursor] = useState<string>();
   const [file, setFile] = useState<File>();
   const [open, setOpen] = useState(false);
@@ -337,6 +342,69 @@ export function Evidence() {
                   <dd>{detail.data.scan_version || "Pending"}</dd>
                 </dl>
               </details>
+              {(() => {
+                const rawExt = (
+                  detail.data as {
+                    extraction?: {
+                      fields?: Array<{
+                        name?: string;
+                        value?: string;
+                        page?: number;
+                        left?: number;
+                        top?: number;
+                        right?: number;
+                        bottom?: number;
+                        confidence?: number;
+                      }>;
+                    };
+                  }
+                ).extraction;
+                const extFields = Array.isArray(rawExt?.fields)
+                  ? rawExt.fields
+                  : [];
+                const autoRegions: HighlightRegion[] = extFields
+                  .slice(0, 60)
+                  .map((f, idx) => ({
+                    id: `ext-${idx}`,
+                    label: f.name || `Field ${idx + 1}`,
+                    value: String(f.value || ""),
+                    page: Number(f.page || 1),
+                    left: Number(f.left ?? 0.05),
+                    top: Number(f.top ?? 0.05),
+                    right: Number(f.right ?? 0.25),
+                    bottom: Number(f.bottom ?? 0.1),
+                    confidence:
+                      typeof f.confidence === "number"
+                        ? f.confidence
+                        : undefined,
+                  }));
+                const reviewedRegions: HighlightRegion[] = (
+                  annotations.data?.items || []
+                ).flatMap((ann) =>
+                  ann.fields.map((f, idx) => ({
+                    id: `rev-${ann.id}-${idx}`,
+                    label: f.name,
+                    value: f.value,
+                    page: f.page,
+                    left: f.left,
+                    top: f.top,
+                    right: f.right,
+                    bottom: f.bottom,
+                    confidence: 1,
+                  })),
+                );
+                const combinedRegions = [...reviewedRegions, ...autoRegions];
+                return (
+                  <DocumentViewer
+                    businessId={b.id}
+                    evidenceId={selected!}
+                    filename={detail.data.filename}
+                    regions={combinedRegions}
+                    selectedRegionId={selectedRegionId}
+                    onSelectRegion={(reg) => setSelectedRegionId(reg.id)}
+                  />
+                );
+              })()}
               <h3>Review history</h3>
               <ErrorNotice error={annotations.error} />
               {annotations.data?.items.map((annotation) => (

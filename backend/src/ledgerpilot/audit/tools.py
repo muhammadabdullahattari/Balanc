@@ -1075,6 +1075,56 @@ def reconcile_balances_and_continuity_tool(run_id: str) -> dict[str, Any]:
     }
 
 
+def find_document_sequence_gaps(documents: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Detect missing sequential document numbers per (kind, prefix, suffix)."""
+    seq_pattern = re.compile(r"^(.*?)(\d+)([^0-9]*)$")
+    grouped: dict[tuple[str, str, str], list[tuple[int, int, str, str]]] = defaultdict(list)
+
+    for doc in documents:
+        raw_num = str(doc.get("number") or "").strip()
+        if not raw_num:
+            continue
+        m = seq_pattern.match(raw_num)
+        if not m:
+            continue
+        prefix, digits, suffix = m.group(1), m.group(2), m.group(3)
+        if len(digits) > 10:
+            continue
+        seq_val = int(digits)
+        grouped[(str(doc.get("kind") or "invoice"), prefix.upper(), suffix.upper())].append(
+            (seq_val, len(digits), prefix, suffix)
+        )
+
+    gaps_found: list[dict[str, Any]] = []
+    for (kind, _p_norm, _s_norm), items in grouped.items():
+        distinct_vals = sorted({v for v, _, _, _ in items})
+        if len(distinct_vals) < 2:
+            continue
+        min_v, max_v = distinct_vals[0], distinct_vals[-1]
+        span = max_v - min_v + 1
+        if span <= len(distinct_vals) or (span - len(distinct_vals)) > 200:
+            continue
+        present = set(distinct_vals)
+        sample_width = items[0][1]
+        orig_prefix, orig_suffix = items[0][2], items[0][3]
+        missing = [
+            f"{orig_prefix}{str(n).zfill(sample_width)}{orig_suffix}"
+            for n in range(min_v, max_v + 1)
+            if n not in present
+        ]
+        if missing:
+            gaps_found.append(
+                {
+                    "kind": kind,
+                    "range_start": f"{orig_prefix}{str(min_v).zfill(sample_width)}{orig_suffix}",
+                    "range_end": f"{orig_prefix}{str(max_v).zfill(sample_width)}{orig_suffix}",
+                    "missing_numbers": missing[:25],
+                    "missing_count": len(missing),
+                }
+            )
+    return gaps_found
+
+
 @tool("detect_ledger_and_bank_anomalies", args_schema=RunScopedToolInput)
 def detect_ledger_and_bank_anomalies_tool(run_id: str) -> dict[str, Any]:
     """Detect duplicates, orphaned cash postings, back-dated entries, and statistical outliers."""
@@ -1308,6 +1358,30 @@ def detect_ledger_and_bank_anomalies_tool(run_id: str) -> dict[str, Any]:
                         ),
                     )
                 )
+
+    # 6. Missing sequential document numbers (e.g. INV-101, INV-102, INV-104 missing INV-103)
+    for gap in find_document_sequence_gaps(ds.trade_documents):
+        sample_str = ", ".join(gap["missing_numbers"][:10])
+        findings.append(
+            _make_finding(
+                severity="High",
+                category="anomaly",
+                rule_violated="RULE-ANOM-002:DOCUMENT_SEQUENCE_GAP",
+                affected_records=gap["missing_numbers"][:10],
+                expected_vs_actual={
+                    "sequence_range": f"{gap['range_start']} .. {gap['range_end']}",
+                    "missing_count": str(gap["missing_count"]),
+                },
+                evidence=[
+                    f"Sequence gap in {gap['kind']} numbering between {gap['range_start']} and "
+                    f"{gap['range_end']}: {gap['missing_count']} number(s) missing ({sample_str})."
+                ],
+                recommendation=(
+                    "Confirm whether missing sequence numbers were voided or omitted, "
+                    "and record voided documents explicitly for audit completeness."
+                ),
+            )
+        )
 
     return {
         "tool": "detect_ledger_and_bank_anomalies",
