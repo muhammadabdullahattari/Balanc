@@ -23,6 +23,7 @@ from test_phase2_integration import (
 )
 
 from ledgerpilot.config import Settings, get_settings
+from ledgerpilot.local_setup import FileSettings
 from ledgerpilot.reports import visuals
 
 # ruff: noqa: F811 -- isolated real-service fixtures
@@ -319,84 +320,70 @@ def test_matplotlib_fallback_renders_all_populated_and_empty_states(
 @pytest.mark.anyio
 async def test_live_sql_visuals_match_canonical_reports_exports_and_audit_runs(
     client: httpx.AsyncClient,
-    database_settings: Settings,
+    database_settings: FileSettings,
 ) -> None:
     """Seed double-entry transactions + audits and verify SQL tie-out and PDF/HTML exports."""
-    async with accountant_context(client) as ctx:
-        api = ctx["owner"]
-        bid = ctx["business_id"]
-        accounts = ctx["accounts"]
-        customer_id = ctx["customer_id"]
-        supplier_id = ctx["supplier_id"]
+    async with accountant_context(client, database_settings) as (bid, api):
+        accountant_uid = (await api.get("/api/v1/auth/me")).json()["id"]
 
-        inv_oct = await api.post(
-            f"/api/v1/businesses/{bid}/invoices",
-            json={
-                "party_id": customer_id,
-                "issue_date": "2026-10-05",
-                "due_date": "2026-10-20",
-                "lines": [
-                    {
-                        "description": "October advisory retainer",
-                        "quantity": "1",
-                        "unit_price": "4500.00",
-                        "account_id": accounts["sales"],
-                    }
-                ],
-            },
-        )
-        assert inv_oct.status_code == 201, inv_oct.text
-        post_oct = await api.post(
-            f"/api/v1/businesses/{bid}/invoices/{inv_oct.json()['id']}/post",
-            json={"version": inv_oct.json()["version"]},
-        )
-        assert post_oct.status_code == 200, post_oct.text
+        acc_ids: dict[str, str] = {}
+        for key, code, name, kind in [
+            ("bank", "1000", "Operating bank", "asset"),
+            ("sales", "4000", "Advisory revenue", "income"),
+            ("expense", "5100", "Cloud hosting", "expense"),
+        ]:
+            created_acc = await api.post(
+                f"/api/v1/businesses/{bid}/accounts",
+                json={"code": code, "name": name, "kind": kind},
+            )
+            assert created_acc.status_code == 201, created_acc.text
+            acc_ids[key] = str(created_acc.json()["id"])
 
-        inv_nov = await api.post(
-            f"/api/v1/businesses/{bid}/invoices",
-            json={
-                "party_id": customer_id,
-                "issue_date": "2026-11-04",
-                "due_date": "2026-11-25",
-                "lines": [
-                    {
-                        "description": "November platform subscription",
-                        "quantity": "1",
-                        "unit_price": "6200.00",
-                        "account_id": accounts["sales"],
-                    }
-                ],
-            },
+        period_res = await api.post(
+            f"/api/v1/businesses/{bid}/periods",
+            json={"start_date": "2026-01-01", "end_date": "2026-12-31"},
         )
-        assert inv_nov.status_code == 201, inv_nov.text
-        post_nov = await api.post(
-            f"/api/v1/businesses/{bid}/invoices/{inv_nov.json()['id']}/post",
-            json={"version": inv_nov.json()["version"]},
-        )
-        assert post_nov.status_code == 200, post_nov.text
+        assert period_res.status_code == 201, period_res.text
 
-        bill_nov = await api.post(
-            f"/api/v1/businesses/{bid}/bills",
-            json={
-                "party_id": supplier_id,
-                "issue_date": "2026-11-08",
-                "due_date": "2026-11-28",
-                "lines": [
-                    {
-                        "description": "Cloud hosting & database cluster",
-                        "quantity": "1",
-                        "unit_price": "1750.00",
-                        "account_id": accounts["expense"],
-                    }
-                ],
-            },
-        )
-        assert bill_nov.status_code == 201, bill_nov.text
-        post_bill = await api.post(
-            f"/api/v1/businesses/{bid}/bills/{bill_nov.json()['id']}/post",
-            json={"version": bill_nov.json()["version"]},
-        )
-        assert post_bill.status_code == 200, post_bill.text
+        for accounting_date, memo, dr_acc, cr_acc, amt in [
+            (
+                "2026-10-05",
+                "October advisory retainer",
+                acc_ids["bank"],
+                acc_ids["sales"],
+                "4500.00",
+            ),
+            (
+                "2026-11-04",
+                "November platform subscription",
+                acc_ids["bank"],
+                acc_ids["sales"],
+                "6200.00",
+            ),
+            (
+                "2026-11-08",
+                "Cloud hosting & database cluster",
+                acc_ids["expense"],
+                acc_ids["bank"],
+                "1750.00",
+            ),
+        ]:
+            cur_ver = (await api.get(f"/api/v1/businesses/{bid}")).json()["version"]
+            j_res = await api.post(
+                f"/api/v1/businesses/{bid}/journals",
+                json={
+                    "accounting_date": accounting_date,
+                    "memo": memo,
+                    "currency": "USD",
+                    "idempotency_key": uuid4().hex,
+                    "expected_version": cur_ver,
+                    "lines": [
+                        {"account_id": dr_acc, "debit": amt},
+                        {"account_id": cr_acc, "credit": amt},
+                    ],
+                },
+            )
+            assert j_res.status_code == 201, j_res.text
 
         pl = await api.get(
             f"/api/v1/businesses/{bid}/reports/profit-loss",
@@ -431,12 +418,18 @@ async def test_live_sql_visuals_match_canonical_reports_exports_and_audit_runs(
         assert assets_dec == liab_dec + eq_dec
 
         # Verify migration 0043 SQL functions return matching aggregations under RLS
-        assert database_settings.database_url is not None
-        engine = create_engine(database_settings.database_url.get_secret_value())
+        engine = create_engine(
+            database_settings.database_url.get_secret_value(), hide_parameters=True
+        )
         try:
             with engine.begin() as conn:
-                conn.execute(text("SET LOCAL app.business_id = :b"), {"b": str(bid)})
-                conn.execute(text("SET LOCAL app.actor_id = :u"), {"u": str(ctx["owner_id"])})
+                conn.execute(
+                    text(
+                        "SELECT set_config('app.user_id', :u, true), "
+                        "set_config('app.business_id', :b, true)"
+                    ),
+                    {"u": str(accountant_uid), "b": str(bid)},
+                )
                 sql_kpi = (
                     conn.execute(
                         text("SELECT * FROM app.grafana_kpi_summary(:b, :s, :e)"),

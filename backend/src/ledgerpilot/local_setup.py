@@ -173,6 +173,8 @@ def prepare_environment(
         "POSTGRES_PASSWORD",
         "APP_DB_PASSWORD",
         "MIGRATION_DB_PASSWORD",
+        "GRAFANA_DB_PASSWORD",
+        "GRAFANA_ADMIN_PASSWORD",
         "SESSION_SIGNING_KEY",
         "OCR_SERVICE_TOKEN",
     ):
