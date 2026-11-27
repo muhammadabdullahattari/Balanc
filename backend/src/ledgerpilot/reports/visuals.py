@@ -271,8 +271,9 @@ def query_financial_visuals(
     expense_categories = _collapse_categories("expense")
     income_categories = _collapse_categories("income")
 
-    # SQL time-series aggregation (monthly or yearly buckets)
-    granularity = "year" if period_mode == "yearly" or (end - start).days > 400 else "month"
+    # SQL time-series buckets: weekly (<=45d), monthly (<=400d), yearly (>400d)
+    span_days = (end - start).days
+    granularity = "year" if span_days > 400 else ("week" if span_days <= 45 else "month")
     series_rows = (
         db.execute(
             text(
@@ -334,6 +335,9 @@ def query_financial_visuals(
         if granularity == "year":
             b_end = min(end, date(b_start.year, 12, 31))
             label = f"{b_start.year}"
+        elif granularity == "week":
+            b_end = min(end, date.fromordinal(b_start.toordinal() + 6))
+            label = b_start.isoformat()
         else:
             last_day = monthrange(b_start.year, b_start.month)[1]
             b_end = min(end, date(b_start.year, b_start.month, last_day))
