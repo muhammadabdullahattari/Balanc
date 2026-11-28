@@ -60,7 +60,7 @@ def _test_settings() -> Settings:
         _env_file=None,
         app_env="test",
         database_url="postgresql+psycopg://ledgerpilot_app:synthetic@localhost/ledgerpilot",
-        session_signing_key="synthetic-v2-test-key-at-least-32-bytes-long",
+        session_signing_key="test-key-" + ("a" * 32),
         frontend_origins="http://localhost:5173",
     )
 

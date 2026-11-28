@@ -154,7 +154,7 @@ def upgrade() -> None:
           FROM app.businesses b
           WHERE lower(b.id::text) LIKE lower(p_slug) || '%'
              OR regexp_replace(lower(b.name), '[^a-z0-9]+', '-', 'g') = lower(p_slug)
-          ORDER BY b.created_at ASC
+          ORDER BY b.id ASC
           LIMIT 1;
         $$;
         REVOKE ALL ON FUNCTION app.resolve_inbound_email_business(text) FROM PUBLIC;

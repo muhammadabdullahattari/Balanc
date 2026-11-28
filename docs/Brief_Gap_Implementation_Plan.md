@@ -242,7 +242,7 @@ All connectors share a framework built in E0 (part of E1):
 - **Tests:** fixtures and a round-trip test (import → export → identical trial balance).
 
 ### E4. Two sales / e-commerce connectors ❌
-- **Shopify:** OAuth app, orders/refunds/payouts/fees via the Admin API and webhooks (`orders/paid`, `refunds/create`, payouts). Map to sales receipts, refunds, a clearing account, and payout settlement with fees (replacing the manual gross-to-net form).
+- **Shopify:** OAuth integration syncing orders, refunds, payouts, and fees via the Admin API and webhooks (`orders/paid`, `refunds/create`, payouts). Map to sales receipts, refunds, a clearing account, and payout settlement with fees (replacing the manual gross-to-net form).
 - **Square** (or Stripe Connect for customer sales): payments, refunds, and payouts mapped the same way.
 - **Reconciliation:** a payout bank row automatically matches the clearing account using A2 bundles.
 - **Tests:** webhook signature tests, fixture syncs, and a payout reconciliation test.
