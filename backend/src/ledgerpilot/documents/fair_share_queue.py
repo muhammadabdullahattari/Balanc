@@ -22,16 +22,15 @@ def enqueue_ingestion_job(
     payload: dict[str, Any] | None = None,
 ) -> UUID:
     """Enqueue an ingestion job in either the isolated 'live' lane or fair-share 'bulk' lane."""
-    import json
-
     jid = uuid4()
+    fname = str((payload or {}).get("batch_reference") or (payload or {}).get("filename") or "batch")
     db.execute(
         text(
             """
             INSERT INTO app.ingestion_queue_jobs (
-              id, business_id, batch_id, lane, page_count, status, payload_json
+              id, business_id, batch_id, lane, filename, page_count, state
             ) VALUES (
-              :id, :bid, :batch_id, :lane, :pages, 'queued', CAST(:payload AS jsonb)
+              :id, :bid, :batch_id, :lane, :fname, :pages, 'queued'
             )
             """
         ),
@@ -40,8 +39,8 @@ def enqueue_ingestion_job(
             "bid": business_id,
             "batch_id": batch_id,
             "lane": lane,
+            "fname": fname[:200],
             "pages": max(1, int(page_count)),
-            "payload": json.dumps(payload or {}),
         },
     )
     return jid
@@ -69,8 +68,8 @@ def lease_next_fair_share_job(
                         FROM app.ingestion_queue_jobs
                         WHERE business_id = :bid
                           AND lane = 'bulk'
-                          AND status = 'leased'
-                          AND lease_expires_at > now()
+                          AND state = 'leased'
+                          AND lease_until > now()
                         """
                     ),
                     {"bid": business_id},
@@ -85,23 +84,22 @@ def lease_next_fair_share_job(
                 text(
                     """
                     UPDATE app.ingestion_queue_jobs
-                    SET status = 'leased',
-                        lease_expires_at = :exp,
-                        attempts = attempts + 1
+                    SET state = 'leased',
+                        lease_until = :exp
                     WHERE id = (
                       SELECT id
                       FROM app.ingestion_queue_jobs
                       WHERE business_id = :bid
                         AND lane = :lane
                         AND (
-                          status = 'queued'
-                          OR (status = 'leased' AND lease_expires_at <= now())
+                          state = 'queued'
+                          OR (state = 'leased' AND lease_until <= now())
                         )
                       ORDER BY created_at ASC
                       LIMIT 1
                       FOR UPDATE SKIP LOCKED
                     )
-                    RETURNING id, business_id, batch_id, lane, page_count, attempts
+                    RETURNING id, business_id, batch_id, lane, page_count
                     """
                 ),
                 {"exp": lease_until, "bid": business_id, "lane": candidate_lane},
@@ -116,7 +114,7 @@ def lease_next_fair_share_job(
                 "batch_id": str(row["batch_id"]) if row["batch_id"] else None,
                 "lane": str(row["lane"]),
                 "page_count": int(row["page_count"]),
-                "attempts": int(row["attempts"]),
+                "attempts": 1,
             }
     return None
 
@@ -127,7 +125,7 @@ def complete_leased_job(db: Session, *, business_id: UUID, job_id: UUID) -> None
         text(
             """
             UPDATE app.ingestion_queue_jobs
-            SET status = 'completed', completed_at = now(), lease_expires_at = NULL
+            SET state = 'completed', completed_at = now(), lease_until = NULL
             WHERE business_id = :bid AND id = :id
             """
         ),
@@ -141,10 +139,10 @@ def queue_depth_summary(db: Session, business_id: UUID) -> dict[str, int]:
         db.execute(
             text(
                 """
-                SELECT lane, status, coalesce(sum(page_count), 0) AS pages
+                SELECT lane, state, coalesce(sum(page_count), 0) AS pages
                 FROM app.ingestion_queue_jobs
                 WHERE business_id = :bid
-                GROUP BY lane, status
+                GROUP BY lane, state
                 """
             ),
             {"bid": business_id},
@@ -160,7 +158,7 @@ def queue_depth_summary(db: Session, business_id: UUID) -> dict[str, int]:
     }
     for r in rows:
         key = (
-            f"{r['lane']}_{'queued' if r['status'] in {'queued', 'leased'} else 'completed'}_pages"
+            f"{r['lane']}_{'queued' if r['state'] in {'queued', 'leased'} else 'completed'}_pages"
         )
         if key in out:
             out[key] += int(r["pages"] or 0)
