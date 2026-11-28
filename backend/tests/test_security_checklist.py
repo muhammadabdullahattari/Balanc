@@ -115,6 +115,7 @@ def test_every_private_api_operation_declares_owned_authentication() -> None:
         ("/public/v1/openapi.json", "get"),
         ("/api/v1/billing/stripe/webhook", "post"),
         ("/api/v1/webhooks/inbound-email", "post"),
+        ("/api/v1/public-uploads/{token}", "post"),
         ("/api/v1/auth/csrf", "get"),
         ("/api/v1/auth/google/config", "get"),
         *(

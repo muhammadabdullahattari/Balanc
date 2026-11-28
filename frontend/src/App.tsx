@@ -161,7 +161,19 @@ const ConnectorsAndApi = lazy(() =>
     default: m.ConnectorsAndApi,
   })),
 );
+const SwipeReview = lazy(() =>
+  import("./features/swipe-review").then((m) => ({
+    default: m.SwipeReview,
+  })),
+);
+const AutonomousOffice = lazy(() =>
+  import("./features/autonomous-ops").then((m) => ({
+    default: m.AutonomousOffice,
+  })),
+);
 const navigation = [
+  { to: "/review", label: "Quick review", icon: CheckSquare },
+  { to: "/autonomous-office", label: "Autonomous office", icon: CheckSquare },
   { to: "/ai-assistant", label: "AI assistant", icon: CheckSquare },
   { to: "/financial-audit", label: "Financial audit", icon: CheckSquare },
   { to: "/drafts", label: "Draft review", icon: FileText },
@@ -789,6 +801,11 @@ function Workspace() {
                   <Route path="/close" element={<Close />} />
                   <Route path="/financial-audit" element={<FinancialAudit />} />
                   <Route path="/ai-assistant" element={<AICopilotHub />} />
+                  <Route path="/review" element={<SwipeReview />} />
+                  <Route
+                    path="/autonomous-office"
+                    element={<AutonomousOffice />}
+                  />
                   {/* legacy-redirects */}
                   <Route
                     path="/p4-operations"

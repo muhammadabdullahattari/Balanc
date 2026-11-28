@@ -1,0 +1,9 @@
+{
+  "name": "LedgerPilot Finance Office",
+  "short_name": "LedgerPilot",
+  "start_url": "/review",
+  "display": "standalone",
+  "background_color": "#f3f1ed",
+  "theme_color": "#1f2937",
+  "description": "Autonomous accounting, receipt capture, and one-tap transaction review."
+}

@@ -1,8 +1,8 @@
 {
   "corpus_version": "2026.11-v1",
   "execution_provenance": "empirical_live_harness",
-  "evaluated_at": "2026-11-27T18:39:52.294985+00:00",
-  "duration_ms": 16.72,
+  "evaluated_at": "2026-11-28T10:32:38.043414+00:00",
+  "duration_ms": 25.01,
   "sample_counts": {
     "documents": 6,
     "bank_matches": 3,
@@ -15,7 +15,7 @@
     "extraction_f1": 1.0,
     "mean_box_iou": 1.0,
     "bank_match_accuracy": 1.0,
-    "max_bundle_match_latency_ms": 0.296,
+    "max_bundle_match_latency_ms": 0.42,
     "sequence_gap_f1": 1.0
   },
   "baseline_thresholds": {

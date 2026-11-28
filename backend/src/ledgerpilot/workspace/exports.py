@@ -466,6 +466,13 @@ def pack(
             pass
         add_json("journal-line-evidence.json", line_ev_rows)
         add_json("ai-audit-trail.json", ai_run_rows)
+        from ledgerpilot.workspace.workpapers import build_workpapers_xlsx
+
+        files["workpapers.xlsx"] = build_workpapers_xlsx(
+            business_name=str(bid),
+            period_start=start,
+            period_end=end,
+        )
 
     manifest_doc: dict[str, Any] = {
         "business_id": str(bid),

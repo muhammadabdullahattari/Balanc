@@ -1,7 +1,7 @@
 {
   "scope": "Static frontend call-site/contract inventory; not runtime acceptance",
-  "call_sites": 330,
-  "distinct_operations": 284,
+  "call_sites": 340,
+  "distinct_operations": 294,
   "operations": [
     {
       "file": "App.tsx",
@@ -307,6 +307,41 @@
       "file": "features/auth.tsx",
       "method": "POST",
       "path": "/api/v1/auth/reset"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/autonomous/schedules"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/autonomous/auto-post-policies"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/autonomous/accruals"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/banking/merchants/normalize"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/autonomous/chasing"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/notifications/vapid/generate"
+    },
+    {
+      "file": "features/autonomous-ops.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/fraud-sentinel/validate-tax-id"
     },
     {
       "file": "features/banking.tsx",
@@ -1602,6 +1637,21 @@
       "file": "features/settings.tsx",
       "method": "GET",
       "path": "/api/v1/auth/me"
+    },
+    {
+      "file": "features/swipe-review.tsx",
+      "method": "GET",
+      "path": "/api/v1/businesses/{business_id}/review-queue"
+    },
+    {
+      "file": "features/swipe-review.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/review-queue/{bank_row_id}/decision"
+    },
+    {
+      "file": "features/swipe-review.tsx",
+      "method": "POST",
+      "path": "/api/v1/businesses/{business_id}/bank-accounts/{account_id}/imports/ofx"
     },
     {
       "file": "features/trade.tsx",

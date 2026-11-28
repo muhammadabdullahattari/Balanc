@@ -67,6 +67,150 @@ def classify_document_type(raw_text: str, filename: str = "") -> str:
     )
 
 
+_MONTH_NAMES = {
+    "jan": 1,
+    "january": 1,
+    "feb": 2,
+    "february": 2,
+    "mar": 3,
+    "march": 3,
+    "apr": 4,
+    "april": 4,
+    "may": 5,
+    "jun": 6,
+    "june": 6,
+    "jul": 7,
+    "july": 7,
+    "aug": 8,
+    "august": 8,
+    "sep": 9,
+    "sept": 9,
+    "september": 9,
+    "oct": 10,
+    "october": 10,
+    "nov": 11,
+    "november": 11,
+    "dec": 12,
+    "december": 12,
+}
+
+
+def _parse_flexible_date(token: str) -> date | None:
+    s = token.strip().replace(",", "")
+    m_iso = re.match(r"^(\d{4})-(\d{2})-(\d{2})$", s)
+    if m_iso:
+        try:
+            return date(int(m_iso.group(1)), int(m_iso.group(2)), int(m_iso.group(3)))
+        except ValueError:
+            return None
+    m_slash = re.match(r"^(\d{1,2})/(\d{1,2})/(\d{4})$", s)
+    if m_slash:
+        a, b, y = int(m_slash.group(1)), int(m_slash.group(2)), int(m_slash.group(3))
+        try:
+            # Prefer MM/DD/YYYY unless first component > 12 (DD/MM/YYYY)
+            return date(y, b, a) if a > 12 else date(y, a, b)
+        except ValueError:
+            return None
+    m_named = re.match(r"^([A-Za-z]{3,9})\.?\s+(\d{1,2})\s+(\d{4})$", s)
+    if m_named:
+        month = _MONTH_NAMES.get(m_named.group(1).lower())
+        if month:
+            try:
+                return date(int(m_named.group(3)), month, int(m_named.group(2)))
+            except ValueError:
+                return None
+    m_dmy = re.match(r"^(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{4})$", s)
+    if m_dmy:
+        month = _MONTH_NAMES.get(m_dmy.group(2).lower())
+        if month:
+            try:
+                return date(int(m_dmy.group(3)), month, int(m_dmy.group(1)))
+            except ValueError:
+                return None
+    return None
+
+
+def _add_months_inclusive_end(start: date, months: int) -> date:
+    from datetime import timedelta
+
+    month_idx = (start.month - 1) + months
+    year = start.year + month_idx // 12
+    month = (month_idx % 12) + 1
+    day = min(
+        start.day,
+        [
+            31,
+            29 if year % 4 == 0 and (year % 100 != 0 or year % 400 == 0) else 28,
+            31,
+            30,
+            31,
+            30,
+            31,
+            31,
+            30,
+            31,
+            30,
+            31,
+        ][month - 1],
+    )
+    return date(year, month, day) - timedelta(days=1)
+
+
+def extract_service_period(raw_text: str) -> dict[str, Any] | None:
+    """Detect multi-month service or subscription periods for amortization schedules."""
+    date_atom = (
+        r"(?:\d{4}-\d{2}-\d{2}"
+        r"|\d{1,2}/\d{1,2}/\d{4}"
+        r"|[A-Za-z]{3,9}\.?\s+\d{1,2},?\s+\d{4}"
+        r"|\d{1,2}\s+[A-Za-z]{3,9}\.?\s+\d{4})"
+    )
+    range_pat = re.compile(
+        rf"({date_atom})\s*(?:to|through|thru|\-|–|—)\s*({date_atom})",
+        re.IGNORECASE,
+    )
+    for m in range_pat.finditer(raw_text):
+        d1 = _parse_flexible_date(m.group(1))
+        d2 = _parse_flexible_date(m.group(2))
+        if d1 and d2 and d2 > d1:
+            months = (
+                (d2.year - d1.year) * 12
+                + (d2.month - d1.month)
+                + (1 if d2.day >= d1.day - 1 else 0)
+            )
+            if months >= 2:
+                return {
+                    "start_date": d1.isoformat(),
+                    "end_date": d2.isoformat(),
+                    "months": months,
+                    "raw_match": m.group(0).strip(),
+                    "suggested_schedule_type": "prepaid_expense",
+                }
+
+    dur_pat = re.compile(
+        rf"(?:(\d{{1,2}})[\-\s]*month|annual|1[\-\s]*year)\s+"
+        rf"(?:subscription|plan|license|coverage|policy|retainer|term)"
+        rf"(?:[^\n]{{0,40}}?(?:starting|effective|from|beginning)\s*[:\-]?\s*({date_atom}))?",
+        re.IGNORECASE,
+    )
+    m_dur = dur_pat.search(raw_text)
+    if m_dur:
+        months = int(m_dur.group(1)) if m_dur.group(1) else 12
+        start = _parse_flexible_date(m_dur.group(2)) if m_dur.group(2) else None
+        if start is None:
+            iso_any = re.search(r"\b(\d{4}-\d{2}-\d{2})\b", raw_text)
+            start = _parse_flexible_date(iso_any.group(1)) if iso_any else date.today()
+        if start and months >= 2:
+            end = _add_months_inclusive_end(start, months)
+            return {
+                "start_date": start.isoformat(),
+                "end_date": end.isoformat(),
+                "months": months,
+                "raw_match": m_dur.group(0).strip(),
+                "suggested_schedule_type": "prepaid_expense",
+            }
+    return None
+
+
 def _find_word_box(
     ocr_words: list[dict[str, Any]],
     needle: str,
@@ -271,6 +415,7 @@ def extract_structured_document(
             }
         )
 
+    service_period = extract_service_period(raw_text)
     return {
         "document_type": doc_type,
         "vendor_name": vendor or "Unknown Vendor",
@@ -291,6 +436,7 @@ def extract_structured_document(
         "uncertainty_flags": ["ARITHMETIC_MISMATCH"] if validation_issues else [],
         "requires_human_review": True,
         "model_version": "deterministic-grounded-extractor-v1",
+        "service_period": service_period,
         "fields": structured_fields,
     }
 
