@@ -832,6 +832,7 @@ def post_prorate_landed_cost(
 
 @router.post(
     "/businesses/{business_id}/exports/workpapers.xlsx",
+    response_class=Response,
     responses={
         200: {
             "content": {

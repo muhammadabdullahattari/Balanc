@@ -3249,7 +3249,7 @@ def approve_and_execute_supplier_payment(
             idempotency_key=pay["idempotency_key"],
         )
     elif rail == "ach_nacha":
-        provider_ref = f"ACH-FILE-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
+        provider_ref = f"ACH-NACHA-{datetime.now(UTC).strftime('%Y%m%d')}-{uuid4().hex[:8].upper()}"
         provider_payload = {
             "mode": "ach_nacha_file_export",
             "delivery_mode": "file_export_only_not_transmitted",
