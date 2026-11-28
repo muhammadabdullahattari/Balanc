@@ -218,4 +218,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    raise RuntimeError("Financial history schema migrations do not support destructive downgrade.")
+    op.execute("""
+        DROP TABLE IF EXISTS app.merchant_aliases;
+        DROP TABLE IF EXISTS app.merchant_profiles;
+        DROP TABLE IF EXISTS app.vendor_fraud_sentinel_logs;
+        DROP TABLE IF EXISTS app.document_chase_events;
+        DROP TABLE IF EXISTS app.amortization_schedules;
+        DROP TABLE IF EXISTS app.auto_post_policies;
+        DROP TABLE IF EXISTS app.scheduled_job_runs;
+        DROP TABLE IF EXISTS app.scheduled_jobs;
+    """)
