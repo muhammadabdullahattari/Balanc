@@ -23,7 +23,8 @@ def enqueue_ingestion_job(
 ) -> UUID:
     """Enqueue an ingestion job in either the isolated 'live' lane or fair-share 'bulk' lane."""
     jid = uuid4()
-    fname = str((payload or {}).get("batch_reference") or (payload or {}).get("filename") or "batch")
+    meta = payload or {}
+    fname = str(meta.get("batch_reference") or meta.get("filename") or "batch")
     db.execute(
         text(
             """
