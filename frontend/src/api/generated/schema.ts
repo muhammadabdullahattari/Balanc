@@ -40935,6 +40935,7 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": string;
                 };
             };
             /** @description Bad Request */

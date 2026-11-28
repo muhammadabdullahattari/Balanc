@@ -30,6 +30,7 @@ class Extraction(Schema):
     model_version: str | None = Field(max_length=240)
     extractor_version: str
     language: str
+    detected_rotations: list[int] | dict[str, int] | None = None
     confidence_kind: str
     raw_text: str | None = Field(max_length=200000)
     fields: list[ExtractedField] = Field(max_length=20000)

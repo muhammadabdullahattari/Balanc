@@ -830,7 +830,18 @@ def post_prorate_landed_cost(
     return res
 
 
-@router.post("/businesses/{business_id}/exports/workpapers.xlsx")
+@router.post(
+    "/businesses/{business_id}/exports/workpapers.xlsx",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": {
+                    "schema": {"type": "string", "format": "binary"}
+                }
+            }
+        }
+    },
+)
 def post_export_workpapers(
     business_id: UUID,
     payload: WorkpapersRequestIn,

@@ -31,7 +31,7 @@ def route_and_record_page_cost(
         db.execute(
             text(
                 """
-                SELECT id, routing_tier
+                SELECT id, tier_used
                 FROM app.ai_page_cost_ledger
                 WHERE business_id = :bid AND content_sha256 = :sha
                 LIMIT 1
@@ -47,55 +47,49 @@ def route_and_record_page_cost(
         tier = "sha256_content_cache"
         cache_hit = True
         unit_cost = CACHE_HIT_PAGE_COST_USD
-        prompt_tokens = 0
-        completion_tokens = 0
     elif has_embedded_pdf_text and confidence >= Decimal("0.8800"):
         tier = "deterministic_embedded_text"
         cache_hit = False
         unit_cost = DETERMINISTIC_TEXT_PAGE_COST_USD
-        prompt_tokens = 0
-        completion_tokens = 0
     elif confidence >= Decimal("0.8200"):
         tier = "local_ocr_structured_parser"
         cache_hit = False
         unit_cost = LOCAL_OCR_HYBRID_PAGE_COST_USD
-        prompt_tokens = 180 * pages
-        completion_tokens = 65 * pages
     else:
         tier = "cloud_llm_escalation"
         cache_hit = False
         unit_cost = BASELINE_FULL_LLM_PAGE_COST_USD
-        prompt_tokens = 950 * pages
-        completion_tokens = 320 * pages
 
     total_cost = (unit_cost * Decimal(pages)).quantize(Decimal("0.000001"))
     baseline_would_cost = (BASELINE_FULL_LLM_PAGE_COST_USD * Decimal(pages)).quantize(
         Decimal("0.000001")
     )
+    from datetime import UTC, datetime
+
     lid = uuid4()
+    period_month = datetime.now(UTC).strftime("%Y-%m")
     db.execute(
         text(
             """
             INSERT INTO app.ai_page_cost_ledger (
-              id, business_id, evidence_id, content_sha256, page_count,
-              routing_tier, cache_hit, prompt_tokens, completion_tokens, estimated_cost_usd
+              id, business_id, period_month, content_sha256, operation_kind,
+              pages, tier_used, cache_hit, cost_usd, accuracy_score
             ) VALUES (
-              :id, :bid, :eid, :sha, :pages,
-              :tier, :hit, :ptok, :ctok, :cost
+              :id, :bid, :pm, :sha, 'document_extract',
+              :pages, :tier, :hit, :cost, :acc
             )
             """
         ),
         {
             "id": lid,
             "bid": business_id,
-            "eid": evidence_id,
+            "pm": period_month,
             "sha": content_sha256,
             "pages": pages,
             "tier": tier,
             "hit": cache_hit,
-            "ptok": prompt_tokens,
-            "ctok": completion_tokens,
             "cost": total_cost,
+            "acc": confidence.quantize(Decimal("0.0001")),
         },
     )
     return {
@@ -115,9 +109,9 @@ def summarize_business_page_costs(db: Session, business_id: UUID) -> dict[str, A
             text(
                 """
                 SELECT
-                  coalesce(sum(page_count), 0) AS total_pages,
-                  coalesce(sum(estimated_cost_usd), 0) AS actual_cost_usd,
-                  coalesce(sum(CASE WHEN cache_hit THEN page_count ELSE 0 END), 0) AS cached_pages,
+                  coalesce(sum(pages), 0) AS total_pages,
+                  coalesce(sum(cost_usd), 0) AS actual_cost_usd,
+                  coalesce(sum(CASE WHEN cache_hit THEN pages ELSE 0 END), 0) AS cached_pages,
                   count(*) AS operations_count
                 FROM app.ai_page_cost_ledger
                 WHERE business_id = :bid

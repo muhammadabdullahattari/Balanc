@@ -42,9 +42,13 @@ def upgrade() -> None:
         ALTER TABLE app.supplier_payment_executions
           ADD CONSTRAINT supplier_payment_executions_state_check CHECK (
             state IN (
+              'prepared',
               'pending_approval',
               'first_approved',
+              'approved',
+              'rejected',
               'executing',
+              'executed',
               'settled_posted',
               'settled_unposted',
               'invalidated',
